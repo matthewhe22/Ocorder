@@ -121,6 +121,10 @@ export const DEFAULT_CONFIG = {
     certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
     footer: "TOCS Owner Corporation Services  |  info@tocs.co",
   },
+  stripe: {
+    secretKey:      "",
+    publishableKey: "",
+  },
 };
 
 // ── Stateless HMAC token helpers ──────────────────────────────────────────────
@@ -248,6 +252,7 @@ export async function readConfig() {
     sharepoint:     { ...DEFAULT_CONFIG.sharepoint,     ...(c.sharepoint     || {}) },
     paymentDetails: { ...DEFAULT_CONFIG.paymentDetails, ...(c.paymentDetails || {}) },
     emailTemplate:  { ...DEFAULT_CONFIG.emailTemplate,  ...(c.emailTemplate  || {}) },
+    stripe:         { ...DEFAULT_CONFIG.stripe,         ...(c.stripe         || {}) },
   };
 
   // Critical env-var overrides: if Redis has an empty value, use the env var.
