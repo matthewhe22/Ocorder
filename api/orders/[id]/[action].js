@@ -261,7 +261,9 @@ export default async function handler(req, res) {
   // Security: session.metadata.orderId is compared to the URL id to prevent
   // cross-order confirmation attacks. stripeSessionId is read from Redis, never from request body.
   if (action === "stripe-confirm" && req.method === "POST") {
-    if (!process.env.STRIPE_SECRET_KEY) {
+    const cfgForStripe = await readConfig();
+    const stripeKey = cfgForStripe.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
       return res.status(503).json({ error: "Stripe is not configured on this server." });
     }
 
@@ -281,7 +283,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No Stripe session associated with this order." });
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const stripe = new Stripe(stripeKey);
     let session;
     try {
       session = await stripe.checkout.sessions.retrieve(stripeSessionId);
@@ -312,7 +314,7 @@ export default async function handler(req, res) {
     // Send admin + customer emails using shared helpers from _lib/email.js
     // Timeout config: connectionTimeout:8000, socketTimeout:10000, NO greetingTimeout
     // (matches orders/index.js pattern — greetingTimeout causes silent failures with SMTP2GO)
-    const cfg     = await readConfig();
+    const cfg     = cfgForStripe;   // reuse — already fetched above for Stripe key resolution
     const smtp    = cfg.smtp || {};
     const toEmail = cfg.orderEmail || "Orders@tocs.co";
     const confirmedOrder = data.orders[idx];
