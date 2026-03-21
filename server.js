@@ -115,7 +115,7 @@ function buildOrderEmailHtml(order) {
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1c3326;padding:24px 32px;">
-      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Platform</h1>
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Portal</h1>
       <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">New Order Notification</p>
     </div>
     <div style="padding:32px;">
@@ -155,7 +155,7 @@ function buildOrderEmailHtml(order) {
       <p style="margin-top:8px;">${order.lotAuthorityFile ? `<strong>${order.lotAuthorityFile}</strong> has been uploaded and saved.` : "No lot authority document was provided."}</p>
 
       <hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 20px;">
-      <p style="font-size:0.78rem;color:#aaa;margin:0;">This is an automated notification from the TOCS Order Platform. Please do not reply to this email.</p>
+      <p style="font-size:0.78rem;color:#aaa;margin:0;">This is an automated notification from the TOCS Order Portal. Please do not reply to this email.</p>
     </div>
   </div>
 </body></html>`;
@@ -197,7 +197,7 @@ function buildCustomerEmailHtml(order, cfg) {
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1c3326;padding:24px 32px;">
-      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Platform</h1>
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Portal</h1>
       <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Confirmation</p>
     </div>
     <div style="padding:32px;">
@@ -273,7 +273,7 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
       tls: { rejectUnauthorized: false },
     });
     const mailOpts = {
-      from: `"TOCS Order Platform" <${toEmail}>`,
+      from: `"TOCS Order Portal" <${toEmail}>`,
       to: toEmail,
       subject: `New Order #${order.id} — $${(order.total || 0).toFixed(2)} AUD`,
       html: buildOrderEmailHtml(order),
@@ -302,7 +302,7 @@ async function sendCustomerEmail(order, cfg) {
       tls: { rejectUnauthorized: false },
     });
     await transporter.sendMail({
-      from: `"TOCS Order Platform" <${cfg.orderEmail || "Orders@tocs.co"}>`,
+      from: `"TOCS Order Portal" <${cfg.orderEmail || "Orders@tocs.co"}>`,
       to: toEmail,
       subject: `Order Confirmed — ${order.id}`,
       html: buildCustomerEmailHtml(order, cfg),
@@ -627,12 +627,12 @@ async function handler(req, res) {
       });
       await transporter.verify();
       await transporter.sendMail({
-        from: `"TOCS Order Platform" <${toEmail}>`,
+        from: `"TOCS Order Portal" <${toEmail}>`,
         to: toEmail,
-        subject: "[TEST] TOCS Order Platform — SMTP Test",
+        subject: "[TEST] TOCS Order Portal — SMTP Test",
         html: `<div style="font-family:Arial,sans-serif;padding:32px;max-width:500px">
           <h2 style="color:#1c3326;">SMTP Test Successful ✅</h2>
-          <p>This is a test email from the TOCS Order Platform.</p>
+          <p>This is a test email from the TOCS Order Portal.</p>
           <p>Your SMTP server is correctly configured. Real order notifications will be sent to <strong>${toEmail}</strong>.</p>
           <hr style="border:none;border-top:1px solid #e8edf0;margin:20px 0">
           <p style="font-size:0.78rem;color:#aaa;">Sent from ${smtp.host}:${smtp.port} via ${smtp.user}</p>

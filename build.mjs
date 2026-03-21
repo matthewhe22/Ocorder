@@ -17,7 +17,7 @@ writeFileSync(
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TOCS — Owner Corporation Certificate Portal</title>
+  <title>TOCS Order Portal</title>
   <meta name="description" content="Top Owners Corporation Solutions — OC Certificate Purchase Portal"/>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
   <style>

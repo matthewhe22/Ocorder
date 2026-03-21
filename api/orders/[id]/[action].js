@@ -389,7 +389,7 @@ export default async function handler(req, res) {
         : [];
       const emailJobs = [
         createTransporter(smtp).sendMail({
-          from: `"TOCS Order Platform" <${toEmail}>`,
+          from: `"TOCS Order Portal" <${toEmail}>`,
           to: toEmail,
           subject: `Payment Confirmed — Order #${id} — $${(confirmedOrder.total||0).toFixed(2)} AUD`,
           html: buildOrderEmailHtml(confirmedOrder),
@@ -399,7 +399,7 @@ export default async function handler(req, res) {
       if (confirmedOrder.contactInfo?.email) {
         emailJobs.push(
           createTransporter(smtp).sendMail({
-            from: `"TOCS Order Platform" <${toEmail}>`,
+            from: `"TOCS Order Portal" <${toEmail}>`,
             to: confirmedOrder.contactInfo.email,
             subject: `Payment Confirmed — Order ${id}`,
             html: buildCustomerEmailHtml(confirmedOrder, cfg),

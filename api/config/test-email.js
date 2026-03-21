@@ -40,12 +40,12 @@ export default async function handler(req, res) {
     });
     await transporter.verify();
     await transporter.sendMail({
-      from: `"TOCS Order Platform" <${toEmail}>`,
+      from: `"TOCS Order Portal" <${toEmail}>`,
       to: toEmail,
-      subject: "[TEST] TOCS Order Platform — SMTP Test",
+      subject: "[TEST] TOCS Order Portal — SMTP Test",
       html: `<div style="font-family:Arial,sans-serif;padding:32px;max-width:500px">
         <h2 style="color:#1c3326;">SMTP Test Successful ✅</h2>
-        <p>This is a test email from the TOCS Order Platform.</p>
+        <p>This is a test email from the TOCS Order Portal.</p>
         <p>Your SMTP server is correctly configured. Real order notifications will be sent to <strong>${toEmail}</strong>.</p>
         <hr style="border:none;border-top:1px solid #e8edf0;margin:20px 0">
         <p style="font-size:0.78rem;color:#aaa;">Sent from ${smtp.host}:${smtp.port} via ${smtp.user}</p>

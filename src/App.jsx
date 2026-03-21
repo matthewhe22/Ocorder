@@ -794,7 +794,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
       {step === 1 && (
         <div>
           <div style={{ textAlign: "center", marginBottom: "2.8rem" }}>
-            <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "4.5rem", fontWeight: 400, color: "var(--forest)", lineHeight: 1.0, letterSpacing: "-0.01em" }}>TOCS Order Platform</h1>
+            <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "4.5rem", fontWeight: 400, color: "var(--forest)", lineHeight: 1.0, letterSpacing: "-0.01em" }}>TOCS Order Portal</h1>
             <div style={{ width: "48px", height: "2px", background: "var(--sage)", margin: "14px auto 14px", borderRadius: "1px" }}></div>
             <p style={{ fontSize: "0.72rem", color: "var(--sage)", letterSpacing: "0.22em", fontWeight: 600, textTransform: "uppercase" }}>Owners Corporation Certificate</p>
           </div>

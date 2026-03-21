@@ -204,7 +204,7 @@ export default async function handler(req, res) {
       console.log(`Sending emails for order ${order.id}...`);
       const emailJobs = [
         sendMail(smtp, {
-          from: `"TOCS Order Platform" <${toEmail}>`,
+          from: `"TOCS Order Portal" <${toEmail}>`,
           to: toEmail,
           subject: `New Order #${order.id} — $${(order.total||0).toFixed(2)} AUD`,
           html: buildOrderEmailHtml(order),
@@ -219,7 +219,7 @@ export default async function handler(req, res) {
       if (order.contactInfo?.email) {
         emailJobs.push(
           sendMail(smtp, {
-            from: `"TOCS Order Platform" <${toEmail}>`,
+            from: `"TOCS Order Portal" <${toEmail}>`,
             to: order.contactInfo.email,
             subject: `Order Confirmed — ${order.id}`,
             html: buildCustomerEmailHtml(order, cfg),
