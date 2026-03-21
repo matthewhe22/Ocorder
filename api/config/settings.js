@@ -1,4 +1,5 @@
 import { readConfig, writeConfig, validToken, extractToken, cors } from "../_lib/store.js";
+import Stripe from "stripe";
 
 export default async function handler(req, res) {
   cors(res);
@@ -27,15 +28,37 @@ export default async function handler(req, res) {
           siteId:       sp.siteId       || "",
           folderPath:   sp.folderPath   || "TOCS-Orders/Authority-Documents",
         },
+        stripe: {
+          secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
+          publishableKey: cfg.stripe?.publishableKey || "",
+        },
       });
     } catch (err) {
       return res.status(500).json({ error: "Failed to load settings: " + err.message });
     }
   }
 
+  // POST /api/config/settings?action=test-stripe  ← must be BEFORE generic POST block
+  if (req.method === "POST" && req.query?.action === "test-stripe") {
+    try {
+      const cfg = await readConfig();
+      const resolvedKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
+      if (!resolvedKey) {
+        return res.status(200).json({ ok: false, error: "No Stripe secret key configured." });
+      }
+      const keySource = cfg.stripe?.secretKey ? "config" : "env";
+      const stripe = new Stripe(resolvedKey);
+      const account = await stripe.accounts.retrieve();
+      const mode = resolvedKey.startsWith("sk_live_") ? "live" : "test";
+      return res.status(200).json({ ok: true, mode, accountId: account.id, keySource });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
   if (req.method === "POST") {
     try {
-      const { orderEmail, logo, smtp, paymentDetails, emailTemplate, sharepoint } = req.body || {};
+      const { orderEmail, logo, smtp, paymentDetails, emailTemplate, sharepoint, stripe } = req.body || {};
       const cfg = await readConfig();
       if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
       if (logo !== undefined) cfg.logo = logo;
@@ -56,6 +79,15 @@ export default async function handler(req, res) {
         if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
         if (sharepoint.siteId      !== undefined) cfg.sharepoint.siteId     = sharepoint.siteId;
         if (sharepoint.folderPath  !== undefined) cfg.sharepoint.folderPath = sharepoint.folderPath;
+      }
+      if (stripe && typeof stripe === "object") {
+        cfg.stripe = cfg.stripe || {};
+        if (stripe.secretKey !== undefined && stripe.secretKey !== "••••••••") {
+          cfg.stripe.secretKey = stripe.secretKey;
+        }
+        if (stripe.publishableKey !== undefined) {
+          cfg.stripe.publishableKey = stripe.publishableKey;
+        }
       }
       await writeConfig(cfg);
       return res.status(200).json({ ok: true });
