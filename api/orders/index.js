@@ -34,6 +34,7 @@ export default async function handler(req, res) {
 
   try {
     const cfg      = await readConfig();
+    const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
     const smtp     = cfg.smtp || {};
     const toEmail  = cfg.orderEmail || "Orders@tocs.co";
     const spConfig = cfg?.sharepoint || {};
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
     // Validate Stripe configuration BEFORE saving to Redis so a failed validation
     // does not leave an orphaned order in the database with no Stripe session.
     if (order.payment === "stripe") {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      if (!stripeKey) {
         return res.status(400).json({ error: "Stripe is not configured on this server." });
       }
       if (!order.total || order.total <= 0) {
@@ -77,7 +78,7 @@ export default async function handler(req, res) {
     // are all skipped for Stripe orders (accepted limitation for initial implementation).
     if (order.payment === "stripe") {
       try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        const stripe = new Stripe(stripeKey);
         const proto = req.headers["x-forwarded-proto"] || "https";
         const host  = req.headers["host"] || "occorder.vercel.app";
         const baseUrl = `${proto}://${host}`;
