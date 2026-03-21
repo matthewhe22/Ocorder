@@ -374,57 +374,46 @@ const CSS = `
   .modal-tt { font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--forest); }
   @keyframes fi { from { opacity: 0 } to { opacity: 1 } }
 
-  /* ── ORDER PROCESS ANIMATION (Step 1) ── */
-  @keyframes storyFade {
-    0%    { opacity:0; transform:scale(0.96) translateY(8px); }
-    4%    { opacity:1; transform:scale(1) translateY(0); }
-    22%   { opacity:1; }
-    26%   { opacity:0; transform:scale(1.01) translateY(-4px); }
-    100%  { opacity:0; }
-  }
-  @keyframes storyProgress {
-    0%   { width:0% }
-    99%  { width:100% }
-    100% { width:0% }
-  }
-  @keyframes storyDot {
-    0%,4%    { background:var(--forest); transform:scale(1.4); }
-    26%,100% { background:var(--border2); transform:scale(1); }
-  }
-  .step1-panels { display:grid; grid-template-columns:1fr 1px 1fr; margin-bottom:1.5rem; border-radius:10px; overflow:hidden; border:1.5px solid var(--border2); box-shadow:0 2px 12px rgba(28,51,38,0.07); }
-  .step1-anim { background:var(--sage-tint); padding:20px 22px 24px; }
-  .step1-search { background:white; padding:20px 22px 24px; }
-  .step1-divider { background:var(--sage-light); align-self:stretch; }
-  .step1-panel-lbl { font-size:0.58rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
-  .step1-anim .step1-panel-lbl { color:var(--sage); }
-  .step1-search .step1-panel-lbl { color:var(--muted); }
-  .step1-panel-lbl::after { content:''; flex:1; height:1px; }
-  .step1-anim .step1-panel-lbl::after { background:var(--sage-light); }
-  .step1-search .step1-panel-lbl::after { background:var(--border2); }
-  .story-wrap { position:relative; border-radius:8px; overflow:hidden; background:white; border:1.5px solid var(--border2); box-shadow:0 2px 10px rgba(28,51,38,0.08); height:230px; }
-  .story-bar { position:absolute; top:0; left:0; right:0; height:3px; background:var(--border2); z-index:5; }
-  .story-bar-fill { height:100%; background:var(--sage); width:0; animation:storyProgress 16s linear infinite; }
-  .story-slide { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:16px 20px 44px; opacity:0; animation:storyFade 16s infinite; }
-  .story-slide:nth-child(2){ animation-delay:4s; }
-  .story-slide:nth-child(3){ animation-delay:8s; }
-  .story-slide:nth-child(4){ animation-delay:12s; }
-  .slide-1 { background:linear-gradient(155deg,#f0f5f2 0%,white 60%); }
-  .slide-2 { background:linear-gradient(155deg,#f5f2ec 0%,white 60%); }
-  .slide-3 { background:linear-gradient(155deg,#eef3f5 0%,white 60%); }
-  .slide-4 { background:linear-gradient(155deg,#f0f5f0 0%,white 60%); }
-  .story-step { font-size:0.55rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:var(--sage); }
-  .story-icon { font-size:50px; line-height:1; filter:drop-shadow(0 3px 8px rgba(0,0,0,0.1)); }
-  .story-title { font-size:1.05rem; font-weight:700; color:var(--forest); text-align:center; }
-  .story-desc { font-size:0.73rem; color:var(--muted); text-align:center; line-height:1.5; max-width:220px; }
-  .story-dots { position:absolute; bottom:13px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:5; }
-  .story-dot { width:6px; height:6px; border-radius:50%; background:var(--border2); animation:storyDot 16s infinite; }
-  .story-dot:nth-child(2){ animation-delay:4s; }
-  .story-dot:nth-child(3){ animation-delay:8s; }
-  .story-dot:nth-child(4){ animation-delay:12s; }
-  .story-arrow { position:absolute; top:50%; transform:translateY(-50%); width:26px; height:26px; border-radius:50%; border:1.5px solid var(--border); background:white; display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--forest); cursor:pointer; z-index:10; box-shadow:0 1px 4px rgba(0,0,0,0.07); user-select:none; }
-  .story-arrow-l { left:8px; }
-  .story-arrow-r { right:8px; }
-  @media(max-width:640px){ .step1-panels{ grid-template-columns:1fr; } .step1-divider{ display:none; } }
+  /* ── STEP 1 — NEW LAYOUT ── */
+  .s1-title { background:white; border-radius:14px; padding:30px 30px 26px; margin-bottom:14px; box-shadow:0 2px 12px rgba(0,0,0,0.06); border:1px solid #e4e4e0; }
+  .s1-eyebrow { font-size:0.6rem; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:var(--sage); margin-bottom:8px; }
+  .s1-h1 { font-family:'Cormorant Garamond',serif; font-size:2.6rem; font-weight:400; color:var(--forest); line-height:1.08; letter-spacing:-0.01em; margin-bottom:8px; }
+  .s1-sub { font-size:0.82rem; color:var(--muted); line-height:1.6; margin-bottom:20px; }
+  .s1-search-bar { display:flex; align-items:center; gap:10px; background:#f6f6f3; border:1.5px solid #deded8; border-radius:100px; padding:11px 12px 11px 20px; transition:all 0.2s; }
+  .s1-search-bar:focus-within { border-color:var(--sage); background:white; box-shadow:0 4px 18px rgba(28,51,38,0.08); }
+  .s1-search-bar input { flex:1; border:none; background:transparent; font-family:'Inter',sans-serif; font-size:0.9rem; color:var(--ink); outline:none; }
+  .s1-search-bar input::placeholder { color:#aaaa9e; font-weight:300; }
+  .s1-search-sel { flex:1; font-size:0.9rem; color:var(--forest); font-weight:500; }
+  .s1-search-btn { background:var(--forest); color:white; border:none; border-radius:100px; padding:7px 18px; font-size:0.72rem; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; white-space:nowrap; letter-spacing:0.04em; }
+  .s1-search-btn:hover { background:var(--forest3); }
+  /* How It Works 4-cell grid */
+  .hiw-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:2px; border-radius:12px; overflow:hidden; background:#c4c4c2; margin-bottom:14px; box-shadow:0 2px 10px rgba(0,0,0,0.07); }
+  .hiw-cell { background:white; padding:18px 14px 16px; display:flex; flex-direction:column; gap:7px; position:relative; }
+  .hiw-cell.hiw-act { background:var(--forest); }
+  .hiw-ghost { font-size:2.6rem; font-weight:700; color:#f0f0ed; position:absolute; top:8px; right:10px; line-height:1; font-family:'Cormorant Garamond',serif; }
+  .hiw-cell.hiw-act .hiw-ghost { color:rgba(255,255,255,0.07); }
+  .hiw-emoji { font-size:1.35rem; position:relative; z-index:1; }
+  .hiw-name { font-size:0.74rem; font-weight:600; color:var(--ink); line-height:1.3; position:relative; z-index:1; }
+  .hiw-cell.hiw-act .hiw-name { color:white; }
+  .hiw-desc { font-size:0.64rem; color:var(--muted); line-height:1.5; position:relative; z-index:1; }
+  .hiw-cell.hiw-act .hiw-desc { color:rgba(255,255,255,0.55); }
+  /* Selected building card */
+  .bsel { border:2px solid var(--forest); border-radius:14px; overflow:hidden; box-shadow:0 4px 20px rgba(28,51,38,0.12); margin-bottom:14px; background:white; }
+  .bsel-hdr { background:var(--forest); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; }
+  .bsel-hdr-lbl { font-size:0.58rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.65); display:flex; align-items:center; gap:8px; }
+  .bsel-hdr-check { width:18px; height:18px; border-radius:50%; background:rgba(255,255,255,0.15); border:1.5px solid rgba(255,255,255,0.3); display:flex; align-items:center; justify-content:center; font-size:10px; color:white; flex-shrink:0; }
+  .bsel-change { font-size:0.7rem; color:rgba(255,255,255,0.6); cursor:pointer; background:rgba(255,255,255,0.1); border-radius:20px; padding:4px 12px; border:none; font-family:'Inter',sans-serif; transition:all 0.15s; }
+  .bsel-change:hover { color:white; background:rgba(255,255,255,0.2); }
+  .bsel-body { padding:18px 20px 20px; }
+  .bsel-name { font-family:'Cormorant Garamond',serif; font-size:1.55rem; font-weight:400; color:var(--forest); margin-bottom:4px; line-height:1.2; }
+  .bsel-addr { font-size:0.78rem; color:var(--muted); margin-bottom:16px; display:flex; align-items:center; gap:5px; }
+  .bsel-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .bsel-stat { background:#f6f6f3; border:1px solid #e8e8e3; border-radius:9px; padding:11px 14px; }
+  .bsel-stat-val { font-size:1.7rem; font-weight:700; color:var(--forest); line-height:1; font-family:'Cormorant Garamond',serif; }
+  .bsel-stat-lbl { font-size:0.6rem; font-weight:600; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; margin-top:2px; }
+  .bsel-sp { margin-top:12px; padding-top:12px; border-top:1px solid #eaeae6; font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .bsel-sp-badge { background:#f0f6f2; border:1px solid #c8dece; border-radius:5px; padding:2px 8px; font-size:0.62rem; font-weight:700; color:var(--sage); letter-spacing:0.04em; }
+  @media(max-width:640px){ .hiw-grid{ grid-template-columns:1fr 1fr; } }
   @media(max-width:800px){ .payment-grid{ grid-template-columns:1fr !important; } }
 
   /* ── LOT PICKER MODAL ── */
@@ -793,13 +782,38 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
       {/* ── STEP 1: SELECT PLAN ── */}
       {step === 1 && (
         <div>
-          <div style={{ textAlign: "center", marginBottom: "2.8rem" }}>
-            <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "4.5rem", fontWeight: 400, color: "var(--forest)", lineHeight: 1.0, letterSpacing: "-0.01em" }}>TOCS Order Portal</h1>
-            <div style={{ width: "48px", height: "2px", background: "var(--sage)", margin: "14px auto 14px", borderRadius: "1px" }}></div>
-            <p style={{ fontSize: "0.72rem", color: "var(--sage)", letterSpacing: "0.22em", fontWeight: 600, textTransform: "uppercase" }}>Owners Corporation Certificate</p>
+
+          {/* ── Title block ── */}
+          <div className="s1-title">
+            <div className="s1-eyebrow">Top Owners Corporation Solutions</div>
+            <h1 className="s1-h1">TOCS Order Portal</h1>
+            <p className="s1-sub">Order certificates, keys, fobs, swipes and more for your NSW strata property</p>
+            {/* Search bar — shows input when no building selected, summary when selected */}
+            {!selPlan ? (
+              <div className="s1-search-bar">
+                <Ic n="search" s={16} style={{ color: "#9a9a8e", flexShrink: 0 }}/>
+                <input
+                  placeholder="Search by building name or strata plan…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  autoFocus
+                />
+                {search && (
+                  <button className="s1-search-btn" style={{ background: "transparent", color: "var(--muted)", padding: "0 8px" }} onClick={() => setSearch("")}><Ic n="x" s={14}/></button>
+                )}
+              </div>
+            ) : (
+              <div className="s1-search-bar" style={{ background: "#f0f6f2", borderColor: "var(--sage-light)" }}>
+                <Ic n="check" s={16} style={{ color: "var(--sage)", flexShrink: 0 }}/>
+                <span className="s1-search-sel">{plan?.name}</span>
+                <button className="s1-search-btn" onClick={() => { setSelPlan(null); setSelLot(null); setCart([]); setOrderCategory(null); setSearch(""); }}>Change</button>
+              </div>
+            )}
           </div>
+
+          {/* ── Recent order banner ── */}
           {recentOrder && (
-            <div style={{ background: "#f0f7f3", border: "1px solid #c0dbc9", borderRadius: "8px", padding: "12px 16px", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", fontSize: "0.82rem" }}>
+            <div style={{ background: "#f0f7f3", border: "1px solid #c0dbc9", borderRadius: "8px", padding: "12px 16px", marginBottom: "14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", fontSize: "0.82rem" }}>
               <div>
                 <strong style={{ color: "var(--forest)" }}>Recent order: {recentOrder.id}</strong>
                 <span style={{ color: "var(--muted)", marginLeft: "10px" }}>{recentOrder.orderCategory === "keys" ? "Invoice to follow" : recentOrder.payment === "bank" ? "Awaiting bank transfer" : recentOrder.payment === "payid" ? "Awaiting PayID transfer" : "Paid"} · {fmt(recentOrder.total)}</span>
@@ -808,105 +822,99 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <button onClick={() => { try { localStorage.removeItem("tocs_last_order"); } catch {} setRecentOrder(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: "1.1rem", lineHeight: 1, padding: "0 4px", flexShrink: 0 }} aria-label="Dismiss">×</button>
             </div>
           )}
-          {/* ── Two-panel layout: animation left, search right ── */}
-          <div className="step1-panels">
 
-            {/* LEFT — How it works animation */}
-            <div className="step1-anim">
-              <div className="step1-panel-lbl">How it works</div>
-              <div style={{ position: "relative" }}>
-                <div className="story-wrap">
-                  <div className="story-bar"><div className="story-bar-fill"/></div>
-                  <div className="story-slide slide-1">
-                    <div className="story-step">Step 1 of 4</div>
-                    <div className="story-icon">🏢</div>
-                    <div className="story-title">Find Your Property</div>
-                    <div className="story-desc">Search by address or strata plan number</div>
+          {/* ── How It Works — 4-cell grid ── */}
+          <div className="hiw-grid">
+            <div className="hiw-cell hiw-act">
+              <div className="hiw-ghost">1</div>
+              <div className="hiw-emoji">🏢</div>
+              <div className="hiw-name">Find your building</div>
+              <div className="hiw-desc">Search by strata plan or address</div>
+            </div>
+            <div className="hiw-cell">
+              <div className="hiw-ghost">2</div>
+              <div className="hiw-emoji">🛒</div>
+              <div className="hiw-name">Choose your items</div>
+              <div className="hiw-desc">Certs, keys, fobs, swipes &amp; more</div>
+            </div>
+            <div className="hiw-cell">
+              <div className="hiw-ghost">3</div>
+              <div className="hiw-emoji">📋</div>
+              <div className="hiw-name">Enter your details</div>
+              <div className="hiw-desc">Applicant &amp; contact info</div>
+            </div>
+            <div className="hiw-cell">
+              <div className="hiw-ghost">4</div>
+              <div className="hiw-emoji">💳</div>
+              <div className="hiw-name">Pay your way</div>
+              <div className="hiw-desc">{pubConfig?.stripeEnabled ? "Bank · PayID · Card" : "Bank transfer · PayID"}</div>
+            </div>
+          </div>
+
+          {/* ── Building search results (no plan selected) ── */}
+          {!selPlan && (
+            !search.trim() ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🏢</div>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Start typing to find your building.</p>
+                <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Search by address, building name, or Strata Plan number (e.g. SP12345).</p>
+              </div>
+            ) : filteredPlans.length === 0 ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>No matching buildings found.</p>
+                <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Try a partial address or your Strata Plan number (e.g. SP12345).</p>
+              </div>
+            ) : (
+              <div className="plan-grid" style={{ marginBottom: "14px" }}>
+                {filteredPlans.map(p => (
+                  <div key={p.id} className="plan-card" onClick={() => { setCart([]); setSelLot(null); setSelPlan(p.id); setSearch(""); }}>
+                    <div className="pc-id">{p.id}</div>
+                    <div className="pc-name">{p.name}</div>
+                    <div className="pc-addr">{p.address}</div>
+                    <div className="pc-meta">{p.lots.length} lots &nbsp;·&nbsp; {Object.keys(p.ownerCorps).length} Owner Corporations</div>
                   </div>
-                  <div className="story-slide slide-2">
-                    <div className="story-step">Step 2 of 4</div>
-                    <div className="story-icon">🛒</div>
-                    <div className="story-title">Pick What You Need</div>
-                    <div className="story-desc">Certificates · Keys · Fobs · Swipes &amp; more</div>
+                ))}
+              </div>
+            )
+          )}
+
+          {/* ── Selected building detail card ── */}
+          {selPlan && plan && (
+            <div className="bsel">
+              <div className="bsel-hdr">
+                <div className="bsel-hdr-lbl">
+                  <div className="bsel-hdr-check">✓</div>
+                  Building Selected
+                </div>
+                <button className="bsel-change" onClick={() => { setSelPlan(null); setSelLot(null); setCart([]); setOrderCategory(null); setSearch(""); }}>
+                  Change ↗
+                </button>
+              </div>
+              <div className="bsel-body">
+                <div className="bsel-name">{plan.name}</div>
+                <div className="bsel-addr">📍 {plan.address}</div>
+                <div className="bsel-stats">
+                  <div className="bsel-stat">
+                    <div className="bsel-stat-val">{plan.lots.length}</div>
+                    <div className="bsel-stat-lbl">Total Lots</div>
                   </div>
-                  <div className="story-slide slide-3">
-                    <div className="story-step">Step 3 of 4</div>
-                    <div className="story-icon">💳</div>
-                    <div className="story-title">Pay Your Way</div>
-                    <div className="story-desc">
-                      {pubConfig?.stripeEnabled
-                        ? "Bank transfer · PayID · Stripe"
-                        : "Bank transfer · PayID"}
-                    </div>
-                  </div>
-                  <div className="story-slide slide-4">
-                    <div className="story-step">Step 4 of 4</div>
-                    <div className="story-icon">📬</div>
-                    <div className="story-title">We Handle the Rest</div>
-                    <div className="story-desc">Issued &amp; delivered within 2–3 business days</div>
-                  </div>
-                  <div className="story-dots">
-                    <div className="story-dot"/><div className="story-dot"/>
-                    <div className="story-dot"/><div className="story-dot"/>
+                  <div className="bsel-stat">
+                    <div className="bsel-stat-val">{Object.keys(plan.ownerCorps).length}</div>
+                    <div className="bsel-stat-lbl">Owner Corporations</div>
                   </div>
                 </div>
-                <div className="story-arrow story-arrow-l">‹</div>
-                <div className="story-arrow story-arrow-r">›</div>
+                <div className="bsel-sp">
+                  <span>Strata Plan</span>
+                  <span className="bsel-sp-badge">{plan.id}</span>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* DIVIDER */}
-            <div className="step1-divider"/>
-
-            {/* RIGHT — Find Your Building search */}
-            <div className="step1-search">
-              <div className="step1-panel-lbl">Find Your Building</div>
-              <div className="search-wrap">
-                <span className="search-icon"><Ic n="search" s={18}/></span>
-                <input
-                  className="search-input"
-                  placeholder="e.g. 45 Marina Drive  —  or  —  SP12345"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  autoFocus
-                />
-                {search && (
-                  <button className="search-clear" onClick={() => setSearch("")}><Ic n="x" s={16}/></button>
-                )}
-              </div>
-
-              {!search.trim() ? (
-                <div className="empty" style={{ background: "rgba(255,255,255,0.45)", border: "1.5px dashed rgba(28,51,38,0.18)", borderRadius: "8px" }}>
-                  <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🏢</div>
-                  <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Start typing to find your building.</p>
-                  <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Search by address, building name, or Strata Plan number (e.g. SP12345).</p>
-                </div>
-              ) : filteredPlans.length === 0 ? (
-                <div className="empty" style={{ background: "rgba(255,255,255,0.45)", border: "1.5px dashed rgba(28,51,38,0.18)", borderRadius: "8px" }}>
-                  <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
-                  <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>No matching buildings found.</p>
-                  <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Try a partial address or your Strata Plan number (e.g. SP12345).</p>
-                </div>
-              ) : (
-                <div className="plan-grid">
-                  {filteredPlans.map(p => (
-                    <div key={p.id} className={`plan-card ${selPlan === p.id ? "sel" : ""}`} onClick={() => { if (selPlan !== p.id) { setCart([]); setSelLot(null); } setSelPlan(p.id); }}>
-                      {selPlan === p.id && <div className="sel-tick"><Ic n="check" s={11}/></div>}
-                      <div className="pc-id">{p.id}</div>
-                      <div className="pc-name">{p.name}</div>
-                      <div className="pc-addr">{p.address}</div>
-                      <div className="pc-meta">{p.lots.length} lots &nbsp;·&nbsp; {Object.keys(p.ownerCorps).length} Owner Corporations</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-          </div>{/* end step1-panels */}
-
-          {/* Category selector — shown once a plan is selected */}
+          {/* ── Category selector — shown once a plan is selected ── */}
           {selPlan && (
-            <div style={{ marginTop: "2rem", marginBottom: "2rem" }}>
+            <div style={{ marginBottom: "20px" }}>
               <div className="search-label" style={{ marginBottom: "12px" }}>What are you ordering?</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                 <button className={`cat-card ${orderCategory === "oc" ? "cat-selected" : ""}`}
@@ -1445,7 +1453,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
       {step < 6 && (
         <div style={{ textAlign:"center", padding:"2rem 0 0.5rem", marginTop:"3rem", borderTop:"1px solid var(--border)", fontSize:"0.75rem", color:"var(--muted)" }}>
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
-          {" · "}TOCS Owner Corporation Services
+          {" · "}TOCS Owner Corporation Solutions
         </div>
       )}
 
