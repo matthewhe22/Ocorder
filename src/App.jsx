@@ -1266,7 +1266,13 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => { setCart([]); setLotAuthFile(null); setContact(DEFAULT_CONTACT); setSelectedShipping(null); setStep(1); }} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
               <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                 disabled={(plan?.shippingOptions?.length > 0 && !selectedShipping)}
-                onClick={() => setStep(4)}>
+                onClick={() => {
+                  // Pre-populate Full Name from owner name if not yet entered
+                  if (contact.applicantType === "owner" && contact.ownerName && !contact.name) {
+                    setContact(p => ({ ...p, name: p.ownerName }));
+                  }
+                  setStep(4);
+                }}>
                 Enter Contact Details <Ic n="arrow" s={14}/>
               </button>
             </div>
@@ -1283,7 +1289,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
           <div className="panel">
             <div className="form-row">
               <label className="f-label">Full Name *</label>
-              <input className="f-input" type="text" placeholder="Jane Smith" value={contact.name} onChange={e => setContact(p => ({...p, name: e.target.value}))} onBlur={() => setNameTouched(true)}/>
+              <input className="f-input" type="text" placeholder={contact.ownerName || "Jane Smith"} value={contact.name} onChange={e => setContact(p => ({...p, name: e.target.value}))} onBlur={() => setNameTouched(true)}/>
               {nameTouched && !contact.name && (
                 <div className="f-err"><Ic n="x" s={12}/> Full name is required.</div>
               )}
@@ -2669,7 +2675,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── SECURITY ── */}
       {adminTab === "settings" && (
-        <SettingsTab adminToken={adminToken} />
+        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} />
       )}
 
       {adminTab === "branding" && (
@@ -3296,7 +3302,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ adminToken }) {
+function SettingsTab({ adminToken, pubConfig }) {
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
   const DEF_TPL = { certificateSubject: "Your OC Certificate — Order #{orderId}", certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team", footer: "TOCS Owner Corporation Services  |  info@tocs.co" };
@@ -3495,7 +3501,7 @@ function SettingsTab({ adminToken }) {
         {stripeTestResult?.ok === true  && <div className="alert alert-ok"  style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
         {stripeTestResult?.ok === false && <div className="alert alert-err" style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
 
-        <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || !stripeSecretKey || stripeSecretKey === "••••••••"}>
+        <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || (stripeSecretKey === "••••••••") || (!stripeSecretKey && !pubConfig?.stripeEnabled)}>
           {testingStripe
             ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
             : <><Ic n="check" s={15}/> Test Stripe Connection</>
