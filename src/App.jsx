@@ -3311,6 +3311,11 @@ function SettingsTab({ adminToken }) {
   const [showPass, setShowPass] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [stripeSecretKey, setStripeSecretKey] = useState("");
+  const [stripePubKey, setStripePubKey] = useState("");
+  const [showStripeKey, setShowStripeKey] = useState(false);
+  const [testingStripe, setTestingStripe] = useState(false);
+  const [stripeTestResult, setStripeTestResult] = useState(null);
 
   useEffect(() => {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
@@ -3320,6 +3325,8 @@ function SettingsTab({ adminToken }) {
         setSmtp({ ...DEF_SMTP, ...(d.smtp || {}) });
         setPayDetails({ ...DEF_PAY, ...(d.paymentDetails || {}) });
         setEmailTpl({ ...DEF_TPL, ...(d.emailTemplate || {}) });
+        setStripeSecretKey(d.stripe?.secretKey || "");
+        setStripePubKey(d.stripe?.publishableKey || "");
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -3335,7 +3342,10 @@ function SettingsTab({ adminToken }) {
       const r = await fetch("/api/config/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ orderEmail, smtp, paymentDetails: payDetails, emailTemplate: emailTpl }),
+        body: JSON.stringify({
+          orderEmail, smtp, paymentDetails: payDetails, emailTemplate: emailTpl,
+          stripe: { secretKey: stripeSecretKey, publishableKey: stripePubKey },
+        }),
       });
       if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
       else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
@@ -3358,9 +3368,35 @@ function SettingsTab({ adminToken }) {
     setTesting(false);
   };
 
+  const testStripe = async () => {
+    setTestingStripe(true); setStripeTestResult(null); setSaveErr("");
+    try {
+      const r = await fetch("/api/config/settings?action=test-stripe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ stripe: { secretKey: stripeSecretKey } }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        setStripeTestResult({ ok: true, msg: `✅ Connected · ${d.mode === "test" ? "Test Mode" : "⚠️ Live Mode"} · ${d.accountId} (key from ${d.keySource})` });
+      } else {
+        setStripeTestResult({ ok: false, msg: d.error || "Connection failed." });
+      }
+    } catch { setStripeTestResult({ ok: false, msg: "Unable to connect to server." }); }
+    setTestingStripe(false);
+  };
+
   if (loading) return <div className="panel" style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}>Loading settings…</div>;
 
   const rowSt = { display: "flex", gap: "10px" };
+
+  const stripeModeFromKey = (k) => {
+    if (!k || k === "••••••••") return null;
+    if (k.startsWith("sk_live_")) return { label: "Live Mode", color: "#b45309" };
+    if (k.startsWith("sk_test_")) return { label: "Test Mode", color: "#16a34a" };
+    return null;
+  };
+  const stripeMode = stripeModeFromKey(stripeSecretKey);
 
   return (
     <div style={{ maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -3406,6 +3442,65 @@ function SettingsTab({ adminToken }) {
           <input className="f-input" type="email" placeholder="accounts@tocs.com.au" value={payDetails.payid}
             onChange={e => updPay("payid", e.target.value)}/>
         </div>
+      </div>
+
+      {/* Stripe Payments */}
+      <div className="panel">
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Stripe Payments</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
+          Enable card payments via Stripe. Keys are stored securely and take priority over Vercel environment variables.
+        </p>
+
+        {stripeMode && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: stripeMode.color + "18", border: `1px solid ${stripeMode.color}40`, borderRadius: "20px", padding: "3px 12px", marginBottom: "16px" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: stripeMode.color, display: "inline-block" }}/>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: stripeMode.color, letterSpacing: "0.06em" }}>{stripeMode.label}</span>
+          </div>
+        )}
+        {!stripeMode && stripeSecretKey === "" && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "20px", padding: "3px 12px", marginBottom: "16px" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#9ca3af", display: "inline-block" }}/>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", letterSpacing: "0.06em" }}>Not Configured</span>
+          </div>
+        )}
+
+        <div className="form-row">
+          <label className="f-label">Secret Key</label>
+          <div className="pw-wrap">
+            <input className="f-input" type={showStripeKey ? "text" : "password"}
+              placeholder="sk_test_••••  or  sk_live_••••"
+              value={stripeSecretKey}
+              onChange={e => { setStripeSecretKey(e.target.value); setSaved(false); setSaveErr(""); setStripeTestResult(null); }}
+              style={{ paddingRight: "42px" }}/>
+            <button className="pw-toggle" type="button" onClick={() => setShowStripeKey(p => !p)}>
+              <Ic n={showStripeKey ? "eyeOff" : "eye"} s={16}/>
+            </button>
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
+            Find this in your Stripe Dashboard → Developers → API keys.
+          </div>
+        </div>
+
+        <div className="form-row" style={{ marginBottom: "1rem" }}>
+          <label className="f-label">Publishable Key</label>
+          <input className="f-input" type="text"
+            placeholder="pk_test_••••  or  pk_live_••••"
+            value={stripePubKey}
+            onChange={e => { setStripePubKey(e.target.value); setSaved(false); setSaveErr(""); }}/>
+          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
+            Optional — used to display card brands and for future client-side integrations.
+          </div>
+        </div>
+
+        {stripeTestResult?.ok === true  && <div className="alert alert-ok"  style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
+        {stripeTestResult?.ok === false && <div className="alert alert-err" style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
+
+        <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || !stripeSecretKey || stripeSecretKey === "••••••••"}>
+          {testingStripe
+            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            : <><Ic n="check" s={15}/> Test Stripe Connection</>
+          }
+        </button>
       </div>
 
       {/* SMTP configuration */}
