@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const pd = cfg.paymentDetails || {};
   return res.status(200).json({
     logo: cfg.logo || "",
-    stripeEnabled: !!(process.env.STRIPE_SECRET_KEY),
+    stripeEnabled: !!(cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY),
     paymentDetails: {
       accountName: pd.accountName || "Top Owners Corporation",
       bsb: pd.bsb || "033-065",
