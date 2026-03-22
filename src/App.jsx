@@ -573,7 +573,7 @@ export default function App() {
     const contactInfo = {
       ...contact,
       // Include shippingAddress for keys orders with a paid delivery option
-      shippingAddress: (orderCategory === "keys" && selectedShipping?.cost > 0) ? contact.shippingAddress : undefined,
+      shippingAddress: (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false) ? contact.shippingAddress : undefined,
     };
     const o = { id, date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, status: orderStatus, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
     try {
@@ -618,7 +618,7 @@ export default function App() {
     if (planShipping.length > 0 && !selectedShipping) {
       const opt = planShipping[0];
       const cost = calcShippingCost(opt, cart, plan?.products);
-      setSelectedShipping({ id: opt.id, name: opt.name, cost });
+      setSelectedShipping({ id: opt.id, name: opt.name, cost, requiresAddress: opt.requiresAddress !== false });
     }
   }, [step, plan?.id]); // plan.id tracks plan changes; cart is stable while on step 3
 
@@ -1226,14 +1226,14 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                       const isSelected = selectedShipping?.id === opt.id;
                       return (
                         <label key={opt.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", border: `1px solid ${isSelected ? "var(--sage)" : "var(--border)"}`, borderRadius: "4px", cursor: "pointer", marginBottom: "6px", background: isSelected ? "var(--sage-tint)" : "white" }}>
-                          <input type="radio" name="shipping" checked={isSelected} onChange={() => setSelectedShipping({ id: opt.id, name: opt.name, cost })} style={{ accentColor: "var(--sage)" }}/>
+                          <input type="radio" name="shipping" checked={isSelected} onChange={() => setSelectedShipping({ id: opt.id, name: opt.name, cost, requiresAddress: opt.requiresAddress !== false })} style={{ accentColor: "var(--sage)" }}/>
                           <span style={{ flex: 1, fontSize: "0.88rem" }}>{opt.name}</span>
                           <span style={{ fontWeight: 600, fontSize: "0.88rem" }}>{fmt(cost)}</span>
                         </label>
                       );
                     })}
-                    {/* Delivery Address — shown for keys orders when a paid delivery option is selected */}
-                    {orderCategory === "keys" && selectedShipping && selectedShipping.cost > 0 && (
+                    {/* Delivery Address — shown for keys orders when a delivery option is selected that requires an address */}
+                    {orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (
                       <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
                         <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.8rem" }}>Delivery Address</div>
                         <div className="form-row">
@@ -1287,7 +1287,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                 disabled={
                   (plan?.shippingOptions?.length > 0 && !selectedShipping) ||
-                  (orderCategory === "keys" && selectedShipping?.cost > 0 && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
+                  (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
                 }
                 onClick={() => {
                   // Pre-populate Full Name from owner name if not yet entered
@@ -1953,10 +1953,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   const addShippingOption = async () => {
     if (!form.shippingName || form.shippingCost === "" || form.shippingCost === undefined) return;
-    const newOpt = { id: "ship-" + Date.now(), name: form.shippingName, cost: Math.max(0, parseFloat(form.shippingCost)) };
+    const newOpt = { id: "ship-" + Date.now(), name: form.shippingName, cost: Math.max(0, parseFloat(form.shippingCost)), requiresAddress: form.shippingRequiresAddress !== false };
     const plans = data.strataPlans.map(p => p.id !== editTarget.id ? p : { ...p, shippingOptions: [...(p.shippingOptions || []), newOpt] });
     await savePlans(plans);
-    setForm(f => ({ ...f, shippingName: "", shippingCost: "" }));
+    setForm(f => ({ ...f, shippingName: "", shippingCost: "", shippingRequiresAddress: true }));
   };
 
   const deleteShippingOption = async (optId) => {
@@ -2756,12 +2756,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>No shipping options configured. Add one below.</p>
               ) : (
                 <table className="tbl" style={{ marginBottom: "1rem" }}>
-                  <thead><tr><th>Name</th><th>Cost (AUD)</th><th></th></tr></thead>
+                  <thead><tr><th>Name</th><th>Cost (AUD)</th><th>Needs Address</th><th></th></tr></thead>
                   <tbody>
                     {opts.map(opt => (
                       <tr key={opt.id}>
                         <td>{opt.name}</td>
                         <td>{fmt(opt.cost)}</td>
+                        <td style={{ textAlign: "center" }}>{opt.requiresAddress !== false ? "✓" : "—"}</td>
                         <td><button className="tbl-act-btn danger" onClick={() => deleteShippingOption(opt.id)}><Ic n="trash" s={13}/> Remove</button></td>
                       </tr>
                     ))}
@@ -2781,6 +2782,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                   </div>
                   <button className="btn btn-blk" style={{ padding: "8px 14px", fontSize: "0.78rem", whiteSpace: "nowrap" }} onClick={addShippingOption}><Ic n="plus" s={13}/> Add</button>
                 </div>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "0.8rem", color: "var(--forest)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.shippingRequiresAddress !== false} onChange={e => upd("shippingRequiresAddress", e.target.checked)} style={{ accentColor: "var(--sage)" }}/>
+                  Requires delivery address (uncheck for pickup / no shipment)
+                </label>
               </div>
               <div style={{ marginTop: "1rem" }}>
                 <button className="btn btn-out" style={{ width: "100%" }} onClick={() => { setModal(null); setEditTarget(null); setForm({}); }}>Done</button>
