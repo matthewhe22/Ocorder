@@ -55,7 +55,7 @@ const PHONE_RE  = /^(\+?61|0)[0-9]{8,9}$/;
 // Default contact state — single source of truth used for init, reset and cancel
 const DEFAULT_CONTACT = {
   name: "", email: "", phone: "", companyName: "",
-  applicantType: "owner", ownerName: "",
+  applicantType: "owner", ownerName: "", ocReference: "",
   shippingAddress: { street: "", suburb: "", state: "NSW", postcode: "" },
 };
 
@@ -386,8 +386,8 @@ const CSS = `
   .s1-search-sel { flex:1; font-size:0.9rem; color:var(--forest); font-weight:500; }
   .s1-search-btn { background:var(--forest); color:white; border:none; border-radius:100px; padding:7px 18px; font-size:0.72rem; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; white-space:nowrap; letter-spacing:0.04em; }
   .s1-search-btn:hover { background:var(--forest3); }
-  /* How It Works 4-cell grid */
-  .hiw-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:2px; border-radius:12px; overflow:hidden; background:#c4c4c2; margin-bottom:14px; box-shadow:0 2px 10px rgba(0,0,0,0.07); }
+  /* How It Works 5-cell grid */
+  .hiw-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:2px; border-radius:12px; overflow:hidden; background:#c4c4c2; margin-bottom:14px; box-shadow:0 2px 10px rgba(0,0,0,0.07); }
   .hiw-cell { background:white; padding:18px 14px 16px; display:flex; flex-direction:column; gap:7px; position:relative; }
   .hiw-cell.hiw-act { background:var(--forest); }
   .hiw-ghost { font-size:2.6rem; font-weight:700; color:#f0f0ed; position:absolute; top:8px; right:10px; line-height:1; font-family:'Cormorant Garamond',serif; }
@@ -413,7 +413,7 @@ const CSS = `
   .bsel-stat-lbl { font-size:0.6rem; font-weight:600; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; margin-top:2px; }
   .bsel-sp { margin-top:12px; padding-top:12px; border-top:1px solid #eaeae6; font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:6px; }
   .bsel-sp-badge { background:#f0f6f2; border:1px solid #c8dece; border-radius:5px; padding:2px 8px; font-size:0.62rem; font-weight:700; color:var(--sage); letter-spacing:0.04em; }
-  @media(max-width:640px){ .hiw-grid{ grid-template-columns:1fr 1fr; } }
+  @media(max-width:720px){ .hiw-grid{ grid-template-columns:1fr 1fr; } }
   @media(max-width:800px){ .payment-grid{ grid-template-columns:1fr !important; } }
 
   /* ── LOT PICKER MODAL ── */
@@ -817,7 +817,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
             </div>
           )}
 
-          {/* ── How It Works — 4-cell grid ── */}
+          {/* ── How It Works — 5-cell grid ── */}
           <div className="hiw-grid">
             <div className="hiw-cell hiw-act">
               <div className="hiw-ghost">1</div>
@@ -828,17 +828,23 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
             <div className="hiw-cell">
               <div className="hiw-ghost">2</div>
               <div className="hiw-emoji">🛒</div>
-              <div className="hiw-name">Choose your items</div>
+              <div className="hiw-name">Select products</div>
               <div className="hiw-desc">Certs, keys, fobs, swipes &amp; more</div>
             </div>
             <div className="hiw-cell">
               <div className="hiw-ghost">3</div>
               <div className="hiw-emoji">📋</div>
-              <div className="hiw-name">Enter your details</div>
-              <div className="hiw-desc">Applicant &amp; contact info</div>
+              <div className="hiw-name">Review order</div>
+              <div className="hiw-desc">Confirm your selections</div>
             </div>
             <div className="hiw-cell">
               <div className="hiw-ghost">4</div>
+              <div className="hiw-emoji">👤</div>
+              <div className="hiw-name">Contact details</div>
+              <div className="hiw-desc">Applicant &amp; contact info</div>
+            </div>
+            <div className="hiw-cell">
+              <div className="hiw-ghost">5</div>
               <div className="hiw-emoji">💳</div>
               <div className="hiw-name">Pay your way</div>
               <div className="hiw-desc">{pubConfig?.stripeEnabled ? "Bank · PayID · Card" : "Bank transfer · PayID"}</div>
@@ -1002,6 +1008,15 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                     <div className="form-row">
                       <label className="f-label">Company / Firm Name</label>
                       <input className="f-input" type="text" placeholder="e.g. Smith & Partners Conveyancing" value={contact.companyName} onChange={e => setContact(p => ({...p, companyName: e.target.value}))}/>
+                    </div>
+                  )}
+
+                  {/* OC Certificate Reference — optional, OC orders only */}
+                  {orderCategory !== "keys" && (
+                    <div className="form-row">
+                      <label className="f-label">OC Certificate Reference (if required)</label>
+                      <input className="f-input" type="text" placeholder="e.g. Ref-2024-001 (optional)" value={contact.ocReference} onChange={e => setContact(p => ({...p, ocReference: e.target.value}))}/>
+                      <p style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>Your internal reference number for this order, if applicable. For order tracking purposes only.</p>
                     </div>
                   )}
 
@@ -1214,6 +1229,20 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                   <button className="ci-rm" onClick={() => setCart(p => p.filter(i => i.key !== item.key))}><Ic n="trash" s={15}/></button>
                 </div>
               ))}
+              {/* ── Applicant Summary (OC orders only) ── */}
+              {orderCategory === "oc" && (contact.ownerName || contact.applicantType === "agent" || contact.ocReference) && (
+                <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+                  <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.6rem" }}>Applicant</div>
+                  <div style={{ fontSize: "0.82rem", color: "var(--ink)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div><span style={{ color: "var(--muted)", marginRight: "8px" }}>Applying as:</span>{contact.applicantType === "agent" ? "Agent / Representative" : "Owner"}</div>
+                    {contact.applicantType === "owner" && contact.ownerName && <div><span style={{ color: "var(--muted)", marginRight: "8px" }}>Owner name:</span>{contact.ownerName}</div>}
+                    {contact.applicantType === "agent" && contact.companyName && <div><span style={{ color: "var(--muted)", marginRight: "8px" }}>Company:</span>{contact.companyName}</div>}
+                    {contact.ocReference && <div><span style={{ color: "var(--muted)", marginRight: "8px" }}>Reference:</span>{contact.ocReference}</div>}
+                    {cart[0]?.lotNumber && <div><span style={{ color: "var(--muted)", marginRight: "8px" }}>Lot:</span>{cart[0].lotNumber}</div>}
+                  </div>
+                </div>
+              )}
+
               {/* ── Shipping Method Selector (Keys/Fobs orders only — OC certs are delivered by email) ── */}
               {(() => {
                 const planShipping = plan?.shippingOptions || [];
@@ -1238,11 +1267,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                         <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.8rem" }}>Delivery Address</div>
                         <div className="form-row">
                           <label className="f-label">Street Address *</label>
-                          <input className="f-input" type="text" placeholder="123 Example Street" value={contact.shippingAddress.street} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, street: e.target.value}}))}/>
+                          <input className="f-input" type="text" placeholder="Street address" value={contact.shippingAddress.street} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, street: e.target.value}}))}/>
                         </div>
                         <div className="form-row">
                           <label className="f-label">Suburb *</label>
-                          <input className="f-input" type="text" placeholder="Sydney" value={contact.shippingAddress.suburb} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, suburb: e.target.value}}))}/>
+                          <input className="f-input" type="text" placeholder="Suburb" value={contact.shippingAddress.suburb} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, suburb: e.target.value}}))}/>
                         </div>
                         <div style={{ display: "flex", gap: "12px" }}>
                           <div className="form-row" style={{ flex: 2, marginBottom: 0 }}>
@@ -1253,7 +1282,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                           </div>
                           <div className="form-row" style={{ flex: 1, marginBottom: 0 }}>
                             <label className="f-label">Postcode *</label>
-                            <input className="f-input" type="text" maxLength={4} placeholder="2000" value={contact.shippingAddress.postcode} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, postcode: e.target.value}}))}/>
+                            <input className="f-input" type="text" maxLength={4} placeholder="Postcode" value={contact.shippingAddress.postcode} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, postcode: e.target.value}}))}/>
                           </div>
                         </div>
                       </div>
@@ -1277,27 +1306,37 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                 <span className="cart-total-label">Total (AUD, incl. GST)</span>
                 <span className="cart-total-amt">{fmt(total)}</span>
               </div>
+              {orderCategory === "keys" && (
+                <div style={{ marginTop: "0.6rem", fontSize: "0.72rem", color: "var(--muted)", fontStyle: "italic" }}>
+                  Note: Key/fob prices are indicative — final amount confirmed on invoice.
+                </div>
+              )}
             </div>
           )}
 
           {cart.length > 0 && (
-            <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
+            <div style={{ display: "flex", gap: "10px", marginTop: "1px", flexWrap: "wrap" }}>
               <button className="btn btn-out" onClick={() => setStep(2)}><Ic n="arrowL" s={14}/> Edit</button>
               <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => { setCart([]); setLotAuthFile(null); setContact(DEFAULT_CONTACT); setSelectedShipping(null); setStep(1); }} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
-              <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
-                disabled={
-                  (orderCategory === "keys" && plan?.shippingOptions?.length > 0 && !selectedShipping) ||
-                  (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
-                }
-                onClick={() => {
-                  // Pre-populate Full Name from owner name if not yet entered
-                  if (contact.applicantType === "owner" && contact.ownerName && !contact.name) {
-                    setContact(p => ({ ...p, name: p.ownerName }));
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
+                  disabled={
+                    (orderCategory === "keys" && plan?.shippingOptions?.length > 0 && !selectedShipping) ||
+                    (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
                   }
-                  setStep(4);
-                }}>
-                Enter Contact Details <Ic n="arrow" s={14}/>
-              </button>
+                  onClick={() => {
+                    // Pre-populate Full Name from owner name if not yet entered
+                    if (contact.applicantType === "owner" && contact.ownerName && !contact.name) {
+                      setContact(p => ({ ...p, name: p.ownerName }));
+                    }
+                    setStep(4);
+                  }}>
+                  Enter Contact Details <Ic n="arrow" s={14}/>
+                </button>
+                {orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode) && (
+                  <div style={{ fontSize: "0.75rem", color: "var(--muted)", textAlign: "center" }}>Please enter your delivery address above to continue.</div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1308,6 +1347,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
         <div style={{ maxWidth: "520px" }}>
           <h1 className="pg-title">Contact Details</h1>
           <p className="pg-sub">We'll send your order confirmation and {orderCategory === "keys" ? "invoice" : "certificate"} to these details.</p>
+          {(() => {
+            const turnarounds = [...new Set(cart.map(i => i.turnaround).filter(Boolean))];
+            if (turnarounds.length === 0) return null;
+            return <div style={{ fontSize: "0.78rem", color: "var(--sage)", background: "var(--sage-tint)", border: "1px solid var(--border2)", borderRadius: "6px", padding: "8px 12px", marginBottom: "1rem" }}>⏱ Estimated turnaround: {turnarounds.join(" / ")}</div>;
+          })()}
 
           <div className="panel">
             <div className="form-row">
@@ -1395,7 +1439,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
           cart={cart} total={total} contact={contact}
           payMethod={payMethod} setPayMethod={setPayMethod}
           onBack={() => setStep(4)} placeOrder={placeOrder} pubConfig={pubConfig}
-          selectedShipping={selectedShipping}
+          selectedShipping={selectedShipping} orderCategory={orderCategory}
         />
       )}
 
@@ -1458,7 +1502,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
 }
 
 // ─── PAYMENT STEP ─────────────────────────────────────────────────────────────
-function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, placeOrder, pubConfig, selectedShipping }) {
+function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, placeOrder, pubConfig, selectedShipping, orderCategory }) {
   const [placing, setPlacing] = useState(false);
   const [placeErr, setPlaceErr] = useState("");
 
@@ -1474,6 +1518,11 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
       <div>{/* left column */}
       <h1 className="pg-title">Payment</h1>
       <p className="pg-sub">Choose your preferred payment method to complete the order.</p>
+      {(() => {
+        const turnarounds = [...new Set(cart.map(i => i.turnaround).filter(Boolean))];
+        if (turnarounds.length === 0) return null;
+        return <div style={{ fontSize: "0.78rem", color: "var(--sage)", background: "var(--sage-tint)", border: "1px solid var(--border2)", borderRadius: "6px", padding: "8px 12px", marginBottom: "1rem" }}>⏱ Estimated turnaround: {turnarounds.join(" / ")}</div>;
+      })()}
 
       <div style={{ border: "1px solid var(--border)", padding: "1.2rem", marginBottom: "1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "3px" }}>
         <div>
@@ -1482,6 +1531,9 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
           <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>GST component: {fmt(gstOf(total))}</div>
           {selectedShipping?.cost > 0 && (
             <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>Shipping ({selectedShipping.name}): {fmt(selectedShipping.cost)}</div>
+          )}
+          {orderCategory === "keys" && (
+            <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px", fontStyle: "italic" }}>Key/fob prices are indicative — final amount confirmed on invoice.</div>
           )}
         </div>
         <div style={{ fontSize: "0.8rem", color: "var(--muted)", textAlign: "right" }}>
@@ -2518,7 +2570,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                             const hasExtra = effectiveType === "owner" ? !!ci.ownerName : !!ci.companyName;
                             const hasAddr = !!(ci.shippingAddress?.street);
                             const hasShipping = !!(o.selectedShipping);
-                            if (!hasExtra && !hasAddr && !hasShipping) return null;
+                            const hasRef = !!(ci.ocReference);
+                            if (!hasExtra && !hasAddr && !hasShipping && !hasRef) return null;
                             return (
                               <div style={{ marginBottom: "1rem" }}>
                                 <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Customer Details</div>
@@ -2527,6 +2580,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Applicant Type</td><td style={{ paddingBottom:"4px", fontWeight:500 }}>{effectiveType === "agent" ? "Agent / Representative" : "Owner"}</td></tr>
                                     {effectiveType === "owner" && ci.ownerName && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Owner Name</td><td style={{ paddingBottom:"4px" }}>{ci.ownerName}</td></tr>}
                                     {effectiveType === "agent" && ci.companyName && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Company</td><td style={{ paddingBottom:"4px" }}>{ci.companyName}</td></tr>}
+                                    {hasRef && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>OC Reference</td><td style={{ paddingBottom:"4px" }}>{ci.ocReference}</td></tr>}
                                     {hasAddr && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Delivery Address</td><td style={{ paddingBottom:"4px" }}>{ci.shippingAddress.street}, {ci.shippingAddress.suburb} {ci.shippingAddress.state} {ci.shippingAddress.postcode}</td></tr>}
                                     {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost)}</td></tr>}
                                   </tbody>
