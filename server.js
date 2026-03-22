@@ -63,7 +63,7 @@ const DEFAULT_CONFIG = {
   emailTemplate: {
     certificateSubject: "Your OC Certificate — Order #{orderId}",
     certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
-    footer: "TOCS Owners Corporation Solution  |  info@tocs.co",
+    footer: "Top Owners Corporation Solution  |  info@tocs.co",
   },
 };
 
@@ -238,12 +238,12 @@ function buildCertEmailHtml(order, message, cfg) {
     .replace(/{address}/g, lot?.planName || "");
   const bodyText = message || raw;
   const htmlBody = bodyText.replace(/\n/g, "<br>");
-  const footer = (tpl.footer || "TOCS Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1c3326;padding:24px 32px;">
-      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Owners Corporation Solution</h1>
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
     </div>
     <div style="padding:32px;">
       <p style="margin-top:0;">${htmlBody}</p>
@@ -537,7 +537,7 @@ async function handler(req, res) {
       const tpl = cfg.emailTemplate || {};
       const subj = (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
       const mailOpts = {
-        from: `"TOCS Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
+        from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
         to: order.contactInfo.email,
         subject: subj,
         html: buildCertEmailHtml(order, message, cfg),

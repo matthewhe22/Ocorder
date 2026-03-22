@@ -779,7 +779,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
 
           {/* ── Title block ── */}
           <div className="s1-title">
-            <div className="s1-eyebrow">Top Owners Corporation Solutions</div>
+            <div className="s1-eyebrow">Top Owners Corporation Solution</div>
             <h1 className="s1-h1">TOCS Order Portal</h1>
             <p className="s1-sub">Order certificates, keys, fobs, swipes and more for your NSW strata property</p>
             {/* Search bar — shows input when no building selected, summary when selected */}
@@ -1469,7 +1469,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
       {step < 6 && (
         <div style={{ textAlign:"center", padding:"2rem 0 0.5rem", marginTop:"3rem", borderTop:"1px solid var(--border)", fontSize:"0.75rem", color:"var(--muted)" }}>
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
-          {" · "}TOCS Owners Corporation Solution
+          {" · "}Top Owners Corporation Solution
         </div>
       )}
 
@@ -1783,7 +1783,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
   const sections = [
     {
       heading: "Introduction",
-      body: `TOCS Owners Corporation Solution ("TOCS", "we", "our", "us") is committed to providing quality services to you and this policy outlines our ongoing obligations to you in respect of how we manage your Personal Information.\n\nWe have adopted the Australian Privacy Principles (APPs) contained in the Privacy Act 1988 (Cth) (the Privacy Act). The APPs govern the way in which we collect, use, disclose, store, secure and dispose of your Personal Information.\n\nA copy of the Australian Privacy Principles may be obtained from the website of The Office of the Australian Information Commissioner at www.oaic.gov.au.`,
+      body: `Top Owners Corporation Solution ("TOCS", "we", "our", "us") is committed to providing quality services to you and this policy outlines our ongoing obligations to you in respect of how we manage your Personal Information.\n\nWe have adopted the Australian Privacy Principles (APPs) contained in the Privacy Act 1988 (Cth) (the Privacy Act). The APPs govern the way in which we collect, use, disclose, store, secure and dispose of your Personal Information.\n\nA copy of the Australian Privacy Principles may be obtained from the website of The Office of the Australian Information Commissioner at www.oaic.gov.au.`,
     },
     {
       heading: "What is Personal Information and why do we collect it?",
@@ -1807,7 +1807,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
     },
     {
       heading: "Access to your Personal Information",
-      body: `You may access the Personal Information we hold about you and to update and/or correct it, subject to certain exceptions. If you wish to access your Personal Information, please contact us in writing.\n\nTOCS Owners Corporation Solution will not charge any fee for your access request, but may charge an administrative fee for providing a copy of your Personal Information.\n\nIn order to protect your Personal Information we may require identification from you before releasing the requested information.`,
+      body: `You may access the Personal Information we hold about you and to update and/or correct it, subject to certain exceptions. If you wish to access your Personal Information, please contact us in writing.\n\nTop Owners Corporation Solution will not charge any fee for your access request, but may charge an administrative fee for providing a copy of your Personal Information.\n\nIn order to protect your Personal Information we may require identification from you before releasing the requested information.`,
     },
     {
       heading: "Maintaining the Quality of your Personal Information",
@@ -1819,7 +1819,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
     },
     {
       heading: "Privacy Policy Complaints and Enquiries",
-      body: `If you have any queries or complaints about our Privacy Policy please contact us at:\n\nTOCS Owners Corporation Solution\nSydney, NSW, Australia\nEmail: info@tocs.co`,
+      body: `If you have any queries or complaints about our Privacy Policy please contact us at:\n\nTop Owners Corporation Solution\nSydney, NSW, Australia\nEmail: info@tocs.co`,
     },
   ];
 
@@ -1833,7 +1833,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
         Privacy Policy
       </h1>
       <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: "2.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1.5rem" }}>
-        TOCS Owners Corporation Solution · Last updated: March 2026
+        Top Owners Corporation Solution · Last updated: March 2026
       </p>
 
       {sections.map(({ heading, body }) => (
@@ -3277,7 +3277,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 function SettingsTab({ adminToken, pubConfig }) {
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
-  const DEF_TPL = { certificateSubject: "Your OC Certificate — Order #{orderId}", certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team", footer: "TOCS Owners Corporation Solution  |  info@tocs.co" };
+  const DEF_TPL = { certificateSubject: "Your OC Certificate — Order #{orderId}", certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team", footer: "Top Owners Corporation Solution  |  info@tocs.co" };
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
   const [smtp, setSmtp] = useState(DEF_SMTP);
@@ -3648,7 +3648,7 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 
 // ─── STORAGE TAB ──────────────────────────────────────────────────────────────
 function StorageTab({ adminToken }) {
-  const DEF_SP = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solutions/ORDER DATABASE" };
+  const DEF_SP = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
   const [sp, setSp] = useState(DEF_SP);
   const [showSecret, setShowSecret] = useState(false);
   const [secretPlaceholder, setSecretPlaceholder] = useState(false); // true when server returned "••••••••"
@@ -3742,7 +3742,7 @@ function StorageTab({ adminToken }) {
         </div>
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label className="f-label">Folder Path</label>
-          <input className="f-input" type="text" placeholder="Top Owners Corporation Solutions/ORDER DATABASE" value={sp.folderPath} onChange={e => updSp("folderPath", e.target.value)}/>
+          <input className="f-input" type="text" placeholder="Top Owners Corporation Solution/ORDER DATABASE" value={sp.folderPath} onChange={e => updSp("folderPath", e.target.value)}/>
           <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>Primary folder path in the default document library. A read-only shadow copy is automatically saved to a sibling <code style={{background:"var(--cream)",padding:"1px 3px",borderRadius:"3px"}}>TOCS ORDERS</code> folder.</div>
         </div>
       </div>

@@ -147,4 +147,4 @@ npm start       # restart server
 
 ---
 
-*TOCS — Top Owners Corporation Solutions | Leading with Expertise & Reliability*
+*TOCS — Top Owners Corporation Solution | Leading with Expertise & Reliability*

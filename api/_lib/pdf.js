@@ -18,7 +18,7 @@ export function generateOrderPdf(order) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, info: {
       Title: `Order ${order.id} — TOCS`,
-      Author: "TOCS Owners Corporation Solution",
+      Author: "Top Owners Corporation Solution",
     }});
 
     const chunks = [];
@@ -191,7 +191,7 @@ export function generateOrderPdf(order) {
     doc.moveTo(50, y).lineTo(50 + W, y).stroke(BORDER);
     y += 10;
     doc.fillColor(MID).font("Helvetica").fontSize(7.5)
-       .text("TOCS Owners Corporation Solution  |  info@tocs.co  |  This document was generated automatically.", 50, y, {
+       .text("Top Owners Corporation Solution  |  info@tocs.co  |  This document was generated automatically.", 50, y, {
          align: "center", width: W,
        });
 
@@ -209,7 +209,7 @@ export function generateReceiptPdf(order, sessionId) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, info: {
       Title: `Payment Receipt — Order ${order.id} — TOCS`,
-      Author: "TOCS Owners Corporation Solution",
+      Author: "Top Owners Corporation Solution",
     }});
 
     const chunks = [];
@@ -293,7 +293,7 @@ export function generateReceiptPdf(order, sessionId) {
     doc.moveTo(50, y).lineTo(50 + W, y).stroke(BORDER);
     y += 10;
     doc.fillColor(MID).font("Helvetica").fontSize(7.5)
-       .text("TOCS Owners Corporation Solution  |  info@tocs.co  |  This receipt was generated automatically.", 50, y, {
+       .text("Top Owners Corporation Solution  |  info@tocs.co  |  This receipt was generated automatically.", 50, y, {
          align: "center", width: W,
        });
 
