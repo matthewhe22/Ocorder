@@ -108,7 +108,7 @@ export const DEFAULT_CONFIG = {
     clientId:     process.env.AZURE_CLIENT_ID      || "",
     clientSecret: process.env.AZURE_CLIENT_SECRET  || "",
     siteId:       process.env.SHAREPOINT_SITE_ID   || "",
-    folderPath:   process.env.SHAREPOINT_FOLDER_PATH || "Top Owners Corporation Solution/ORDER DATABASE",
+    folderPath:   process.env.SHAREPOINT_FOLDER_PATH || "Top Owners Corporation Solutions/ORDER DATABASE",
   },
   paymentDetails: {
     accountName:   "Top Owners Corporation",
@@ -119,7 +119,7 @@ export const DEFAULT_CONFIG = {
   emailTemplate: {
     certificateSubject:  "Your OC Certificate — Order #{orderId}",
     certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
-    footer: "TOCS Owner Corporation Services  |  info@tocs.co",
+    footer: "TOCS Owners Corporation Solution  |  info@tocs.co",
   },
   stripe: {
     secretKey:      "",

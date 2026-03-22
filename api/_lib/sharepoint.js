@@ -17,7 +17,7 @@ const TENANT_ID     = process.env.AZURE_TENANT_ID;
 const CLIENT_ID     = process.env.AZURE_CLIENT_ID;
 const CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET;
 const SITE_ID       = process.env.SHAREPOINT_SITE_ID;
-export const FOLDER_PATH = process.env.SHAREPOINT_FOLDER_PATH || "Top Owners Corporation Solution/ORDER DATABASE";
+export const FOLDER_PATH = process.env.SHAREPOINT_FOLDER_PATH || "Top Owners Corporation Solutions/ORDER DATABASE";
 
 // True only when all required env vars are present (used as a quick check for env-var path)
 export const SHAREPOINT_ENABLED = !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET && SITE_ID);
