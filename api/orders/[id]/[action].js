@@ -17,7 +17,10 @@ function buildCertEmailHtml(order, message, cfg) {
   const tpl = cfg.emailTemplate || {};
   const contact = order.contactInfo || {};
   const lot = order.items?.[0];
-  const raw = (tpl.certificateGreeting || "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team")
+  const isKeys = order.orderCategory === "keys";
+  const keysDefault = "Dear {name},\n\nPlease find attached your Keys/Fobs/Remotes order documents for {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team";
+  const ocDefault = "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team";
+  const raw = (tpl.certificateGreeting || (isKeys ? keysDefault : ocDefault))
     .replace(/{name}/g, contact.name || "Applicant")
     .replace(/{lotNumber}/g, lot?.lotNumber || "")
     .replace(/{address}/g, lot?.planName || "");
@@ -127,7 +130,10 @@ export default async function handler(req, res) {
         tls: { rejectUnauthorized: false },
       });
       const tpl = cfg.emailTemplate || {};
-      const subj = (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
+      const isKeys = order.orderCategory === "keys";
+      const subj = isKeys
+        ? `Your Keys/Fobs Order — ${order.id}`
+        : (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
       const mailOpts = {
         from: `"Top Owners Corporation Solution" <${fromEmail}>`,
         to: order.contactInfo.email,

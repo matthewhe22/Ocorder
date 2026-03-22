@@ -28,9 +28,9 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const order = body.order || body;
-  if (!order?.id || !Array.isArray(order?.items)) {
-    return res.status(400).json({ error: "Invalid order." });
-  }
+  if (!order?.id) return res.status(400).json({ error: "Invalid order: 'id' is required." });
+  if (!Array.isArray(order?.items) || order.items.length === 0) return res.status(400).json({ error: "Invalid order: 'items' must be a non-empty array." });
+  if (!order?.payment) return res.status(400).json({ error: "Invalid order: 'payment' method is required (bank, payid, stripe)." });
 
   try {
     const cfg      = await readConfig();
@@ -140,17 +140,21 @@ export default async function handler(req, res) {
       spPromise = (async () => {
         try {
           const spFilename = `authority-${body.lotAuthority?.filename || "doc"}`;
+          // Capture upload errors so audit log entries contain the actual reason
+          let authErr = null, pdfErr = null;
           // Run both uploads in parallel — each takes ~8–9 s independently
           const [authResult, pdfResult] = await Promise.allSettled([
             body.lotAuthority?.data
               ? uploadToSharePoint(spFilename, body.lotAuthority.contentType, body.lotAuthority.data, spConfig, spSubFolder)
-                  .catch(e => { console.error("SP authority upload:", e.message); return null; })
+                  .catch(e => { authErr = e; console.error("SP authority upload:", e.message); return null; })
               : Promise.resolve(null),
             (async () => {
-              const pdfBuffer = await generateOrderPdf(order);
-              const pdfBase64 = pdfBuffer.toString("base64");
-              return uploadToSharePoint("order-summary.pdf", "application/pdf", pdfBase64, spConfig, spSubFolder)
-                .catch(e => { console.error("SP PDF upload:", e.message); return null; });
+              try {
+                const pdfBuffer = await generateOrderPdf(order);
+                const pdfBase64 = pdfBuffer.toString("base64");
+                return await uploadToSharePoint("order-summary.pdf", "application/pdf", pdfBase64, spConfig, spSubFolder)
+                  .catch(e => { pdfErr = e; console.error("SP PDF upload:", e.message); return null; });
+              } catch (e) { pdfErr = e; console.error("SP PDF gen/upload:", e.message); return null; }
             })(),
           ]);
           const spUrl     = authResult.status === "fulfilled" ? authResult.value : null;
@@ -164,13 +168,13 @@ export default async function handler(req, res) {
             order.summaryUrl = summaryUrl;
             if (oi) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
           }
-          if (spUrl) {
-            // already added audit entry above
-          } else if (body.lotAuthority?.data) {
-            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note: "See Vercel logs" });
+          if (!spUrl && body.lotAuthority?.data) {
+            const note = authErr?.message ? authErr.message.substring(0, 120) : "See Vercel logs";
+            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note });
           }
           if (!summaryUrl) {
-            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note: "See Vercel logs" });
+            const note = pdfErr?.message ? pdfErr.message.substring(0, 120) : "See Vercel logs";
+            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note });
           }
           // Always persist final state (SP URLs if succeeded, failure audit entries if not)
           await writeData(data).catch(e => console.error("SP result persist failed:", e.message));
