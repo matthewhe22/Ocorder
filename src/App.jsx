@@ -613,7 +613,7 @@ export default function App() {
 
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 3 || orderCategory !== "keys") return;
     const planShipping = plan?.shippingOptions || [];
     if (planShipping.length > 0 && !selectedShipping) {
       const opt = planShipping[0];
@@ -1214,10 +1214,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                   <button className="ci-rm" onClick={() => setCart(p => p.filter(i => i.key !== item.key))}><Ic n="trash" s={15}/></button>
                 </div>
               ))}
-              {/* ── Shipping Method Selector (both OC and Keys use plan.shippingOptions) ── */}
+              {/* ── Shipping Method Selector (Keys/Fobs orders only — OC certs are delivered by email) ── */}
               {(() => {
                 const planShipping = plan?.shippingOptions || [];
-                if (planShipping.length === 0) return null;
+                if (orderCategory !== "keys" || planShipping.length === 0) return null;
                 return (
                   <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
                     <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.8rem" }}>Shipping Method</div>
@@ -1286,7 +1286,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => { setCart([]); setLotAuthFile(null); setContact(DEFAULT_CONTACT); setSelectedShipping(null); setStep(1); }} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
               <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                 disabled={
-                  (plan?.shippingOptions?.length > 0 && !selectedShipping) ||
+                  (orderCategory === "keys" && plan?.shippingOptions?.length > 0 && !selectedShipping) ||
                   (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
                 }
                 onClick={() => {
