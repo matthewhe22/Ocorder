@@ -572,8 +572,8 @@ export default function App() {
       : "Paid";
     const contactInfo = {
       ...contact,
-      // For keys orders omit shippingAddress if empty; always include for keys
-      shippingAddress: (orderCategory === "keys" && selectedShipping?.requiresAddress) ? contact.shippingAddress : undefined,
+      // Include shippingAddress for keys orders with a paid delivery option
+      shippingAddress: (orderCategory === "keys" && selectedShipping?.cost > 0) ? contact.shippingAddress : undefined,
     };
     const o = { id, date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, status: orderStatus, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
     try {
@@ -622,12 +622,6 @@ export default function App() {
     }
   }, [step, plan?.id]); // plan.id tracks plan changes; cart is stable while on step 3
 
-  // Auto-select "Pick up from BM" when customer reaches Step 4 for a keys order
-  useEffect(() => {
-    if (step !== 4 || orderCategory !== "keys" || selectedShipping) return;
-    const opt = KEYS_SHIPPING_OPTIONS[0]; // "Pick up from BM"
-    setSelectedShipping({ id: opt.id, name: opt.name, cost: 0, requiresAddress: false });
-  }, [step, orderCategory, selectedShipping]);
 
   const goToStep = (s) => {
     if (s < step) setStep(s);
@@ -1220,7 +1214,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                   <button className="ci-rm" onClick={() => setCart(p => p.filter(i => i.key !== item.key))}><Ic n="trash" s={15}/></button>
                 </div>
               ))}
-              {/* ── Shipping Method Selector ── */}
+              {/* ── Shipping Method Selector (both OC and Keys use plan.shippingOptions) ── */}
               {(() => {
                 const planShipping = plan?.shippingOptions || [];
                 if (planShipping.length === 0) return null;
@@ -1238,6 +1232,32 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                         </label>
                       );
                     })}
+                    {/* Delivery Address — shown for keys orders when a paid delivery option is selected */}
+                    {orderCategory === "keys" && selectedShipping && selectedShipping.cost > 0 && (
+                      <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+                        <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.8rem" }}>Delivery Address</div>
+                        <div className="form-row">
+                          <label className="f-label">Street Address *</label>
+                          <input className="f-input" type="text" placeholder="123 Example Street" value={contact.shippingAddress.street} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, street: e.target.value}}))}/>
+                        </div>
+                        <div className="form-row">
+                          <label className="f-label">Suburb *</label>
+                          <input className="f-input" type="text" placeholder="Sydney" value={contact.shippingAddress.suburb} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, suburb: e.target.value}}))}/>
+                        </div>
+                        <div style={{ display: "flex", gap: "12px" }}>
+                          <div className="form-row" style={{ flex: 2, marginBottom: 0 }}>
+                            <label className="f-label">State *</label>
+                            <select className="f-input" value={contact.shippingAddress.state} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, state: e.target.value}}))}>
+                              {["NSW","VIC","QLD","SA","WA","TAS","ACT","NT"].map(s => <option key={s}>{s}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-row" style={{ flex: 1, marginBottom: 0 }}>
+                            <label className="f-label">Postcode *</label>
+                            <input className="f-input" type="text" maxLength={4} placeholder="2000" value={contact.shippingAddress.postcode} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, postcode: e.target.value}}))}/>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1265,7 +1285,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <button className="btn btn-out" onClick={() => setStep(2)}><Ic n="arrowL" s={14}/> Edit</button>
               <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => { setCart([]); setLotAuthFile(null); setContact(DEFAULT_CONTACT); setSelectedShipping(null); setStep(1); }} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
               <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
-                disabled={(plan?.shippingOptions?.length > 0 && !selectedShipping)}
+                disabled={
+                  (plan?.shippingOptions?.length > 0 && !selectedShipping) ||
+                  (orderCategory === "keys" && selectedShipping?.cost > 0 && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
+                }
                 onClick={() => {
                   // Pre-populate Full Name from owner name if not yet entered
                   if (contact.applicantType === "owner" && contact.ownerName && !contact.name) {
@@ -1308,7 +1331,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                 <div className="f-err"><Ic n="x" s={12}/> Please enter a valid email address.</div>
               )}
             </div>
-            <div className="form-row" style={{ marginBottom: orderCategory === "keys" ? undefined : 0 }}>
+            <div className="form-row" style={{ marginBottom: 0 }}>
               <label className="f-label">Phone Number *</label>
               <input
                 className={`f-input ${phoneTouched && (!contact.phone || !phoneValid) ? "err" : ""}`}
@@ -1326,57 +1349,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               )}
             </div>
 
-            {/* ── Shipping Method + Address (keys orders only) ── */}
-            {orderCategory === "keys" && (
-              <>
-                {/* Shipping Method selector */}
-                <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", margin: "1.2rem 0 0.8rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-                  Shipping Method
-                </div>
-                {KEYS_SHIPPING_OPTIONS.map(opt => {
-                  const cost = getKeysShippingCost(opt.id, plan?.keysShipping);
-                  const isSelected = selectedShipping?.id === opt.id;
-                  return (
-                    <label key={opt.id} style={{ display:"flex", alignItems:"center", gap:"12px", padding:"10px 14px", border:`1px solid ${isSelected ? "var(--sage)" : "var(--border)"}`, borderRadius:"4px", cursor:"pointer", marginBottom:"6px", background: isSelected ? "var(--sage-tint)" : "white" }}>
-                      <input type="radio" name="keysShipping" checked={isSelected}
-                        onChange={() => setSelectedShipping({ id: opt.id, name: opt.name, cost, requiresAddress: opt.requiresAddress })}
-                        style={{ accentColor:"var(--sage)" }}/>
-                      <span style={{ flex:1, fontSize:"0.88rem" }}>{opt.name}</span>
-                      <span style={{ fontWeight:600, fontSize:"0.88rem" }}>{cost > 0 ? fmt(cost) : <span style={{ color:"var(--muted)" }}>Free</span>}</span>
-                    </label>
-                  );
-                })}
-
-                {/* Delivery Address — only shown when a delivery option is selected */}
-                {selectedShipping?.requiresAddress && (
-                  <>
-                    <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", margin: "1.2rem 0 0.8rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-                      Delivery Address
-                    </div>
-                    <div className="form-row">
-                      <label className="f-label">Street Address *</label>
-                      <input className="f-input" type="text" placeholder="123 Example Street" value={contact.shippingAddress.street} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, street: e.target.value}}))}/>
-                    </div>
-                    <div className="form-row">
-                      <label className="f-label">Suburb *</label>
-                      <input className="f-input" type="text" placeholder="Sydney" value={contact.shippingAddress.suburb} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, suburb: e.target.value}}))}/>
-                    </div>
-                    <div style={{ display: "flex", gap: "12px" }}>
-                      <div className="form-row" style={{ flex: 2, marginBottom: 0 }}>
-                        <label className="f-label">State *</label>
-                        <select className="f-input" value={contact.shippingAddress.state} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, state: e.target.value}}))}>
-                          {["NSW","VIC","QLD","SA","WA","TAS","ACT","NT"].map(s => <option key={s}>{s}</option>)}
-                        </select>
-                      </div>
-                      <div className="form-row" style={{ flex: 1, marginBottom: 0 }}>
-                        <label className="f-label">Postcode *</label>
-                        <input className="f-input" type="text" maxLength={4} placeholder="2000" value={contact.shippingAddress.postcode} onChange={e => setContact(p => ({...p, shippingAddress: {...p.shippingAddress, postcode: e.target.value}}))}/>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
           </div>
 
           <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
@@ -1388,13 +1360,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                   className="btn btn-blk btn-lg"
                   style={{ flex: 1, justifyContent: "center" }}
                   disabled={
-                    !contact.name || !contact.email || !emailValid || !contact.phone || !phoneValid || keysPlacing ||
-                    !selectedShipping ||
-                    (selectedShipping?.requiresAddress && (
-                      !contact.shippingAddress.street ||
-                      !contact.shippingAddress.suburb ||
-                      !contact.shippingAddress.postcode
-                    ))
+                    !contact.name || !contact.email || !emailValid || !contact.phone || !phoneValid || keysPlacing
                   }
                   onClick={async () => { setKeysPlaceErr(""); setKeysPlacing(true); await placeOrder(setKeysPlacing, setKeysPlaceErr); }}
                 >
@@ -2206,7 +2172,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                   <td style={{ display: "flex", gap: "6px" }}>
                     <button className="tbl-act-btn" onClick={() => openEditPlan(p)}><Ic n="edit" s={13}/> Edit</button>
                     <button className="tbl-act-btn" onClick={() => openManageShipping(p)}><Ic n="truck" s={13}/> Shipping</button>
-                    <button className="tbl-act-btn" style={{ background:"#e8f4f0", color:"#1c5c40", border:"1px solid #b0d9c8" }} onClick={() => openKeysShipping(p)}><Ic n="truck" s={13}/> Keys Shipping</button>
                     <button className="tbl-act-btn danger" onClick={() => deletePlan(p.id)}><Ic n="trash" s={13}/> Delete</button>
                   </td>
                 </tr>
@@ -2825,58 +2790,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         );
       })()}
 
-      {modal === "keysShipping" && editTarget && (() => {
-        const targetPlan = data.strataPlans.find(p => p.id === editTarget.id);
-        return (
-          <div className="overlay" onClick={() => { setModal(null); setEditTarget(null); setForm({}); }}>
-            <div className="modal" style={{ maxWidth: "420px" }} onClick={e => e.stopPropagation()}>
-              <h2 className="modal-tt">Keys Shipping Costs — {targetPlan?.name}</h2>
-              <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
-                Set delivery costs for Keys / Fob orders on this plan. Pick-up and No Shipment are always $0.
-              </p>
-
-              {/* Fixed $0 options (read-only) */}
-              <table className="tbl" style={{ marginBottom: "1rem" }}>
-                <thead><tr><th>Option</th><th>Cost</th></tr></thead>
-                <tbody>
-                  <tr><td>Pick up from BM</td><td style={{ color:"var(--muted)" }}>$0.00 (fixed)</td></tr>
-                  <tr><td>No Shipment Required</td><td style={{ color:"var(--muted)" }}>$0.00 (fixed)</td></tr>
-                </tbody>
-              </table>
-
-              {/* Configurable options */}
-              <div className="form-row">
-                <label className="f-label">Standard Delivery cost ($)</label>
-                <input className="f-input" type="number" min="0" step="0.01" placeholder="0.00"
-                  value={form.keysDeliveryCost ?? ""}
-                  onChange={e => upd("keysDeliveryCost", e.target.value)}/>
-              </div>
-              <div className="form-row">
-                <label className="f-label">Express Delivery cost ($)</label>
-                <input className="f-input" type="number" min="0" step="0.01" placeholder="0.00"
-                  value={form.keysExpressCost ?? ""}
-                  onChange={e => upd("keysExpressCost", e.target.value)}/>
-              </div>
-              {(!form.keysDeliveryCost || Number(form.keysDeliveryCost) === 0) &&
-               (!form.keysExpressCost  || Number(form.keysExpressCost)  === 0) && (
-                <div className="alert alert-warn" style={{ marginTop: "10px", fontSize: "0.78rem" }}>
-                  <Ic n="shield" s={13}/> Both delivery costs are $0. Customers will see "Free" for Standard and Express delivery. Update these if delivery fees apply.
-                </div>
-              )}
-
-              <div style={{ display:"flex", gap:"8px", marginTop:"1rem" }}>
-                <button className="btn btn-blk" style={{ flex:1, justifyContent:"center" }}
-                  onClick={saveKeysShipping}>
-                  Save
-                </button>
-                <button className="btn btn-out" onClick={() => { setModal(null); setEditTarget(null); setForm({}); }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {(modal === "lot" || modal === "editLot") && (
         <div className="overlay" onClick={() => { setModal(null); setEditTarget(null); }}>
