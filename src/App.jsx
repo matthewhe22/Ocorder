@@ -1856,6 +1856,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── All hooks MUST be declared before any conditional return (Rules of Hooks) ─
   const [modal, setModal] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
+  const [planSaveErr, setPlanSaveErr] = useState(null);
   const [planId, setPlanId] = useState(data.strataPlans[0]?.id || "");
   const [form, setForm] = useState({});
   const [expandedOrder, setExpandedOrder] = useState(null);
@@ -1885,14 +1886,23 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   // ── API helper ──────────────────────────────────────────────────────────────
   const savePlans = async (plans) => {
+    const previousPlans = data.strataPlans;          // snapshot BEFORE optimistic update
     setData(p => ({ ...p, strataPlans: plans }));
     try {
-      await fetch("/api/plans", {
+      const res = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ plans }),
       });
-    } catch {}
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Save failed (${res.status})`);
+      }
+      setPlanSaveErr(null);
+    } catch (err) {
+      setData(p => ({ ...p, strataPlans: previousPlans }));
+      setPlanSaveErr(err.message || "Failed to save. Please try again.");
+    }
   };
 
   // ── Plan CRUD ───────────────────────────────────────────────────────────────
@@ -2204,6 +2214,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* ── PLANS ── */}
       {adminTab === "plans" && (
         <div className="panel">
+          {planSaveErr && (
+            <div className="alert alert-err" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <span>{planSaveErr}</span>
+              <button onClick={() => setPlanSaveErr(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "inherit", marginLeft: "12px" }}>×</button>
+            </div>
+          )}
           <div className="section-hd">
             <h2 className="section-tt">Strata Plans</h2>
             <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
@@ -3277,7 +3293,13 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 function SettingsTab({ adminToken, pubConfig }) {
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
-  const DEF_TPL = { certificateSubject: "Your OC Certificate — Order #{orderId}", certificateGreeting: "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team", footer: "Top Owners Corporation Solution  |  info@tocs.co" };
+  const DEF_TPL = {
+    certificateSubject:       "Your OC Certificate — Order #{orderId}",
+    certificateGreeting:      "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
+    footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
+    adminNotificationSubject: "New Order — {orderType} #{orderId} — {total}",
+    adminNotificationIntro:   "A new order has been placed.",
+  };
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
   const [smtp, setSmtp] = useState(DEF_SMTP);
@@ -3321,7 +3343,12 @@ function SettingsTab({ adminToken, pubConfig }) {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({
-          orderEmail, smtp, paymentDetails: payDetails, emailTemplate: emailTpl,
+          orderEmail, smtp, paymentDetails: payDetails,
+          emailTemplate: {
+            ...emailTpl,
+            adminNotificationSubject: (emailTpl.adminNotificationSubject || "").trim(),
+            adminNotificationIntro:   (emailTpl.adminNotificationIntro   || "").trim(),
+          },
           stripe: { secretKey: stripeSecretKey, publishableKey: stripePubKey },
         }),
       });
@@ -3523,7 +3550,34 @@ function SettingsTab({ adminToken, pubConfig }) {
       <div className="panel">
         <h2 className="section-tt" style={{ marginBottom: "6px" }}>Email Templates</h2>
         <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
-          Customise the certificate email sent to applicants. Placeholders: <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{name}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{lotNumber}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{address}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{orderId}"}</code>
+          Customise email notifications. Use the placeholders shown below each field.
+        </p>
+
+        {/* Admin Notification Email */}
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "4px" }}>Admin Notification Email</h3>
+        <div className="form-row">
+          <label className="f-label">Notification Subject</label>
+          <input className="f-input" type="text"
+            value={emailTpl.adminNotificationSubject || ""}
+            onChange={e => updTpl("adminNotificationSubject", e.target.value)}/>
+          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
+            Tokens:{" "}
+            <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{"+"orderType}"}</code>{" "}
+            <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{"+"orderId}"}</code>{" "}
+            <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{"+"total}"}</code>
+          </div>
+        </div>
+        <div className="form-row">
+          <label className="f-label">Notification Intro Text</label>
+          <textarea className="f-input" rows={3} style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+            value={emailTpl.adminNotificationIntro || ""}
+            onChange={e => updTpl("adminNotificationIntro", e.target.value)}/>
+        </div>
+
+        {/* Certificate Email */}
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "20px" }}>Certificate Email</h3>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
+          Sent to applicants when their certificate is issued. Placeholders: <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{name}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{lotNumber}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{address}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{orderId}"}</code>
         </p>
         <div className="form-row">
           <label className="f-label">Certificate Email Subject</label>
