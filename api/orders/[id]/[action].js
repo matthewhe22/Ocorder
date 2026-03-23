@@ -414,9 +414,23 @@ export default async function handler(req, res) {
           }).catch(e => console.error("Customer stripe email failed:", e.message))
         );
       }
-      await Promise.allSettled(emailJobs).then(results => {
+      await Promise.allSettled(emailJobs).then(async results => {
         const sent = results.filter(r => r.status === "fulfilled").length;
         console.log(`Stripe-confirm emails: ${sent}/${results.length} sent for order ${id}`);
+        const labels = ["Admin notification", "Customer confirmation"];
+        const failures = results
+          .map((r, i) => r.status === "rejected" ? `${labels[i] || "Email"} failed: ${r.reason?.message || "unknown"}` : null)
+          .filter(Boolean);
+        if (failures.length > 0) {
+          try {
+            const fresh = await readData();
+            const oi = fresh.orders.find(o => o.id === id);
+            if (oi) {
+              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed: " + msg, note: "" }));
+              await writeData(fresh);
+            }
+          } catch (e) { console.error("Failed to persist email failure to audit log:", e.message); }
+        }
       });
     }
 

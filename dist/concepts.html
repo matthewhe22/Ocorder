@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOCS UI Concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #e8e4de; font-family: Inter, sans-serif; padding: 40px 24px; }
+  .page-title { text-align: center; font-family: Inter; font-size: 13px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: #666; margin-bottom: 32px; }
+  .concepts { display: flex; gap: 32px; align-items: flex-start; max-width: 1400px; margin: 0 auto; }
+  .concept { flex: 1; }
+  .concept-label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #888; margin-bottom: 10px; text-align: center; }
+  .mockup { border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.12); }
+
+  /* ═══════════════════════════════════════════
+     CONCEPT A — Editorial Luxury
+  ═══════════════════════════════════════════ */
+  .concept-a { background: #f5f0e8; }
+  .a-header {
+    background: #1c3326;
+    padding: 0 32px;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .a-logo { font-family: Inter; font-weight: 700; letter-spacing: 0.22em; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 12px; }
+  .a-logo-sub { font-size: 8px; font-weight: 400; letter-spacing: 0.06em; opacity: 0.55; line-height: 1.3; text-transform: uppercase; }
+  .a-nav { display: flex; gap: 6px; }
+  .a-nav-btn { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; padding: 6px 14px; cursor: pointer; }
+  .a-nav-btn.active { background: rgba(255,255,255,0.18); color: #fff; }
+  .a-steps {
+    background: #f5f0e8;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-bottom: 1px solid #e0d8cd;
+  }
+  .a-step { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #b0a898; }
+  .a-step.active { color: #1c3326; }
+  .a-step-num { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid #b0a898; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+  .a-step.active .a-step-num { background: #1c3326; border-color: #1c3326; color: #fff; }
+  .a-step-line { width: 28px; height: 1px; background: #d0c8be; margin: 0 4px; }
+  .a-body { padding: 40px 32px 32px; }
+  .a-hero-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #7a9e89; margin-bottom: 8px; }
+  .a-title { font-family: 'Cormorant Garamond', serif; font-size: 52px; font-weight: 400; color: #1c3326; line-height: 1.05; margin-bottom: 6px; }
+  .a-title-rule { width: 56px; height: 2px; background: #4a7255; margin-bottom: 28px; margin-top: 10px; }
+  .a-search-label { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b5e50; margin-bottom: 10px; }
+  .a-search { display: flex; align-items: center; background: #fff; border: 1.5px solid #c8bfb4; border-radius: 6px; padding: 0 16px; height: 52px; gap: 12px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(28,51,38,0.06); }
+  .a-search-icon { color: #4a7255; font-size: 16px; }
+  .a-search-text { font-size: 14px; color: #b0a898; flex: 1; }
+  .a-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .a-card { background: #fff; border-left: 3px solid #4a7255; border-radius: 0 6px 6px 0; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .a-card-plan { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #4a7255; margin-bottom: 4px; }
+  .a-card-addr { font-size: 12px; font-weight: 500; color: #1c3326; margin-bottom: 2px; }
+  .a-card-sub { font-size: 11px; color: #8a7e72; }
+  .a-card-lots { font-size: 10px; color: #4a7255; margin-top: 10px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+  .a-continue { background: #1c3326; color: #fff; border: none; border-radius: 24px; padding: 12px 28px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; float: right; }
+
+  /* ═══════════════════════════════════════════
+     CONCEPT B — Modern Minimal
+  ═══════════════════════════════════════════ */
+  .concept-b { background: #ffffff; }
+  .b-header {
+    background: #fff;
+    padding: 0 32px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #eef0ed;
+  }
+  .b-logo { display: flex; align-items: center; gap: 10px; }
+  .b-logo-dot { width: 10px; height: 10px; background: #2d6a4f; border-radius: 50%; }
+  .b-logo-text { font-family: Inter; font-weight: 700; letter-spacing: 0.2em; font-size: 15px; color: #1c3326; }
+  .b-nav { display: flex; gap: 8px; }
+  .b-nav-pill { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: #1c3326; border: 1.5px solid #c8d5cb; border-radius: 20px; padding: 6px 14px; }
+  .b-progress {
+    background: #fff;
+    padding: 0 32px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-bottom: 2px solid #f0faf4;
+  }
+  .b-prog-item { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #b0bfb4; }
+  .b-prog-item.active { color: #1c3326; }
+  .b-prog-num { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #c0d0c4; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+  .b-prog-item.active .b-prog-num { background: #2d6a4f; border-color: #2d6a4f; color: #fff; }
+  .b-prog-line { width: 20px; height: 1.5px; background: #e0ebe3; margin: 0 3px; }
+  .b-body { padding: 40px 32px 32px; }
+  .b-title { font-family: Inter; font-size: 36px; font-weight: 700; color: #0f1f16; margin-bottom: 6px; letter-spacing: -0.02em; }
+  .b-sub { font-size: 14px; color: #6b8072; margin-bottom: 24px; }
+  .b-search { display: flex; align-items: center; background: #fff; border: 2px solid #c8d5cb; border-radius: 8px; padding: 0 16px; height: 50px; gap: 10px; margin-bottom: 16px; transition: border-color 0.2s; }
+  .b-search-icon { color: #4a7255; font-size: 15px; }
+  .b-search-text { font-size: 14px; color: #b0bfb4; flex: 1; }
+  .b-list { border: 1.5px solid #e4eee6; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+  .b-row { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid #eef4f0; background: #fff; gap: 12px; }
+  .b-row:last-child { border-bottom: none; }
+  .b-row:hover { background: #f0faf4; }
+  .b-row-accent { width: 3px; height: 36px; background: #2d6a4f; border-radius: 2px; opacity: 0; }
+  .b-row:hover .b-row-accent { opacity: 1; }
+  .b-row-plan { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #2d6a4f; width: 62px; }
+  .b-row-main { flex: 1; }
+  .b-row-addr { font-size: 13px; font-weight: 500; color: #1c3326; }
+  .b-row-suburb { font-size: 11px; color: #7a9080; }
+  .b-row-lots { font-size: 11px; font-weight: 600; color: #4a7255; background: #ebf5ee; border-radius: 12px; padding: 3px 10px; }
+  .b-row-arrow { color: #4a7255; font-size: 14px; }
+  .b-actions { display: flex; justify-content: flex-end; }
+  .b-continue { background: #2d6a4f; color: #fff; border: none; border-radius: 8px; padding: 13px 28px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .b-continue-arrow { font-size: 16px; }
+
+  /* ═══════════════════════════════════════════
+     CONCEPT C — Bold Architectural
+  ═══════════════════════════════════════════ */
+  .concept-c { background: #f7f3ec; }
+  .c-header {
+    background: #1c3326;
+    padding: 0 32px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .c-logo-text { font-family: Inter; font-weight: 800; letter-spacing: 0.28em; font-size: 18px; color: #fff; }
+  .c-nav { display: flex; gap: 16px; }
+  .c-nav-link { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.65); }
+  .c-hero {
+    background: #1c3326;
+    padding: 40px 32px 36px;
+    position: relative;
+    overflow: hidden;
+  }
+  .c-hero::before {
+    content: '';
+    position: absolute;
+    right: -60px; top: -60px;
+    width: 280px; height: 280px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .c-hero::after {
+    content: '';
+    position: absolute;
+    right: 20px; top: 20px;
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .c-hero-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: #7ab89a; margin-bottom: 10px; }
+  .c-hero-title { font-family: 'Cormorant Garamond', serif; font-size: 52px; font-weight: 300; color: #f7f3ec; line-height: 1.0; margin-bottom: 24px; }
+  .c-hero-title strong { font-weight: 500; }
+  .c-hero-search { display: flex; align-items: center; background: #f7f3ec; border-radius: 6px; padding: 0 16px; height: 50px; gap: 10px; }
+  .c-hero-search-icon { color: #4a7255; font-size: 16px; }
+  .c-hero-search-text { font-size: 14px; color: #8a7e72; flex: 1; }
+  .c-progress { background: #1c3326; border-top: 1px solid rgba(255,255,255,0.08); padding: 0 32px; height: 42px; display: flex; align-items: center; gap: 0; }
+  .c-prog-item { display: flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.3); }
+  .c-prog-item.active { color: #7ab89a; }
+  .c-prog-num { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; }
+  .c-prog-item.active .c-prog-num { background: #2d6a4f; border-color: #2d6a4f; color: #fff; }
+  .c-prog-line { width: 18px; height: 1px; background: rgba(255,255,255,0.1); margin: 0 3px; }
+  .c-body { padding: 28px 32px 32px; }
+  .c-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #8a9e90; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .c-section-label::after { content: ''; flex: 1; height: 1px; background: #d8d0c4; }
+  .c-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .c-card { background: #fff; border: 1.5px solid #e0d8cc; border-radius: 8px; padding: 16px; cursor: pointer; }
+  .c-card.selected { background: #1c3326; border-color: #1c3326; }
+  .c-card-plan { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 4px; color: #4a7255; }
+  .c-card.selected .c-card-plan { color: #7ab89a; }
+  .c-card-addr { font-size: 12px; font-weight: 500; color: #1c3326; margin-bottom: 2px; }
+  .c-card.selected .c-card-addr { color: #f7f3ec; }
+  .c-card-suburb { font-size: 11px; color: #8a7e72; }
+  .c-card.selected .c-card-suburb { color: rgba(247,243,236,0.6); }
+  .c-card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .c-card-lots { font-size: 10px; font-weight: 600; color: #4a7255; }
+  .c-card.selected .c-card-lots { color: #7ab89a; }
+  .c-card-arrow { font-size: 14px; color: #4a7255; }
+  .c-card.selected .c-card-arrow { color: #7ab89a; }
+  .c-actions { display: flex; justify-content: flex-end; }
+  .c-continue { background: #1c3326; color: #f7f3ec; border: none; border-radius: 6px; padding: 13px 28px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+</style>
+</head>
+<body>
+<p class="page-title">TOCS UI Redesign — Concept Exploration</p>
+<div class="concepts">
+
+  <!-- CONCEPT A -->
+  <div class="concept">
+    <div class="concept-label">A — Editorial Luxury</div>
+    <div class="mockup concept-a">
+      <div class="a-header">
+        <div class="a-logo">
+          <span>TOCS</span>
+          <span class="a-logo-sub">Top Owners<br>Corporation Solutions</span>
+        </div>
+        <div class="a-nav">
+          <button class="a-nav-btn active">Order Portal</button>
+          <button class="a-nav-btn">Admin</button>
+        </div>
+      </div>
+      <div class="a-steps">
+        <div class="a-step active"><span class="a-step-num">1</span>Select Plan</div>
+        <div class="a-step-line"></div>
+        <div class="a-step"><span class="a-step-num">2</span>Products</div>
+        <div class="a-step-line"></div>
+        <div class="a-step"><span class="a-step-num">3</span>Review</div>
+        <div class="a-step-line"></div>
+        <div class="a-step"><span class="a-step-num">4</span>Contact</div>
+        <div class="a-step-line"></div>
+        <div class="a-step"><span class="a-step-num">5</span>Payment</div>
+      </div>
+      <div class="a-body">
+        <div class="a-hero-tag">Owner Corporation Certificates</div>
+        <div class="a-title">Find Your<br>Building</div>
+        <div class="a-title-rule"></div>
+        <div class="a-search-label">Search by address or plan ID</div>
+        <div class="a-search">
+          <span class="a-search-icon">⌕</span>
+          <span class="a-search-text">e.g. 45 Marina Drive — or — SP12345</span>
+        </div>
+        <div class="a-cards">
+          <div class="a-card">
+            <div class="a-card-plan">SP 12345</div>
+            <div class="a-card-addr">45 Marina Drive</div>
+            <div class="a-card-sub">Docklands VIC 3008</div>
+            <div class="a-card-lots">12 lots &nbsp; →</div>
+          </div>
+          <div class="a-card">
+            <div class="a-card-plan">SP 67890</div>
+            <div class="a-card-addr">12 Park Avenue</div>
+            <div class="a-card-sub">Southbank VIC 3006</div>
+            <div class="a-card-lots">24 lots &nbsp; →</div>
+          </div>
+          <div class="a-card">
+            <div class="a-card-plan">SP 11111</div>
+            <div class="a-card-addr">8 Ocean Street</div>
+            <div class="a-card-sub">St Kilda VIC 3182</div>
+            <div class="a-card-lots">8 lots &nbsp; →</div>
+          </div>
+        </div>
+        <button class="a-continue">Continue →</button>
+        <div style="clear:both"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPT B -->
+  <div class="concept">
+    <div class="concept-label">B — Modern Minimal ✦ Recommended</div>
+    <div class="mockup concept-b">
+      <div class="b-header">
+        <div class="b-logo">
+          <div class="b-logo-dot"></div>
+          <span class="b-logo-text">TOCS</span>
+        </div>
+        <div class="b-nav">
+          <span class="b-nav-pill">Order Portal</span>
+          <span class="b-nav-pill">Admin</span>
+        </div>
+      </div>
+      <div class="b-progress">
+        <div class="b-prog-item active"><span class="b-prog-num">1</span>Select Plan</div>
+        <div class="b-prog-line"></div>
+        <div class="b-prog-item"><span class="b-prog-num">2</span>Products</div>
+        <div class="b-prog-line"></div>
+        <div class="b-prog-item"><span class="b-prog-num">3</span>Review</div>
+        <div class="b-prog-line"></div>
+        <div class="b-prog-item"><span class="b-prog-num">4</span>Contact</div>
+        <div class="b-prog-line"></div>
+        <div class="b-prog-item"><span class="b-prog-num">5</span>Payment</div>
+      </div>
+      <div class="b-body">
+        <div class="b-title">Find your building</div>
+        <div class="b-sub">Search by address, building name, or Strata Plan ID</div>
+        <div class="b-search">
+          <span class="b-search-icon">⌕</span>
+          <span class="b-search-text">e.g. 45 Marina Drive or SP12345…</span>
+        </div>
+        <div class="b-list">
+          <div class="b-row">
+            <div class="b-row-accent"></div>
+            <div class="b-row-plan">SP 12345</div>
+            <div class="b-row-main">
+              <div class="b-row-addr">45 Marina Drive</div>
+              <div class="b-row-suburb">Docklands VIC 3008</div>
+            </div>
+            <div class="b-row-lots">12 lots</div>
+            <div class="b-row-arrow">→</div>
+          </div>
+          <div class="b-row" style="background:#f0faf4;">
+            <div class="b-row-accent" style="opacity:1;"></div>
+            <div class="b-row-plan">SP 67890</div>
+            <div class="b-row-main">
+              <div class="b-row-addr">12 Park Avenue</div>
+              <div class="b-row-suburb">Southbank VIC 3006</div>
+            </div>
+            <div class="b-row-lots">24 lots</div>
+            <div class="b-row-arrow">→</div>
+          </div>
+          <div class="b-row">
+            <div class="b-row-accent"></div>
+            <div class="b-row-plan">SP 11111</div>
+            <div class="b-row-main">
+              <div class="b-row-addr">8 Ocean Street</div>
+              <div class="b-row-suburb">St Kilda VIC 3182</div>
+            </div>
+            <div class="b-row-lots">8 lots</div>
+            <div class="b-row-arrow">→</div>
+          </div>
+        </div>
+        <div class="b-actions">
+          <button class="b-continue">Continue <span class="b-continue-arrow">→</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPT C -->
+  <div class="concept">
+    <div class="concept-label">C — Bold Architectural</div>
+    <div class="mockup concept-c">
+      <div class="c-header">
+        <span class="c-logo-text">TOCS</span>
+        <div class="c-nav">
+          <span class="c-nav-link">Order Portal</span>
+          <span class="c-nav-link">Admin</span>
+        </div>
+      </div>
+      <div class="c-hero">
+        <div class="c-hero-eyebrow">Owners Corporation Certificates</div>
+        <div class="c-hero-title">OC Certificate<br><strong>Order Portal</strong></div>
+        <div class="c-hero-search">
+          <span class="c-hero-search-icon">⌕</span>
+          <span class="c-hero-search-text">Search your strata plan…</span>
+        </div>
+      </div>
+      <div class="c-progress">
+        <div class="c-prog-item active"><span class="c-prog-num">1</span>&nbsp;Select Plan</div>
+        <div class="c-prog-line"></div>
+        <div class="c-prog-item"><span class="c-prog-num">2</span>&nbsp;Products</div>
+        <div class="c-prog-line"></div>
+        <div class="c-prog-item"><span class="c-prog-num">3</span>&nbsp;Review</div>
+        <div class="c-prog-line"></div>
+        <div class="c-prog-item"><span class="c-prog-num">4</span>&nbsp;Contact</div>
+        <div class="c-prog-line"></div>
+        <div class="c-prog-item"><span class="c-prog-num">5</span>&nbsp;Payment</div>
+      </div>
+      <div class="c-body">
+        <div class="c-section-label">Select your plan</div>
+        <div class="c-cards">
+          <div class="c-card selected">
+            <div class="c-card-plan">SP 12345</div>
+            <div class="c-card-addr">45 Marina Drive</div>
+            <div class="c-card-suburb">Docklands VIC 3008</div>
+            <div class="c-card-footer">
+              <span class="c-card-lots">12 lots</span>
+              <span class="c-card-arrow">✓</span>
+            </div>
+          </div>
+          <div class="c-card">
+            <div class="c-card-plan">SP 67890</div>
+            <div class="c-card-addr">12 Park Avenue</div>
+            <div class="c-card-suburb">Southbank VIC 3006</div>
+            <div class="c-card-footer">
+              <span class="c-card-lots">24 lots</span>
+              <span class="c-card-arrow">→</span>
+            </div>
+          </div>
+          <div class="c-card">
+            <div class="c-card-plan">SP 11111</div>
+            <div class="c-card-addr">8 Ocean Street</div>
+            <div class="c-card-suburb">St Kilda VIC 3182</div>
+            <div class="c-card-footer">
+              <span class="c-card-lots">8 lots</span>
+              <span class="c-card-arrow">→</span>
+            </div>
+          </div>
+        </div>
+        <div class="c-actions">
+          <button class="c-continue">Continue →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

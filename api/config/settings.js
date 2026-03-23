@@ -32,7 +32,7 @@ export default async function handler(req, res) {
           clientId:     sp.clientId     || "",
           clientSecret: sp.clientSecret ? "••••••••" : "",
           siteId:       sp.siteId       || "",
-          folderPath:   sp.folderPath   || "TOCS-Orders/Authority-Documents",
+          folderPath:   sp.folderPath   || "Top Owners Corporation Solution/ORDER DATABASE",
         },
         stripe: {
           secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
