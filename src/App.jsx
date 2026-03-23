@@ -3291,6 +3291,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
 function SettingsTab({ adminToken, pubConfig }) {
+  const codeStyle = { background: "var(--cream)", padding: "1px 4px", borderRadius: "3px" };
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
   const DEF_TPL = {
@@ -3562,9 +3563,9 @@ function SettingsTab({ adminToken, pubConfig }) {
             onChange={e => updTpl("adminNotificationSubject", e.target.value)}/>
           <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
             Tokens:{" "}
-            <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{"+"orderType}"}</code>{" "}
-            <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{"+"orderId}"}</code>{" "}
-            <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{"+"total}"}</code>
+            <code style={codeStyle}>{"{"+"orderType}"}</code>{" "}
+            <code style={codeStyle}>{"{"+"orderId}"}</code>{" "}
+            <code style={codeStyle}>{"{"+"total}"}</code>
           </div>
         </div>
         <div className="form-row">
@@ -3577,7 +3578,7 @@ function SettingsTab({ adminToken, pubConfig }) {
         {/* Certificate Email */}
         <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "20px" }}>Certificate Email</h3>
         <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
-          Sent to applicants when their certificate is issued. Placeholders: <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{name}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{lotNumber}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{address}"}</code> <code style={{background:"var(--cream)",padding:"1px 4px",borderRadius:"3px"}}>{"{orderId}"}</code>
+          Sent to applicants when their certificate is issued. Placeholders: <code style={codeStyle}>{"{name}"}</code> <code style={codeStyle}>{"{lotNumber}"}</code> <code style={codeStyle}>{"{address}"}</code> <code style={codeStyle}>{"{orderId}"}</code>
         </p>
         <div className="form-row">
           <label className="f-label">Certificate Email Subject</label>

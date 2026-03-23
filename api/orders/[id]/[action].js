@@ -395,10 +395,11 @@ export default async function handler(req, res) {
       const authAttachment = (authDoc?.data && authDoc.filename)
         ? [{ filename: authDoc.filename, content: authDoc.data, encoding: "base64", contentType: authDoc.contentType || "application/octet-stream" }]
         : [];
+      const transporter = createTransporter(smtp);
+      const from = `"TOCS Order Portal" <${toEmail}>`;
       const emailJobs = [
-        createTransporter(smtp).sendMail({
-          from: `"TOCS Order Portal" <${toEmail}>`,
-          to: toEmail,
+        transporter.sendMail({
+          from, to: toEmail,
           subject: `Payment Confirmed — Order #${id} — $${(confirmedOrder.total||0).toFixed(2)} AUD`,
           html: buildOrderEmailHtml(confirmedOrder, cfgForStripe),
           attachments: authAttachment,
@@ -406,9 +407,8 @@ export default async function handler(req, res) {
       ];
       if (confirmedOrder.contactInfo?.email) {
         emailJobs.push(
-          createTransporter(smtp).sendMail({
-            from: `"TOCS Order Portal" <${toEmail}>`,
-            to: confirmedOrder.contactInfo.email,
+          transporter.sendMail({
+            from, to: confirmedOrder.contactInfo.email,
             subject: `Payment Confirmed — Order ${id}`,
             html: buildCustomerEmailHtml(confirmedOrder, cfg),
           }).catch(e => console.error("Customer stripe email failed:", e.message))
