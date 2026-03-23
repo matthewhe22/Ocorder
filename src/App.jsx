@@ -1856,6 +1856,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── All hooks MUST be declared before any conditional return (Rules of Hooks) ─
   const [modal, setModal] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
+  const [planSaveErr, setPlanSaveErr] = useState(null);
   const [planId, setPlanId] = useState(data.strataPlans[0]?.id || "");
   const [form, setForm] = useState({});
   const [expandedOrder, setExpandedOrder] = useState(null);
@@ -1885,14 +1886,23 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   // ── API helper ──────────────────────────────────────────────────────────────
   const savePlans = async (plans) => {
+    const previousPlans = data.strataPlans;          // snapshot BEFORE optimistic update
     setData(p => ({ ...p, strataPlans: plans }));
     try {
-      await fetch("/api/plans", {
+      const res = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ plans }),
       });
-    } catch {}
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Save failed (${res.status})`);
+      }
+      setPlanSaveErr(null);
+    } catch (err) {
+      setData(p => ({ ...p, strataPlans: previousPlans }));
+      setPlanSaveErr(err.message || "Failed to save. Please try again.");
+    }
   };
 
   // ── Plan CRUD ───────────────────────────────────────────────────────────────
@@ -2204,6 +2214,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* ── PLANS ── */}
       {adminTab === "plans" && (
         <div className="panel">
+          {planSaveErr && (
+            <div className="alert alert-err" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <span>{planSaveErr}</span>
+              <button onClick={() => setPlanSaveErr(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "inherit", marginLeft: "12px" }}>×</button>
+            </div>
+          )}
           <div className="section-hd">
             <h2 className="section-tt">Strata Plans</h2>
             <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
