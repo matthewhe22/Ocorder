@@ -20,7 +20,13 @@ export default async function handler(req, res) {
         logo: cfg.logo || "",
         smtp: { host: smtp.host || "mail-au.smtp2go.com", port: smtp.port || 2525, user: smtp.user || "OCCAPP", pass: smtp.pass ? "••••••••" : "" },
         paymentDetails: { accountName: pd.accountName || "Top Owners Corporation", bsb: pd.bsb || "033-065", accountNumber: pd.accountNumber || "522011", payid: pd.payid || "accounts@tocs.com.au" },
-        emailTemplate: { certificateSubject: et.certificateSubject || "Your OC Certificate — Order #{orderId}", certificateGreeting: et.certificateGreeting || "", footer: et.footer || "" },
+        emailTemplate: {
+          certificateSubject:       et.certificateSubject       || "Your OC Certificate — Order #{orderId}",
+          certificateGreeting:      et.certificateGreeting      || "",
+          footer:                   et.footer                   || "",
+          adminNotificationSubject: et.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}",
+          adminNotificationIntro:   et.adminNotificationIntro   || "A new order has been placed.",
+        },
         sharepoint: {
           tenantId:     sp.tenantId     || "",
           clientId:     sp.clientId     || "",
