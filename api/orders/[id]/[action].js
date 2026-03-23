@@ -400,7 +400,7 @@ export default async function handler(req, res) {
           from: `"TOCS Order Portal" <${toEmail}>`,
           to: toEmail,
           subject: `Payment Confirmed — Order #${id} — $${(confirmedOrder.total||0).toFixed(2)} AUD`,
-          html: buildOrderEmailHtml(confirmedOrder),
+          html: buildOrderEmailHtml(confirmedOrder, cfgForStripe),
           attachments: authAttachment,
         }).catch(e => console.error("Admin stripe email failed:", e.message)),
       ];
