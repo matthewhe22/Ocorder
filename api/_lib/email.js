@@ -2,7 +2,7 @@
 // Shared email helpers — imported by orders/index.js and orders/[id]/[action].js
 import nodemailer from "nodemailer";
 
-export function buildOrderEmailHtml(order) {
+export function buildOrderEmailHtml(order, cfg) {
   const contact = order.contactInfo || {};
   const items = order.items || [];
   let date = "—";
@@ -19,7 +19,7 @@ export function buildOrderEmailHtml(order) {
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1c3326;padding:24px 32px;"><h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1><p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">New Order Notification</p></div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">A new order has been placed.</p>
+      <p style="margin-top:0;">${cfg?.emailTemplate?.adminNotificationIntro || "A new order has been placed."}</p>
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Order Details</h3>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
         <tr><td style="padding:6px 0;color:#666;width:38%;">Order ID</td><td style="padding:6px 0;font-weight:600;">${order.id}</td></tr>
