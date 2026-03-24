@@ -210,7 +210,7 @@ export default async function handler(req, res) {
       const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
       const lotNumber = order.items?.[0]?.lotNumber || "";
       const buildingName = order.items?.[0]?.planName || "";
-      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} — Lot {lotNumber} — {buildingName}")
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} — {buildingName} — Lot {lotNumber}")
         .replace("{orderType}", orderType)
         .replace("{lotNumber}", lotNumber)
         .replace("{buildingName}", buildingName);
