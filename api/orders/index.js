@@ -207,11 +207,12 @@ export default async function handler(req, res) {
     // already running above in parallel, so emails don't eat into SP time.
     if (smtp.host && smtp.user && smtp.pass) {
       console.log(`Sending emails for order ${order.id}...`);
-      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
-      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
-        .replace("{orderType}", orderType)
+      const lotNumber = order.items?.[0]?.lotNumber || "";
+      const buildingName = order.items?.[0]?.planName || "";
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order #{orderId} — Lot {lotNumber} — {buildingName}")
         .replace("{orderId}", order.id)
-        .replace("{total}", "$" + (order.total || 0).toFixed(2) + " AUD");
+        .replace("{lotNumber}", lotNumber)
+        .replace("{buildingName}", buildingName);
       const emailJobs = [
         sendMail(smtp, {
           from: `"TOCS Order Portal" <${toEmail}>`,
