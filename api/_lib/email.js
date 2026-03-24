@@ -126,7 +126,52 @@ export function buildCustomerEmailHtml(order, cfg) {
     if (!sa || !sa.street) return "";
     return `<h3 style="${HEADING}">Delivery Address</h3><table style="${TBL}"><tr><td style="${LABEL_W}">Address</td><td style="${VAL}">${sa.street}, ${sa.suburb} ${sa.state} ${sa.postcode}</td></tr></table>`;
   })();
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;"><div style="${WRAPPER}"><div style="${BANNER}"><h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1><p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Confirmation</p></div><div style="padding:32px;"><p style="margin-top:0;">Dear ${contact.name||"Applicant"},</p><p>${isPending?"Your order has been received and is <strong>awaiting payment</strong>. Certificate processing will begin once payment is confirmed.":"Your payment has been received and your certificate(s) will be processed within the stated turnaround time."}</p><div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;"><div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div><div style="font-family:monospace;font-size:1.2rem;font-weight:700;color:#1c3326;">${order.id}</div><div style="font-size:0.75rem;color:#666;margin-top:4px;">Please keep this for your records and use it as your payment reference for bank transfers.</div></div>${paymentDetailsHtml(order, pd)}${deliveryAddrBlock}<h3 style="${HEADING}">Order Summary</h3><table style="width:100%;border-collapse:collapse;margin-bottom:8px;"><tr style="background:#f5f7f5;"><th style="${TH_LEFT}">Product</th><th style="${TH_LEFT}">Owner Corporation</th><th style="${TH_RIGHT}">Price</th></tr>${itemRowsHtml(items)}${shippingRow}<tr><td colspan="2" style="padding:8px 12px;font-size:0.78rem;color:#666;">GST (10%) included</td><td style="padding:8px 12px;text-align:right;font-size:0.78rem;color:#666;">$${((order.total||0)/11).toFixed(2)}</td></tr><tr style="background:#f5f7f5;"><td colspan="2" style="padding:8px 12px;font-weight:700;">Total (incl. GST)</td><td style="padding:8px 12px;text-align:right;font-weight:700;font-size:1.05rem;color:#1c3326;">$${(order.total||0).toFixed(2)}</td></tr></table><hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 16px;"><p style="font-size:0.8rem;color:#555;margin:0;">Questions? Contact us at <a href="mailto:${cfg.orderEmail||'info@tocs.co'}" style="color:#2e6b42;">${cfg.orderEmail||'info@tocs.co'}</a> quoting your order reference.</p></div></div></body></html>`;
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="${WRAPPER}">
+    <div style="${BANNER}">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Confirmation</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin-top:0;">Dear ${contact.name||"Applicant"},</p>
+      <p>${isPending
+        ? "Your order has been received and is <strong>awaiting payment</strong>. Certificate processing will begin once payment is confirmed."
+        : "Your payment has been received and your certificate(s) will be processed within the stated turnaround time."
+      }</p>
+      <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;">
+        <div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div>
+        <div style="font-family:monospace;font-size:1.2rem;font-weight:700;color:#1c3326;">${order.id}</div>
+        <div style="font-size:0.75rem;color:#666;margin-top:4px;">Please keep this for your records and use it as your payment reference for bank transfers.</div>
+      </div>
+      ${paymentDetailsHtml(order, pd)}
+      ${deliveryAddrBlock}
+      <h3 style="${HEADING}">Order Summary</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        <tr style="background:#f5f7f5;">
+          <th style="${TH_LEFT}">Product</th>
+          <th style="${TH_LEFT}">Owner Corporation</th>
+          <th style="${TH_RIGHT}">Price</th>
+        </tr>
+        ${itemRowsHtml(items)}
+        ${shippingRow}
+        <tr>
+          <td colspan="2" style="padding:8px 12px;font-size:0.78rem;color:#666;">GST (10%) included</td>
+          <td style="padding:8px 12px;text-align:right;font-size:0.78rem;color:#666;">$${((order.total||0)/11).toFixed(2)}</td>
+        </tr>
+        <tr style="background:#f5f7f5;">
+          <td colspan="2" style="padding:8px 12px;font-weight:700;">Total (incl. GST)</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:700;font-size:1.05rem;color:#1c3326;">$${(order.total||0).toFixed(2)}</td>
+        </tr>
+      </table>
+      <hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 16px;">
+      <p style="font-size:0.8rem;color:#555;margin:0;">Questions? Contact us at <a href="mailto:${cfg.orderEmail||'info@tocs.co'}" style="color:#2e6b42;">${cfg.orderEmail||'info@tocs.co'}</a> quoting your order reference.</p>
+    </div>
+  </div>
+</body>
+</html>`;
 }
 
 /**

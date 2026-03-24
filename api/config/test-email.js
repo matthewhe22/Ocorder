@@ -2,6 +2,7 @@
 // Accepts optional { smtp, orderEmail } in the request body to test without saving first.
 import nodemailer from "nodemailer";
 import { readConfig, validToken, extractToken, cors } from "../_lib/store.js";
+import { createTransporter } from "../_lib/email.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -31,13 +32,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: smtp.host,
-      port: smtp.port,
-      secure: smtp.port === 465,
-      auth: { user: smtp.user, pass: smtp.pass },
-      tls: { rejectUnauthorized: false },
-    });
+    const transporter = createTransporter(smtp);
     await transporter.verify();
     await transporter.sendMail({
       from: `"TOCS Order Portal" <${toEmail}>`,

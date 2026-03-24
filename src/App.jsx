@@ -49,7 +49,7 @@ const GST_RATE = 0.1;
 function gstOf(total) { return total / 11; }          // component inside GST-inclusive price
 function exGst(total) { return total - gstOf(total); }
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_RE  = /^(\+?61|0)[0-9]{8,9}$/;
+const PHONE_RE  = /^\+?[\d\s\-().]{7,20}$/;
 
 // ─── SHARED HELPERS ───────────────────────────────────────────────────────────
 // Default contact state — single source of truth used for init, reset and cancel
@@ -588,25 +588,27 @@ export default function App() {
         body.lotAuthority = { filename: lotAuthFile.name, contentType: lotAuthFile.type || "application/octet-stream", data: base64 };
       }
       const r = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const respData = await r.json().catch(() => ({}));
       if (!r.ok) {
-        // Server returned an error (e.g. KV unavailable) — surface it to the user
-        if (setErr) setErr(respData.error || `Submission failed (${r.status}). Please try again.`);
-        setPlacing(false);
-        return; // Do NOT advance to confirmation
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || "Order submission failed. Please try again.");
       }
+      const returned = await r.json().catch(() => ({}));
       // Stripe payment: redirect to Stripe's hosted checkout page
-      if (respData.redirect) {
-        window.location.href = respData.redirect;
+      if (returned.redirect) {
+        window.location.href = returned.redirect;
         return; // Page navigates away — do not advance to step 6
       }
-    } catch { /* Network / offline — still show confirmation so user knows their order */ }
-    setOrder(o);
-    setData(p => ({ ...p, orders: [o, ...p.orders] }));
-    setCart([]);
-    setStep(6);
-    setPlacing(false);
-    try { localStorage.setItem("tocs_last_order", JSON.stringify({ id: o.id, date: o.date, email: o.contactInfo.email, total: o.total, payment: o.payment, orderCategory: o.orderCategory })); } catch {}
+      const finalOrder = returned.order || o;
+      setOrder(finalOrder);
+      setData(p => ({ ...p, orders: [finalOrder, ...p.orders] }));
+      setCart([]);
+      setStep(6);
+      setPlacing(false);
+      try { localStorage.setItem("tocs_last_order", JSON.stringify({ id: finalOrder.id, date: finalOrder.date, email: finalOrder.contactInfo.email, total: finalOrder.total, payment: finalOrder.payment, orderCategory: finalOrder.orderCategory })); } catch {}
+    } catch (err) {
+      if (setErr) setErr(err.message || "Network error — please check your connection and try again.");
+      setPlacing(false);
+    }
   };
 
   const reset = () => { setStep(1); setSelPlan(null); setSelLot(null); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); };
@@ -3011,11 +3013,17 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
     if (!confirmed) { setErr("Please tick the confirmation checkbox before proceeding."); return; }
     setSaving(true); setErr("");
     try {
-      await fetch(`/api/orders/${order.id}/status`, {
+      const r = await fetch(`/api/orders/${order.id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ status: "Cancelled", note: reason }),
       });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        setErr(e.error || `Failed to cancel order (${r.status}). Please try again.`);
+        setSaving(false);
+        return;
+      }
       onCancelled(order.id, reason);
     } catch {
       setErr("Network error — please try again.");
@@ -3492,7 +3500,7 @@ function SettingsTab({ adminToken, pubConfig }) {
             value={stripePubKey}
             onChange={e => { setStripePubKey(e.target.value); setSaved(false); setSaveErr(""); }}/>
           <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
-            Optional — used to display card brands and for future client-side integrations.
+            Optional — used to display card brands and for future client-side integrations. Note: stored for future Stripe.js integration — not currently used by the portal.
           </div>
         </div>
 
@@ -3819,6 +3827,11 @@ function StorageTab({ adminToken }) {
       {spTestResult && (
         <div className="panel" style={{ fontSize: "0.82rem" }}>
           <div style={{ fontWeight: 600, marginBottom: "8px" }}>SharePoint Diagnostic</div>
+          {spTestResult.ok && (
+            <div style={{ color: "var(--forest)", fontSize: "0.82rem", marginBottom: "8px" }}>
+              ✅ {spTestResult.message} {spTestResult.siteName ? `— ${spTestResult.siteName}` : ""}
+            </div>
+          )}
           {spTestResult.error && <div style={{ color: "var(--red)" }}>❌ {spTestResult.error}</div>}
           {spTestResult.steps && spTestResult.steps.map((s, i) => (
             <div key={i} style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "4px 0", borderBottom: "1px solid var(--border2)" }}>

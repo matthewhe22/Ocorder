@@ -1,4 +1,4 @@
-import { readConfig, writeConfig, validToken, extractToken, cors } from "../_lib/store.js";
+import { readConfig, writeConfig, validToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
 import Stripe from "stripe";
 
 export default async function handler(req, res) {
@@ -11,6 +11,11 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
       const cfg = await readConfig();
+      // Load logo from its dedicated Redis key (avoids inflating every readConfig() call).
+      // Fall back to any logo already stored in the main config key for backward compat.
+      if (KV_AVAILABLE) {
+        cfg.logo = await kvGet("tocs:logo") || cfg.logo || null;
+      }
       const smtp = cfg.smtp || {};
       const pd   = cfg.paymentDetails || {};
       const et   = cfg.emailTemplate || {};
@@ -67,7 +72,17 @@ export default async function handler(req, res) {
       const { orderEmail, logo, smtp, paymentDetails, emailTemplate, sharepoint, stripe } = req.body || {};
       const cfg = await readConfig();
       if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
-      if (logo !== undefined) cfg.logo = logo;
+      if (logo !== undefined) {
+        if (KV_AVAILABLE) {
+          // Store logo in its own Redis key so readConfig() never loads the large blob.
+          await kvSet("tocs:logo", logo);
+          // Remove logo from the main config object to keep it lean.
+          delete cfg.logo;
+        } else {
+          // KV not available: fall back to storing in main config as before.
+          cfg.logo = logo;
+        }
+      }
       if (smtp && typeof smtp === "object") {
         cfg.smtp = cfg.smtp || {};
         if (smtp.host !== undefined) cfg.smtp.host = smtp.host;

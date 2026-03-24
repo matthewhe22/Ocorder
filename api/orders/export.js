@@ -1,13 +1,13 @@
-// GET /api/orders/export?token=<token> — Download all orders as CSV (admin only)
-import { readData, validToken, cors } from "../_lib/store.js";
+// GET /api/orders/export — Download all orders as CSV (admin only)
+import { readData, validToken, extractToken, cors } from "../_lib/store.js";
 
 export default async function handler(req, res) {
   cors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed." });
 
-  // Accept token via ?token= query param OR Authorization: Bearer header
-  const token = req.query.token || (req.headers["authorization"] || "").replace("Bearer ", "");
+  // Accept token via Authorization: Bearer header only
+  const token = extractToken(req);
   if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
 
   const { orders } = await readData();

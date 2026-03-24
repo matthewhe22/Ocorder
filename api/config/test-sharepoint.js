@@ -1,5 +1,5 @@
 // POST /api/config/test-sharepoint — Admin: test SharePoint credentials
-import { readConfig, cors } from "../_lib/store.js";
+import { readConfig, cors, validToken, extractToken } from "../_lib/store.js";
 import { ClientSecretCredential } from "@azure/identity";
 
 export default async function handler(req, res) {
@@ -7,8 +7,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).end();
 
-  const auth = req.headers.authorization?.split(" ")[1];
-  if (!auth) return res.status(401).json({ error: "Unauthorized" });
+  const token = extractToken(req);
+  if (!(await validToken(token))) return res.status(401).json({ error: "Unauthorized" });
 
   const cfg = await readConfig();
   const sp  = cfg?.sharepoint || {};

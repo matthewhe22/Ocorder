@@ -10,17 +10,6 @@ async function sendMail(smtp, mailOpts) {
   await transporter.sendMail(mailOpts);
 }
 
-// Wraps any promise with a hard timeout — returns null (not reject) on expiry so
-// callers can use the result naturally without needing extra try/catch.
-async function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
 export default async function handler(req, res) {
   cors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -28,7 +17,6 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const order = body.order || body;
-  if (!order?.id) return res.status(400).json({ error: "Invalid order: 'id' is required." });
   if (!Array.isArray(order?.items) || order.items.length === 0) return res.status(400).json({ error: "Invalid order: 'items' must be a non-empty array." });
   if (!order?.payment) return res.status(400).json({ error: "Invalid order: 'payment' method is required (bank, payid, stripe)." });
 
@@ -40,12 +28,55 @@ export default async function handler(req, res) {
     const spConfig = cfg?.sharepoint || {};
     const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
 
+    // CRIT-1: Generate order ID server-side
+    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+    order.id = serverId;
+
+    // CRIT-2: Validate payment method
+    if (!["bank", "payid", "stripe", "invoice"].includes(order.payment)) return res.status(400).json({ error: "Invalid payment method." });
+
+    // CRIT-2: Sanitise total
+    order.total = Math.max(0, Number(order.total) || 0);
+
+    // CRIT-2: Validate contact email
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!order.contactInfo?.email) {
+      return res.status(400).json({ error: "Contact email is required." });
+    }
+    if (!EMAIL_RE.test(order.contactInfo.email)) {
+      return res.status(400).json({ error: "Contact email is invalid." });
+    }
+
+    // CRIT-2: Set status server-side
+    if (order.payment === "stripe") {
+      order.status = "Awaiting Stripe Payment";
+    } else {
+      order.status = "Awaiting Payment";
+    }
+
+    // MED-11: Validate items fields
+    if (!order.items.every(item => item.productName && typeof item.price === "number")) {
+      return res.status(400).json({ error: "Invalid order items: each item must have productName and price." });
+    }
+
     // Derive SharePoint folder structure: {buildingName}/{categoryFolder}/{orderId}
     const categoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
     const buildingName   = (order.items?.[0]?.planName || "Unknown Building")
       .replace(/[\\/:*?"<>|]/g, "-").trim();
     const spSubFolder    = `${buildingName}/${categoryFolder}/${order.id}`;
 
+    // CRIT-7: Validate authority document on server
+    if (body.lotAuthority?.data) {
+      const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
+      if (!ALLOWED_TYPES.includes(body.lotAuthority.contentType)) {
+        return res.status(400).json({ error: "Authority document must be PDF, JPG, or PNG." });
+      }
+      // base64 byte size = (chars * 3/4)
+      const byteSize = Math.ceil((body.lotAuthority.data.length * 3) / 4);
+      if (byteSize > 5 * 1024 * 1024) {
+        return res.status(400).json({ error: "Authority document must be under 5 MB." });
+      }
+    }
 
     // Set filename synchronously (no network) so admin can see the doc reference immediately
     if (body.lotAuthority?.data) {
@@ -68,6 +99,10 @@ export default async function handler(req, res) {
 
     // ── Save order to Redis immediately ──────────────────────────────────────────
     const data = await readData();
+    // CRIT-1: Check for ID collision before saving
+    if (data.orders.find(o => o.id === order.id)) {
+      return res.status(409).json({ error: "Order ID collision. Please try again." });
+    }
     data.orders.unshift(order);
     await writeData(data);
 
@@ -93,7 +128,7 @@ export default async function handler(req, res) {
             quantity: 1,
           }],
           mode: "payment",
-          success_url: `${baseUrl}/complete?orderId=${order.id}&stripeOk=1`,
+          success_url: `${baseUrl}/complete?orderId=${serverId}&stripeOk=1`,
           cancel_url:  `${baseUrl}/?cancelled=1`,
           metadata: { orderId: order.id },
         });
@@ -159,25 +194,16 @@ export default async function handler(req, res) {
           ]);
           const spUrl     = authResult.status === "fulfilled" ? authResult.value : null;
           const summaryUrl = pdfResult.status  === "fulfilled" ? pdfResult.value  : null;
-          const oi = data.orders.find(o => o.id === order.id);
-          if (spUrl) {
-            order.lotAuthorityUrl = spUrl;
-            if (oi) { oi.lotAuthorityUrl = spUrl; oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
+          // Fresh read before writing SP results to avoid stale-data overwrites
+          const freshData = await readData().catch(() => data);
+          const freshOi = freshData.orders.find(o => o.id === order.id);
+          if (freshOi) {
+            if (spUrl) { freshOi.lotAuthorityUrl = spUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
+            if (summaryUrl) { freshOi.summaryUrl = summaryUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+            if (!spUrl && body.lotAuthority?.data) { const note = authErr?.message ? authErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note }); }
+            if (!summaryUrl) { const note = pdfErr?.message ? pdfErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note }); }
           }
-          if (summaryUrl) {
-            order.summaryUrl = summaryUrl;
-            if (oi) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-          }
-          if (!spUrl && body.lotAuthority?.data) {
-            const note = authErr?.message ? authErr.message.substring(0, 120) : "See Vercel logs";
-            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note });
-          }
-          if (!summaryUrl) {
-            const note = pdfErr?.message ? pdfErr.message.substring(0, 120) : "See Vercel logs";
-            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note });
-          }
-          // Always persist final state (SP URLs if succeeded, failure audit entries if not)
-          await writeData(data).catch(e => console.error("SP result persist failed:", e.message));
+          await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for order ${order.id}: auth=${!!spUrl} pdf=${!!summaryUrl}`);
         } catch (e) {
           console.error("SP upload block failed:", e.message);
@@ -209,14 +235,14 @@ export default async function handler(req, res) {
       console.log(`Sending emails for order ${order.id}...`);
       const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
       const lotNumber = order.items?.[0]?.lotNumber || "";
-      const buildingName = order.items?.[0]?.planName || "";
-      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} — {buildingName} — Lot {lotNumber}")
+      const buildingNameEmail = order.items?.[0]?.planName || "";
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
         .replace("{orderType}", orderType)
         .replace("{orderId}", order.id || "")
         .replace("{total}", order.total != null ? `$${order.total.toFixed(2)}` : "")
         .replace("{lotNumber}", lotNumber)
-        .replace("{buildingName}", buildingName)
-        .replace("{address}", buildingName);
+        .replace("{buildingName}", buildingNameEmail)
+        .replace("{address}", buildingNameEmail);
       const emailJobs = [
         sendMail(smtp, {
           from: `"TOCS Order Portal" <${toEmail}>`,

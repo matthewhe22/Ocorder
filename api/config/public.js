@@ -7,6 +7,7 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed." });
   const cfg = await readConfig();
   const pd = cfg.paymentDetails || {};
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   return res.status(200).json({
     logo: cfg.logo || "",
     stripeEnabled: !!(cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY),

@@ -120,6 +120,7 @@ export default async function handler(req, res) {
     const cfg = await readConfig();
     const smtp = cfg.smtp || {};
     const fromEmail = cfg.orderEmail || "Orders@tocs.co";
+    if (!order.contactInfo?.email) return res.status(400).json({ error: "No email address on this order." });
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
@@ -151,12 +152,15 @@ export default async function handler(req, res) {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
           if (spEnabled) {
+            const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+            const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+            const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
             const certUrl = await uploadToSharePoint(
               attachment.filename || "certificate.pdf",
               attachment.contentType || "application/pdf",
               attachment.data,
               spConfig,
-              id   // ← per-order subfolder (order ID)
+              spSubFolder
             );
             if (certUrl) {
               data.orders[idx].certificateUrl = certUrl;
@@ -189,6 +193,7 @@ export default async function handler(req, res) {
     const cfg = await readConfig();
     const smtp = cfg.smtp || {};
     const fromEmail = cfg.orderEmail || "Orders@tocs.co";
+    if (!order.contactInfo?.email) return res.status(400).json({ error: "No email address on this order." });
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
@@ -238,12 +243,15 @@ export default async function handler(req, res) {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
           if (spEnabled) {
+            const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+            const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+            const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
             const invoiceUrl = await uploadToSharePoint(
               attachment.filename || "invoice.pdf",
               attachment.contentType || "application/pdf",
               attachment.data,
               spConfig,
-              id   // ← per-order subfolder (order ID)
+              spSubFolder
             );
             if (invoiceUrl) {
               data.orders[idx].invoiceUrl = invoiceUrl;
@@ -397,10 +405,20 @@ export default async function handler(req, res) {
         : [];
       const transporter = createTransporter(smtp);
       const from = `"TOCS Order Portal" <${toEmail}>`;
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[confirmedOrder.orderCategory] || "Order";
+      const lotNumber = confirmedOrder.items?.[0]?.lotNumber || "";
+      const buildingName = confirmedOrder.items?.[0]?.planName || "";
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
+        .replace("{orderType}", orderType)
+        .replace("{orderId}", confirmedOrder.id || "")
+        .replace("{total}", confirmedOrder.total != null ? `$${confirmedOrder.total.toFixed(2)}` : "")
+        .replace("{lotNumber}", lotNumber)
+        .replace("{buildingName}", buildingName)
+        .replace("{address}", buildingName);
       const emailJobs = [
         transporter.sendMail({
           from, to: toEmail,
-          subject: `Payment Confirmed — Order #${id} — $${(confirmedOrder.total||0).toFixed(2)} AUD`,
+          subject: adminSubject,
           html: buildOrderEmailHtml(confirmedOrder, cfgForStripe),
           attachments: authAttachment,
         }).catch(e => console.error("Admin stripe email failed:", e.message)),
@@ -457,6 +475,11 @@ export default async function handler(req, res) {
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
+
+    const orderToDelete = data.orders[idx];
+    if (["Paid", "Issued", "Complete"].includes(orderToDelete.status)) {
+      return res.status(409).json({ error: "Cannot delete a paid or issued order. Cancel it first." });
+    }
 
     data.orders.splice(idx, 1);
     await writeData(data);

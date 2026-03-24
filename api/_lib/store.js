@@ -132,6 +132,10 @@ export const DEFAULT_CONFIG = {
 // ── Stateless HMAC token helpers ──────────────────────────────────────────────
 import { createHmac, timingSafeEqual } from "crypto";
 
+if (!process.env.TOKEN_SECRET) {
+  console.warn("[store.js] WARNING: TOKEN_SECRET env var is not set. Token security is degraded. Set TOKEN_SECRET in Vercel environment variables.");
+}
+
 async function getSecret() {
   if (process.env.TOKEN_SECRET) return process.env.TOKEN_SECRET;
   try {
@@ -160,13 +164,19 @@ async function kvGet(key) {
   }
 }
 
-async function kvSet(key, value) {
+// ttlSeconds is optional; when provided, the key expires after that many seconds.
+async function kvSet(key, value, ttlSeconds) {
   if (!KV_AVAILABLE) {
     throw new Error(NO_KV_MSG);
   }
   try {
     const client = await getClient();
-    await client.set(key, JSON.stringify(value));
+    const serialised = JSON.stringify(value);
+    if (ttlSeconds) {
+      await client.set(key, serialised, { EX: ttlSeconds });
+    } else {
+      await client.set(key, serialised);
+    }
   } catch (err) {
     throw new Error("Redis write failed: " + err.message);
   }
@@ -180,9 +190,12 @@ async function kvDel(key) {
   } catch { /* best-effort */ }
 }
 
+export { kvGet, kvSet, kvDel };
+
 // ── Authority document helpers ────────────────────────────────────────────────
 export async function writeAuthority(orderId, doc) {
-  await kvSet(`tocs:authority:${orderId}`, doc);
+  // Expire authority documents after 90 days to avoid unbounded Redis growth.
+  await kvSet(`tocs:authority:${orderId}`, JSON.stringify(doc), 90 * 86400);
 }
 
 export async function readAuthority(orderId) {
@@ -291,6 +304,7 @@ export async function validToken(token) {
     const lastDot = token.lastIndexOf(".");
     const payload = token.slice(0, lastDot);
     const sig     = token.slice(lastDot + 1);
+    if (!/^[0-9a-f]{64}$/.test(sig)) return false;
     const expected = await hmacSign(payload);
     const sigBuf  = Buffer.from(sig,      "hex");
     const expBuf  = Buffer.from(expected, "hex");
@@ -309,8 +323,17 @@ export function extractToken(req) {
   return auth.startsWith("Bearer ") ? auth.slice(7) : null;
 }
 
-export function cors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+const ALLOWED_ORIGINS = [
+  "https://occorder.vercel.app",
+  "https://tocs.co",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+export function cors(res, req) {
+  const origin = req?.headers?.origin;
+  const allowedOrigin = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o)) ? origin : "*";
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
 }
