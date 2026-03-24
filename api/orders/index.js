@@ -207,10 +207,11 @@ export default async function handler(req, res) {
     // already running above in parallel, so emails don't eat into SP time.
     if (smtp.host && smtp.user && smtp.pass) {
       console.log(`Sending emails for order ${order.id}...`);
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
       const lotNumber = order.items?.[0]?.lotNumber || "";
       const buildingName = order.items?.[0]?.planName || "";
-      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order #{orderId} — Lot {lotNumber} — {buildingName}")
-        .replace("{orderId}", order.id)
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} — Lot {lotNumber} — {buildingName}")
+        .replace("{orderType}", orderType)
         .replace("{lotNumber}", lotNumber)
         .replace("{buildingName}", buildingName);
       const emailJobs = [
