@@ -212,8 +212,11 @@ export default async function handler(req, res) {
       const buildingName = order.items?.[0]?.planName || "";
       const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} — {buildingName} — Lot {lotNumber}")
         .replace("{orderType}", orderType)
+        .replace("{orderId}", order.id || "")
+        .replace("{total}", order.total != null ? `$${order.total.toFixed(2)}` : "")
         .replace("{lotNumber}", lotNumber)
-        .replace("{buildingName}", buildingName);
+        .replace("{buildingName}", buildingName)
+        .replace("{address}", buildingName);
       const emailJobs = [
         sendMail(smtp, {
           from: `"TOCS Order Portal" <${toEmail}>`,

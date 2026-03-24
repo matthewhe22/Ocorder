@@ -3563,7 +3563,9 @@ function SettingsTab({ adminToken, pubConfig }) {
             Tokens:{" "}
             <code style={codeStyle}>{"{"+"orderType}"}</code>{" "}
             <code style={codeStyle}>{"{"+"orderId}"}</code>{" "}
-            <code style={codeStyle}>{"{"+"total}"}</code>
+            <code style={codeStyle}>{"{"+"total}"}</code>{" "}
+            <code style={codeStyle}>{"{"+"buildingName}"}</code>{" "}
+            <code style={codeStyle}>{"{"+"lotNumber}"}</code>
           </div>
         </div>
         <div className="form-row">
