@@ -720,17 +720,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
 
   return (
     <div>
-      {/* ── Stripe cancellation banner ── */}
-      {stripeCancelled && (
-        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"8px", padding:"14px 20px", marginBottom:"1.5rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem" }}>
-          <div>
-            <span style={{ fontWeight:600, color:"#92400e" }}>Payment cancelled.</span>
-            {" "}<span style={{ color:"#78350f", fontSize:"0.88rem" }}>Your order was not processed. You can review your selections and try again.</span>
-          </div>
-          <button onClick={() => setStripeCancelled(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"#92400e", fontSize:"1.2rem", lineHeight:1, padding:"0 4px", flexShrink:0 }} aria-label="Dismiss">×</button>
-        </div>
-      )}
-
       {step < 6 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
           <div className="steps">
@@ -771,6 +760,17 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               ↩ Start New Order
             </button>
           )}
+        </div>
+      )}
+
+      {/* ── Stripe cancellation banner ── */}
+      {stripeCancelled && (
+        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"8px", padding:"14px 20px", marginBottom:"1.5rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem" }}>
+          <div>
+            <span style={{ fontWeight:600, color:"#92400e" }}>Payment cancelled.</span>
+            {" "}<span style={{ color:"#78350f", fontSize:"0.88rem" }}>Your order was not processed. You can review your selections and try again.</span>
+          </div>
+          <button onClick={() => setStripeCancelled(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"#92400e", fontSize:"1.2rem", lineHeight:1, padding:"0 4px", flexShrink:0 }} aria-label="Dismiss">×</button>
         </div>
       )}
 
