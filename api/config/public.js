@@ -7,9 +7,12 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed." });
   const cfg = await readConfig();
   const pd = cfg.paymentDetails || {};
+  const pm = cfg.paymentMethods || {};
   return res.status(200).json({
     logo: cfg.logo || "",
     stripeEnabled: !!(cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY),
+    bankEnabled:   pm.bankEnabled  !== false,
+    payidEnabled:  pm.payidEnabled !== false,
     paymentDetails: {
       accountName: pd.accountName || "Top Owners Corporation",
       bsb: pd.bsb || "033-065",

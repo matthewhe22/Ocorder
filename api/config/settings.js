@@ -15,6 +15,7 @@ export default async function handler(req, res) {
       const pd   = cfg.paymentDetails || {};
       const et   = cfg.emailTemplate || {};
       const sp   = cfg.sharepoint || {};
+      const pm   = cfg.paymentMethods || {};
       return res.status(200).json({
         orderEmail: cfg.orderEmail || "Orders@tocs.co",
         logo: cfg.logo || "",
@@ -37,6 +38,10 @@ export default async function handler(req, res) {
         stripe: {
           secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
           publishableKey: cfg.stripe?.publishableKey || "",
+        },
+        paymentMethods: {
+          bankEnabled:  pm.bankEnabled  !== false,
+          payidEnabled: pm.payidEnabled !== false,
         },
       });
     } catch (err) {
@@ -64,7 +69,7 @@ export default async function handler(req, res) {
 
   if (req.method === "POST") {
     try {
-      const { orderEmail, logo, smtp, paymentDetails, emailTemplate, sharepoint, stripe } = req.body || {};
+      const { orderEmail, logo, smtp, paymentDetails, paymentMethods, emailTemplate, sharepoint, stripe } = req.body || {};
       const cfg = await readConfig();
       if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
       if (logo !== undefined) cfg.logo = logo;
@@ -75,7 +80,8 @@ export default async function handler(req, res) {
         if (smtp.user !== undefined) cfg.smtp.user = smtp.user;
         if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass;
       }
-      if (paymentDetails && typeof paymentDetails === "object") cfg.paymentDetails = { ...cfg.paymentDetails, ...paymentDetails };
+      if (paymentDetails  && typeof paymentDetails  === "object") cfg.paymentDetails  = { ...cfg.paymentDetails,  ...paymentDetails  };
+      if (paymentMethods  && typeof paymentMethods  === "object") cfg.paymentMethods  = { ...cfg.paymentMethods,  ...paymentMethods  };
       if (emailTemplate  && typeof emailTemplate  === "object") cfg.emailTemplate  = { ...cfg.emailTemplate,  ...emailTemplate  };
       if (sharepoint && typeof sharepoint === "object") {
         cfg.sharepoint = cfg.sharepoint || {};
