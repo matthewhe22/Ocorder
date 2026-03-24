@@ -55,7 +55,23 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
   }
 
-  // Only handle checkout.session.completed
+  // Handle checkout.session.expired — customer abandoned or session timed out
+  if (event.type === "checkout.session.expired") {
+    const expiredSession = event.data.object;
+    const expiredOrderId = expiredSession.metadata?.orderId;
+    if (expiredOrderId) {
+      const data = await readData();
+      const idx = data.orders.findIndex(o => o.id === expiredOrderId);
+      if (idx !== -1 && data.orders[idx].status !== "Paid") {
+        data.orders.splice(idx, 1);
+        await writeData(data);
+        console.log(`Stripe webhook: removed expired pending order ${expiredOrderId}`);
+      }
+    }
+    return res.status(200).json({ received: true });
+  }
+
+  // Only handle checkout.session.completed beyond this point
   if (event.type !== "checkout.session.completed") {
     return res.status(200).json({ received: true, ignored: true });
   }

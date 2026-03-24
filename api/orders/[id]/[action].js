@@ -466,6 +466,45 @@ export default async function handler(req, res) {
   }
   // ── END stripe-confirm ─────────────────────────────────────────────────────
 
+  // ── POST /api/orders/:id/stripe-cancel ──────────────────────────────────────
+  // PUBLIC — called by the browser when the customer cancels or abandons Stripe checkout.
+  // Verifies the Stripe session is NOT paid before removing the phantom order from Redis.
+  if (action === "stripe-cancel" && req.method === "POST") {
+    const data = await readData();
+    const idx  = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(200).json({ ok: true }); // already gone — idempotent
+
+    const order = data.orders[idx];
+
+    // Only allow cancellation of Stripe-pending orders
+    if (order.payment !== "stripe" || order.status === "Paid") {
+      return res.status(409).json({ error: "Order cannot be cancelled via this endpoint." });
+    }
+
+    // Double-check with Stripe that payment was not actually completed
+    const cfg = await readConfig();
+    const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
+    if (stripeKey && order.stripeSessionId) {
+      try {
+        const stripe = new Stripe(stripeKey);
+        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+        if (session.payment_status === "paid") {
+          // Race condition: payment completed just as user hit cancel — honour the payment
+          return res.status(409).json({ error: "Payment was already completed. Refresh to see your confirmation." });
+        }
+      } catch (e) {
+        // Stripe API unavailable — proceed with cancellation conservatively
+        console.warn(`stripe-cancel: could not verify session for order ${id}:`, e.message);
+      }
+    }
+
+    data.orders.splice(idx, 1);
+    await writeData(data);
+    console.log(`stripe-cancel: removed pending order ${id}`);
+    return res.status(200).json({ ok: true });
+  }
+  // ── END stripe-cancel ──────────────────────────────────────────────────────
+
   // ── DELETE /api/orders/:id/delete ───────────────────────────────────────────
   // Admin only. Permanently removes an order from Redis. No undo.
   if (action === "delete" && req.method === "DELETE") {

@@ -129,7 +129,7 @@ export default async function handler(req, res) {
           }],
           mode: "payment",
           success_url: `${baseUrl}/complete?orderId=${serverId}&stripeOk=1`,
-          cancel_url:  `${baseUrl}/?cancelled=1`,
+          cancel_url:  `${baseUrl}/?cancelled=1&orderId=${serverId}`,
           metadata: { orderId: order.id },
         });
         // Persist the session ID so stripe-confirm can verify it server-side

@@ -505,10 +505,14 @@ export default function App() {
       setStep(6);
       setCurrentView("portal");
     }
-    // Detect Stripe cancel redirect: /?cancelled=1  — clean URL and show cancellation banner
+    // Detect Stripe cancel redirect: /?cancelled=1&orderId=xxx — clean up the pending order
     if (params.get("cancelled") === "1") {
+      const cancelledOrderId = params.get("orderId");
       window.history.replaceState({}, "", "/");
       setStripeCancelled(true);
+      if (cancelledOrderId) {
+        fetch(`/api/orders/${cancelledOrderId}/stripe-cancel`, { method: "POST" }).catch(() => {});
+      }
     }
     // Detect privacy policy route
     if (window.location.pathname === "/privacy-policy") {
