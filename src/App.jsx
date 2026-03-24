@@ -967,9 +967,9 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                     <button className="s1-search-btn" style={{ background: "transparent", color: "var(--muted)", padding: "0 8px" }} onClick={() => setLotSearch("")}><Ic n="x" s={14}/></button>
                   )}
                 </div>
-                <div className="lot-cards" style={{ marginTop: "12px" }}>
+                {lotSearch.trim() && <div className="lot-cards" style={{ marginTop: "12px" }}>
                   {plan.lots
-                    .filter(l => !lotSearch.trim() || l.number.toLowerCase().includes(lotSearch.toLowerCase()))
+                    .filter(l => l.number.toLowerCase().includes(lotSearch.toLowerCase()))
                     .map(l => (
                       <div
                         key={l.id}
@@ -982,7 +982,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                       </div>
                     ))
                   }
-                </div>
+                </div>}
               </>
             ) : (
               <>
