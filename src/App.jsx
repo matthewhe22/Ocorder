@@ -3372,7 +3372,7 @@ function SettingsTab({ adminToken, pubConfig }) {
     setTesting(true); setTestResult(null); setSaveErr("");
     try {
       // Send current form values so the test works even before saving
-      const r = await fetch("/api/config/test-email", {
+      const r = await fetch("/api/config/test?service=email", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ smtp, orderEmail }),
@@ -3743,7 +3743,7 @@ function StorageTab({ adminToken }) {
   const testSharePoint = async () => {
     setSpTesting(true); setSpTestResult(null);
     try {
-      const r = await fetch("/api/config/test-sharepoint", {
+      const r = await fetch("/api/config/test?service=sharepoint", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
       });
