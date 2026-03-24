@@ -2172,10 +2172,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nThis will REPLACE all existing lots for this plan.`);
       if (!confirmed) return;
 
-      const r = await fetch("/api/lots/import", {
+      const r = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ planId: targetPlanId, lots }),
+        body: JSON.stringify({ action: "import-lots", planId: targetPlanId, lots }),
       });
       if (r.ok) {
         setData(p => ({ ...p, strataPlans: p.strataPlans.map(pl => pl.id !== targetPlanId ? pl : { ...pl, lots }) }));
@@ -2943,10 +2943,10 @@ function AdminLogin({ onAuth, pubConfig }) {
     if (loading || !user || !pass) return;
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/auth/login", {
+      const r = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user, pass }),
+        body: JSON.stringify({ action: "login", user, pass }),
       });
       const data = await r.json();
       if (r.ok) {
@@ -3869,10 +3869,10 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
     if (form.newPw && form.newPw !== form.confirm) { setMsg({ type: "err", text: "New passwords do not match." }); return; }
     setLoading(true); setMsg(null);
     try {
-      const r = await fetch("/api/auth/change-credentials", {
+      const r = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ currentPass: form.current, newUser: form.newUser || undefined, newPass: form.newPw || undefined }),
+        body: JSON.stringify({ action: "change-credentials", currentPass: form.current, newUser: form.newUser || undefined, newPass: form.newPw || undefined }),
       });
       const data = await r.json();
       if (r.ok) {
