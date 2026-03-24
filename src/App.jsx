@@ -693,6 +693,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
+  const [lotSearch, setLotSearch] = useState("");
   const [keysPlacing, setKeysPlacing] = useState(false);
   const [keysPlaceErr, setKeysPlaceErr] = useState("");
   const [step2Attempted, setStep2Attempted] = useState(false);
@@ -952,30 +953,51 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
           <div className="panel" style={{ marginBottom: "1px" }}>
             <label className="f-label">Select Lot</label>
 
-            {/* Desktop: native select */}
-            <select
-              className="f-select lot-select-desktop"
-              value={selLot || ""}
-              onChange={e => { if (e.target.value !== selLot) { setCart([]); setLotAuthFile(null); } setSelLot(e.target.value); }}
-            >
-              <option value="">— Choose a lot —</option>
-              {plan.lots.map(l => <option key={l.id} value={l.id}>{l.number} — {l.level} ({l.type})</option>)}
-            </select>
-
-            {/* Mobile: card picker trigger */}
-            <button
-              className="lot-picker-btn"
-              onClick={() => setShowLotModal(true)}
-            >
-              <span>{selLot ? (() => { const l = plan.lots.find(x=>x.id===selLot); return l ? l.number + " — " + l.level : "— Choose a lot —"; })() : "— Choose a lot —"}</span>
-              <Ic n="list" s={16}/>
-            </button>
-
-            {selLot && lot && (
-              <div style={{ marginTop: "1rem" }}>
-                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Owner Corporations in this lot</div>
-                <div>{lot.ownerCorps.map(ocId => <span key={ocId} className="oc-pill">{plan.ownerCorps[ocId]?.name || ocId}</span>)}</div>
-              </div>
+            {!selLot ? (
+              <>
+                <div className="s1-search-bar">
+                  <Ic n="search" s={16} style={{ color: "#9a9a8e", flexShrink: 0 }}/>
+                  <input
+                    placeholder="Search by lot number…"
+                    value={lotSearch}
+                    onChange={e => setLotSearch(e.target.value)}
+                    autoFocus
+                  />
+                  {lotSearch && (
+                    <button className="s1-search-btn" style={{ background: "transparent", color: "var(--muted)", padding: "0 8px" }} onClick={() => setLotSearch("")}><Ic n="x" s={14}/></button>
+                  )}
+                </div>
+                <div className="lot-cards" style={{ marginTop: "12px" }}>
+                  {plan.lots
+                    .filter(l => !lotSearch.trim() || l.number.toLowerCase().includes(lotSearch.toLowerCase()))
+                    .map(l => (
+                      <div
+                        key={l.id}
+                        className="lot-card"
+                        onClick={() => { setCart([]); setLotAuthFile(null); setSelLot(l.id); setLotSearch(""); }}
+                      >
+                        <div className="lc-num">{l.number}</div>
+                        <div className="lc-detail">{l.level}</div>
+                        <div className="lc-type">{l.type}</div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="s1-search-bar" style={{ background: "#f0f6f2", borderColor: "var(--sage-light)" }}>
+                  <Ic n="check" s={16} style={{ color: "var(--sage)", flexShrink: 0 }}/>
+                  <span className="s1-search-sel">Lot {lot?.number}{lot?.level ? ` — ${lot.level}` : ""}</span>
+                  <button className="s1-search-btn" onClick={() => { setCart([]); setLotAuthFile(null); setSelLot(null); setLotSearch(""); }}>Change</button>
+                </div>
+                {lot && (
+                  <div style={{ marginTop: "1rem" }}>
+                    <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Owner Corporations in this lot</div>
+                    <div>{lot.ownerCorps.map(ocId => <span key={ocId} className="oc-pill">{plan.ownerCorps[ocId]?.name || ocId}</span>)}</div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1473,30 +1495,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
         </div>
       )}
 
-      {/* Mobile lot picker modal */}
-      {showLotModal && plan && (
-        <div className="overlay" onClick={() => setShowLotModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
-              <h2 className="modal-tt" style={{ marginBottom: 0 }}>Select a Lot</h2>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={() => setShowLotModal(false)}><Ic n="x" s={20}/></button>
-            </div>
-            <div className="lot-cards">
-              {plan.lots.map(l => (
-                <div
-                  key={l.id}
-                  className={`lot-card ${selLot === l.id ? "sel" : ""}`}
-                  onClick={() => { if (l.id !== selLot) { setCart([]); setLotAuthFile(null); } setSelLot(l.id); setShowLotModal(false); }}
-                >
-                  <div className="lc-num">{l.number}</div>
-                  <div className="lc-detail">{l.level}</div>
-                  <div className="lc-type">{l.type}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

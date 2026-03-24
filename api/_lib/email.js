@@ -73,6 +73,8 @@ export function buildOrderEmailHtml(order, cfg) {
         ${contact.applicantType !== "agent" && contact.ownerName ? `<tr><td style="${LABEL}">Owner Name</td><td style="${VAL}">${contact.ownerName}</td></tr>` : ""}
         <tr><td style="${LABEL}">Email</td><td style="${VAL}"><a href="mailto:${contact.email||""}" style="color:#2e6b42;">${contact.email||"—"}</a></td></tr>
         <tr><td style="${LABEL}">Phone</td><td style="${VAL}">${contact.phone||"—"}</td></tr>
+        <tr><td style="${LABEL}">Building</td><td style="${VAL}">${items[0]?.planName||"—"}</td></tr>
+        <tr><td style="${LABEL}">Lot #</td><td style="${VAL}">${items[0]?.lotNumber||"—"}</td></tr>
       </table>
       ${deliveryAddressHtml(contact.shippingAddress)}
       <h3 style="${HEADING}">Items</h3>

@@ -208,10 +208,12 @@ export default async function handler(req, res) {
     if (smtp.host && smtp.user && smtp.pass) {
       console.log(`Sending emails for order ${order.id}...`);
       const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
-      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
+      const lotNumber = order.items?.[0]?.lotNumber || "";
+      const buildingName = order.items?.[0]?.planName || "";
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} — {buildingName} — Lot {lotNumber}")
         .replace("{orderType}", orderType)
-        .replace("{orderId}", order.id)
-        .replace("{total}", "$" + (order.total || 0).toFixed(2) + " AUD");
+        .replace("{lotNumber}", lotNumber)
+        .replace("{buildingName}", buildingName);
       const emailJobs = [
         sendMail(smtp, {
           from: `"TOCS Order Portal" <${toEmail}>`,
