@@ -3854,6 +3854,70 @@ function StorageTab({ adminToken }) {
 
 // ─── SECURITY TAB ──────────────────────────────────────────────────────────────
 function SecurityTab({ adminToken, currentUser, onLogout }) {
+  // ── Admin users list ────────────────────────────────────────────────────────
+  const [admins, setAdmins] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listErr, setListErr] = useState(null);
+
+  const loadAdmins = () => {
+    setListLoading(true); setListErr(null);
+    fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+      body: JSON.stringify({ action: "list-admins" }),
+    })
+      .then(r => r.json())
+      .then(d => { setAdmins(d.admins || []); setListLoading(false); })
+      .catch(() => { setListErr("Could not load admin list."); setListLoading(false); });
+  };
+
+  useEffect(() => { loadAdmins(); }, []);
+
+  const removeAdmin = async (id, username) => {
+    if (!window.confirm(`Remove admin "${username}"? They will no longer be able to log in.`)) return;
+    const r = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+      body: JSON.stringify({ action: "remove-admin", id }),
+    });
+    const d = await r.json();
+    if (r.ok) loadAdmins();
+    else alert(d.error || "Could not remove admin.");
+  };
+
+  // ── Add admin form ──────────────────────────────────────────────────────────
+  const [addForm, setAddForm] = useState({ username: "", password: "", name: "" });
+  const [addMsg, setAddMsg] = useState(null);
+  const [addLoading, setAddLoading] = useState(false);
+  const [showAddPw, setShowAddPw] = useState(false);
+
+  const submitAdd = async () => {
+    if (addLoading) return;
+    if (!addForm.username.trim()) { setAddMsg({ type: "err", text: "Username is required." }); return; }
+    if (!addForm.password) { setAddMsg({ type: "err", text: "Password is required." }); return; }
+    if (addForm.password.length < 8) { setAddMsg({ type: "err", text: "Password must be at least 8 characters." }); return; }
+    setAddLoading(true); setAddMsg(null);
+    try {
+      const r = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ action: "add-admin", username: addForm.username.trim(), password: addForm.password, name: addForm.name.trim() || undefined }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setAddMsg({ type: "ok", text: `Admin "${d.admin.username}" added successfully.` });
+        setAddForm({ username: "", password: "", name: "" });
+        loadAdmins();
+      } else {
+        setAddMsg({ type: "err", text: d.error || "Failed to add admin." });
+      }
+    } catch {
+      setAddMsg({ type: "err", text: "Unable to connect to server." });
+    }
+    setAddLoading(false);
+  };
+
+  // ── Change own credentials form ─────────────────────────────────────────────
   const [form, setForm] = useState({ newUser: currentUser || "", current: "", newPw: "", confirm: "" });
   const [showPw, setShowPw] = useState({ current: false, new: false, confirm: false });
   const [msg, setMsg] = useState(null);
@@ -3874,12 +3938,12 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ action: "change-credentials", currentPass: form.current, newUser: form.newUser || undefined, newPass: form.newPw || undefined }),
       });
-      const data = await r.json();
+      const d = await r.json();
       if (r.ok) {
         setMsg({ type: "ok", text: "Credentials updated. Please sign in again." });
         setTimeout(() => onLogout(), 2500);
       } else {
-        setMsg({ type: "err", text: data.error || "Update failed." });
+        setMsg({ type: "err", text: d.error || "Update failed." });
       }
     } catch {
       setMsg({ type: "err", text: "Unable to connect to server." });
@@ -3897,31 +3961,102 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
     </div>
   );
 
+  const spinStyle = { display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(255,255,255,0.3)", borderTop:"2px solid white", borderRadius:"50%", width:14, height:14 };
+
   return (
-    <div style={{ maxWidth: "460px" }}>
+    <div style={{ maxWidth: "560px" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* ── Admin Users ── */}
+      <div className="panel" style={{ marginBottom: "1px" }}>
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Admin Users</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.2rem" }}>
+          All users who can log in to the admin portal.
+        </p>
+
+        {listLoading && <p style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Loading…</p>}
+        {listErr && <div className="alert alert-warn">{listErr}</div>}
+
+        {!listLoading && admins.length > 0 && (
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "0.5rem", fontSize: "0.83rem" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--muted)", fontWeight: 600, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>Name</th>
+                <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--muted)", fontWeight: 600, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>Username</th>
+                <th style={{ width: 60 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {admins.map(a => (
+                <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "8px 8px" }}>{a.name || "—"}{a.username === currentUser && <span style={{ marginLeft: 6, fontSize: "0.7rem", background: "var(--sage)", color: "var(--forest)", borderRadius: 4, padding: "1px 5px", fontWeight: 600 }}>You</span>}</td>
+                  <td style={{ padding: "8px 8px", color: "var(--muted)" }}>{a.username}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                    <button
+                      className="tbl-act-btn danger"
+                      title="Remove admin"
+                      disabled={admins.length <= 1}
+                      onClick={() => removeAdmin(a.id, a.username)}
+                      style={{ opacity: admins.length <= 1 ? 0.35 : 1 }}
+                    >
+                      <Ic n="x" s={13}/>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Add Admin ── */}
+      <div className="panel" style={{ marginBottom: "1px" }}>
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "1rem" }}>Add Admin User</h3>
+
+        {addMsg && <div className={`alert ${addMsg.type === "ok" ? "alert-ok" : "alert-warn"}`} style={{ marginBottom: "1rem" }}>{addMsg.text}</div>}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <div className="form-row">
+            <label className="f-label">Name</label>
+            <input className="f-input" type="text" placeholder="Display name" value={addForm.name} onChange={e => { setAddForm(p => ({ ...p, name: e.target.value })); setAddMsg(null); }}/>
+          </div>
+          <div className="form-row">
+            <label className="f-label">Username *</label>
+            <input className="f-input" type="text" placeholder="e.g. user@tocs.co" value={addForm.username} onChange={e => { setAddForm(p => ({ ...p, username: e.target.value })); setAddMsg(null); }}/>
+          </div>
+        </div>
+        <div className="form-row">
+          <label className="f-label">Password *</label>
+          <div className="pw-wrap">
+            <input className="f-input" type={showAddPw ? "text" : "password"} placeholder="Min. 8 characters" value={addForm.password} onChange={e => { setAddForm(p => ({ ...p, password: e.target.value })); setAddMsg(null); }} style={{ paddingRight: "42px" }}/>
+            <button className="pw-toggle" type="button" onClick={() => setShowAddPw(p => !p)}><Ic n={showAddPw ? "eyeOff" : "eye"} s={16}/></button>
+          </div>
+        </div>
+        <button className="btn btn-blk" style={{ marginTop: "0.5rem" }} onClick={submitAdd} disabled={addLoading}>
+          {addLoading ? <><span style={spinStyle}/> Adding…</> : <><Ic n="plus" s={14}/> Add Admin</>}
+        </button>
+      </div>
+
+      {/* ── Change Own Credentials ── */}
       <div className="panel">
-        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Update Admin Credentials</h2>
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Change My Password</h2>
         <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
-          Change your admin username or password. You will be signed out after saving.
+          Update your own username or password. You will be signed out after saving.
         </p>
 
         {msg && <div className={`alert ${msg.type === "ok" ? "alert-ok" : "alert-warn"}`}>{msg.text}</div>}
 
         <div className="form-row">
-          <label className="f-label">Username (email)</label>
-          <input className="f-input" type="email" value={form.newUser} onChange={e => { upd("newUser", e.target.value); setMsg(null); }}/>
+          <label className="f-label">Username</label>
+          <input className="f-input" type="text" value={form.newUser} onChange={e => { upd("newUser", e.target.value); setMsg(null); }}/>
         </div>
         <PwField label="Current Password *" k="current" fk="current"/>
         <PwField label="New Password (leave blank to keep current)" k="new" fk="newPw"/>
         <PwField label="Confirm New Password" k="confirm" fk="confirm"/>
 
         <button className="btn btn-blk btn-block" onClick={submit} disabled={loading}>
-          {loading
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
-            : <><Ic n="shield" s={15}/> Save Credentials</>
-          }
+          {loading ? <><span style={spinStyle}/> Saving…</> : <><Ic n="shield" s={15}/> Save Credentials</>}
         </button>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   );
