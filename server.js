@@ -257,7 +257,7 @@ function buildCertEmailHtml(order, message, cfg) {
     .replace(/{lotNumber}/g, esc(lot?.lotNumber || ""))
     .replace(/{address}/g, esc(lot?.planName || ""));
   const bodyText = message || raw;
-  const htmlBody = bodyText.replace(/\n/g, "<br>");
+  const htmlBody = esc(bodyText).replace(/\n/g, "<br>");
   const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
@@ -561,18 +561,32 @@ async function handler(req, res) {
     if (raw.id.length > 100) return json(res, 400, { error: "Order ID must not exceed 100 characters." });
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.contactInfo.email)) return json(res, 400, { error: "A valid customer email address is required." });
     // Validate payment method
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
+    // Strip control characters from string values that flow into email subjects / headers
+    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
     const order = {
       id: raw.id,
       planId: raw.planId,
       lotId: raw.lotId,
       orderCategory: raw.orderCategory,
-      contactInfo: raw.contactInfo,
+      contactInfo: {
+        name:        stripCtrl(raw.contactInfo?.name  || ""),
+        email:       stripCtrl(raw.contactInfo?.email || ""),
+        phone:       stripCtrl(raw.contactInfo?.phone || ""),
+        companyName: stripCtrl(raw.contactInfo?.companyName || ""),
+      },
       payment: raw.payment || "bank",
-      items: raw.items,
+      items: (raw.items || []).map(item => ({
+        ...item,
+        lotNumber: stripCtrl(item.lotNumber || ""),
+        planName:  stripCtrl(item.planName  || ""),
+        ocName:    stripCtrl(item.ocName    || ""),
+        productName: stripCtrl(item.productName || ""),
+      })),
       selectedShipping: raw.selectedShipping,
     };
     // Always normalise date to a valid ISO string — never trust client clock alone
@@ -582,26 +596,27 @@ async function handler(req, res) {
     {
       const d = readData();
       const plan = d.strataPlans.find(p => p.id === order.planId);
-      if (plan?.products?.length > 0) {
-        // Count how many times each perOC product appears per lot to apply secondaryPrice
-        const ocCountPerProduct = {}; // key: `${productId}:${lotId}`
-        for (const item of order.items) {
-          if (!item.productId) continue;
-          const product = plan.products.find(p => p.id === item.productId);
-          if (!product) continue;
-          if (product.perOC) {
-            const key = `${item.productId}:${item.lotId || ""}`;
-            ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
-            item.price = ocCountPerProduct[key] === 1
-              ? product.price
-              : (product.secondaryPrice ?? product.price);
-          } else {
-            item.price = product.price;
-          }
-          // Snapshot managerAdminCharge from catalog (keys/fob products only, admin use)
-          if (product.managerAdminCharge !== undefined) {
-            item.managerAdminCharge = product.managerAdminCharge;
-          }
+      // Require a known plan — no plan means no price enforcement
+      if (!plan) return json(res, 400, { error: "A valid planId is required." });
+      if (!plan.products?.length) return json(res, 400, { error: "The specified plan has no products." });
+      // Count how many times each perOC product appears per lot to apply secondaryPrice
+      const ocCountPerProduct = {}; // key: `${productId}:${lotId}`
+      for (const item of order.items) {
+        if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
+        const product = plan.products.find(p => p.id === item.productId);
+        if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
+        if (product.perOC) {
+          const key = `${item.productId}:${item.lotId || ""}`;
+          ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
+          item.price = ocCountPerProduct[key] === 1
+            ? product.price
+            : (product.secondaryPrice ?? product.price);
+        } else {
+          item.price = product.price;
+        }
+        // Snapshot managerAdminCharge from catalog (keys/fob products only, admin use)
+        if (product.managerAdminCharge !== undefined) {
+          item.managerAdminCharge = product.managerAdminCharge;
         }
       }
     }
@@ -793,6 +808,12 @@ async function handler(req, res) {
     const { planId, lots } = await readBody(req, res);
     if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
     if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
+    // Validate each lot has a non-empty id
+    for (const lot of lots) {
+      if (!lot || typeof lot !== "object" || !lot.id) {
+        return json(res, 400, { error: "Each lot must have a non-empty id field." });
+      }
+    }
     // Deduplicate by lot id (last occurrence wins)
     const seenLots = new Map();
     for (const lot of lots) {
@@ -811,7 +832,7 @@ async function handler(req, res) {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { plans } = await readBody(req, res);
-    if (!Array.isArray(plans)) return json(res, 400, { error: "Invalid plans." });
+    if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });
     if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
     // Validate each plan is an object with a non-empty id and name
     for (const p of plans) {
@@ -955,7 +976,6 @@ async function handler(req, res) {
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
       [/^\/api\/config\/public$/, ["GET"]],
       [/^\/api\/config\/test-email$/, ["POST"]],
-      [/^\/api\/admin$/, ["POST"]],
     ];
     for (const [pattern, methods] of knownRoutes) {
       if (pattern.test(urlPath)) {

@@ -163,3 +163,4 @@ node server.js
 | 2026-03-25 | Admin E2E round 3: CRLF server crash fix, authority file write-before-check, paymentDetails XSS in emails, order.id/lotAuthorityFile/orderEmail HTML escaping, email failure auditLog, orderEmail format validation |
 | 2026-03-25 | Email subject tokens: add {buildingName}/{address}/{lotNumber} substitution; remove {total} from admin notification subject default and live config |
 | 2026-03-25 | Manager Admin Charge field for keys/fob products: stored in plan catalog, snapshotted on order items server-side, exported in CSV (admin only — not shown to applicants) |
+| 2026-03-25 | Admin E2E round 4: planId/productId enforcement, email format validation, control char stripping, lots id validation, dead /api/admin route removed, cert email XSS fix |

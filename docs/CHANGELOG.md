@@ -2,6 +2,27 @@
 
 ---
 
+## 2026-03-25 — Admin E2E Round 4: Order Integrity, Input Validation & XSS
+
+### P2 Security Fixes
+
+- **BUG-01: Order with missing/invalid `planId` bypassed all price enforcement** — `POST /api/orders` now requires `planId` to match a known plan; returns 400 `"A valid planId is required."` if absent or unrecognised.
+- **BUG-02: Unknown `productId` bypassed item price enforcement** — Each item's `productId` is now validated against the plan catalog; returns 400 `"Unknown productId: ..."` rather than silently accepting the client-supplied price.
+
+### P3 Functional / Security Fixes
+
+- **BUG-03: Dead `/api/admin` route returned 405 for all requests** — Removed the stale entry from `knownRoutes`; the endpoint has no handler and all credential/admin actions are correctly at `POST /api/auth`.
+- **BUG-04: `contactInfo.email` accepted malformed values including CRLF** — Same regex used for `cfg.orderEmail` (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`) now applied to the customer email at order placement.
+- **BUG-05: CRLF and control characters accepted in `lotNumber`, `planName`, `ocName`, `productName`, `contactInfo` fields** — A `stripCtrl()` helper strips `\x00–\x1f` and `\x7f` from all string fields before they are stored or substituted into email subjects.
+- **BUG-06: Lots without an `id` field silently dropped; import returned `{"ok":true,"count":0}`** — `POST /api/lots/import` now validates every lot object has a non-empty `id`; returns 400 `"Each lot must have a non-empty id field."`.
+- **BUG-08: Admin `message` in certificate email rendered as raw HTML (XSS)** — `buildCertEmailHtml` now wraps `message` with `esc()` before inserting into the HTML body.
+
+### P3 UX Fix
+
+- **BUG-07: `POST /api/plans` with a flat array returned misleading `"Invalid plans."` error** — Error message updated to `'Body must be {"plans": [...]}'`.
+
+---
+
 ## 2026-03-25 — Manager Admin Charge for Keys/Fob Products
 
 ### New Feature
