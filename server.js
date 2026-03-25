@@ -51,7 +51,8 @@ const DEFAULT_DATA = {
 };
 
 const DEFAULT_CONFIG = {
-  admin: { user: "info@tocs.co", pass: "Tocs@Vote" },
+  admins: [{ id: "default", username: "info@tocs.co", password: "Tocs@Vote", name: "Admin" }],
+  admin: { user: "info@tocs.co", pass: "Tocs@Vote" }, // legacy — kept for backward compat
   orderEmail: "Orders@tocs.co",
   smtp: { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" },
   paymentDetails: {
@@ -79,6 +80,15 @@ function validToken(token) {
   if (!s) return false;
   if (Date.now() > s.exp) { SESSIONS.delete(token); return false; }
   return true;
+}
+function getSessionUser(token) {
+  const s = SESSIONS.get(token);
+  return (s && Date.now() <= s.exp) ? s.user : null;
+}
+// Returns the admins array from cfg, migrating from legacy cfg.admin if needed.
+function getAdmins(cfg) {
+  if (Array.isArray(cfg.admins) && cfg.admins.length > 0) return cfg.admins;
+  return [{ id: "legacy", username: cfg.admin?.user || "info@tocs.co", password: cfg.admin?.pass || "Tocs@Vote", name: "Admin" }];
 }
 
 // ── File helpers ──────────────────────────────────────────────────────────────
@@ -412,33 +422,98 @@ async function handler(req, res) {
     return json(res, 200, readData());
   }
 
-  // ── POST /api/auth/login ───────────────────────────────────────────────────
-  if (urlPath === "/api/auth/login" && method === "POST") {
-    const { user, pass } = await readBody(req);
-    const cfg = readConfig();
-    if (user === cfg.admin.user && pass === cfg.admin.pass) {
-      const token = genToken();
-      SESSIONS.set(token, { user, exp: Date.now() + 8 * 60 * 60 * 1000 }); // 8 hr
-      return json(res, 200, { token, user: cfg.admin.user });
-    }
-    return json(res, 401, { error: "Incorrect username or password." });
-  }
+  // ── POST /api/auth  (unified auth endpoint) ───────────────────────────────
+  if (urlPath === "/api/auth" && method === "POST") {
+    const body = await readBody(req);
+    const { action } = body;
 
-  // ── POST /api/auth/change-credentials  (requires token) ───────────────────
-  if (urlPath === "/api/auth/change-credentials" && method === "POST") {
-    const token = authHeader(req);
-    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { currentPass, newUser, newPass } = await readBody(req);
-    const cfg = readConfig();
-    if (currentPass !== cfg.admin.pass) return json(res, 400, { error: "Current password is incorrect." });
-    if (newPass) {
-      if (newPass.length < 8) return json(res, 400, { error: "New password must be at least 8 characters." });
-      cfg.admin.pass = newPass;
+    // action=login
+    if (action === "login") {
+      const { user, pass } = body;
+      if (!user || !pass) return json(res, 400, { error: "Username and password are required." });
+      const cfg = readConfig();
+      const admins = getAdmins(cfg);
+      const match = admins.find(a => a.username === user && a.password === pass);
+      if (match) {
+        const token = genToken();
+        SESSIONS.set(token, { user: match.username, exp: Date.now() + 8 * 60 * 60 * 1000 });
+        return json(res, 200, { token, user: match.username, name: match.name });
+      }
+      return json(res, 401, { error: "Incorrect username or password." });
     }
-    if (newUser && newUser.trim()) cfg.admin.user = newUser.trim();
-    writeConfig(cfg);
-    SESSIONS.clear(); // force re-login
-    return json(res, 200, { ok: true });
+
+    // action=list-admins
+    if (action === "list-admins") {
+      const token = authHeader(req);
+      if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+      const cfg = readConfig();
+      const admins = getAdmins(cfg);
+      return json(res, 200, { admins: admins.map(({ id, username, name }) => ({ id, username, name })) });
+    }
+
+    // action=add-admin
+    if (action === "add-admin") {
+      const token = authHeader(req);
+      if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+      const { username, password, name } = body;
+      if (!username?.trim()) return json(res, 400, { error: "Username is required." });
+      if (!password) return json(res, 400, { error: "Password is required." });
+      if (password.length < 8) return json(res, 400, { error: "Password must be at least 8 characters." });
+      const cfg = readConfig();
+      const admins = getAdmins(cfg);
+      if (admins.find(a => a.username.toLowerCase() === username.trim().toLowerCase())) {
+        return json(res, 409, { error: "An admin with that username already exists." });
+      }
+      const newAdmin = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        username: username.trim(),
+        password,
+        name: name?.trim() || username.trim(),
+      };
+      cfg.admins = [...admins, newAdmin];
+      writeConfig(cfg);
+      return json(res, 200, { ok: true, admin: { id: newAdmin.id, username: newAdmin.username, name: newAdmin.name } });
+    }
+
+    // action=remove-admin
+    if (action === "remove-admin") {
+      const token = authHeader(req);
+      if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+      const { id } = body;
+      const cfg = readConfig();
+      const admins = getAdmins(cfg);
+      if (admins.length <= 1) return json(res, 409, { error: "Cannot remove the last admin account." });
+      if (!admins.find(a => a.id === id)) return json(res, 404, { error: "Admin not found." });
+      cfg.admins = admins.filter(a => a.id !== id);
+      cfg.admin = { user: cfg.admins[0].username, pass: cfg.admins[0].password }; // legacy sync
+      writeConfig(cfg);
+      return json(res, 200, { ok: true });
+    }
+
+    // action=change-credentials
+    if (action === "change-credentials") {
+      const token = authHeader(req);
+      if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+      const sessionUser = getSessionUser(token);
+      const { currentPass, newUser, newPass } = body;
+      const cfg = readConfig();
+      const admins = getAdmins(cfg);
+      const idx = admins.findIndex(a => a.username === sessionUser);
+      if (idx === -1) return json(res, 404, { error: "Your admin account was not found." });
+      if (currentPass !== admins[idx].password) return json(res, 400, { error: "Current password is incorrect." });
+      if (newPass) {
+        if (newPass.length < 8) return json(res, 400, { error: "New password must be at least 8 characters." });
+        admins[idx].password = newPass;
+      }
+      if (newUser && newUser.trim()) admins[idx].username = newUser.trim();
+      cfg.admins = admins;
+      cfg.admin = { user: cfg.admins[0].username, pass: cfg.admins[0].password }; // legacy sync
+      writeConfig(cfg);
+      SESSIONS.clear(); // force re-login for all sessions
+      return json(res, 200, { ok: true });
+    }
+
+    return json(res, 400, { error: "Missing or invalid action." });
   }
 
   // ── POST /api/orders  (public — customer places order, JSON + optional base64 file) ─
