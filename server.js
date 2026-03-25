@@ -106,6 +106,15 @@ function readConfig() {
 function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 function buildOrderEmailHtml(order, tpl) {
   const contact = order.contactInfo || {};
   const items = order.items || [];
@@ -116,8 +125,8 @@ function buildOrderEmailHtml(order, tpl) {
 
   const itemRows = items.map(item => `
     <tr>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${item.productName || item.name || "—"}</td>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${item.ocName || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(item.productName || item.name) || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(item.ocName) || "—"}</td>
       <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:right;">$${(item.price || 0).toFixed(2)}</td>
     </tr>`).join("");
 
@@ -142,10 +151,10 @@ function buildOrderEmailHtml(order, tpl) {
 
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Customer Information</h3>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-        <tr><td style="padding:6px 0;color:#666;width:38%;">Name</td><td style="padding:6px 0;">${contact.name || "—"}</td></tr>
-        <tr><td style="padding:6px 0;color:#666;">Email</td><td style="padding:6px 0;"><a href="mailto:${contact.email || ""}" style="color:#2e6b42;">${contact.email || "—"}</a></td></tr>
-        <tr><td style="padding:6px 0;color:#666;">Phone</td><td style="padding:6px 0;">${contact.phone || "—"}</td></tr>
-        <tr><td style="padding:6px 0;color:#666;">Company / Firm</td><td style="padding:6px 0;">${contact.companyName || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;width:38%;">Name</td><td style="padding:6px 0;">${esc(contact.name) || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Email</td><td style="padding:6px 0;"><a href="mailto:${esc(contact.email)}" style="color:#2e6b42;">${esc(contact.email) || "—"}</a></td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Phone</td><td style="padding:6px 0;">${esc(contact.phone) || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Company / Firm</td><td style="padding:6px 0;">${esc(contact.companyName) || "—"}</td></tr>
       </table>
 
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Order Items</h3>
@@ -182,8 +191,8 @@ function buildCustomerEmailHtml(order, cfg) {
   const isPending = order.payment === "bank" || order.payment === "payid";
   const itemRows = items.map(item =>
     `<tr>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${item.productName || "—"}</td>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${item.ocName || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(item.productName) || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(item.ocName) || "—"}</td>
       <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:right;">$${(item.price||0).toFixed(2)}</td>
     </tr>`).join("");
   const bankRows = order.payment === "bank" ? `
@@ -212,7 +221,7 @@ function buildCustomerEmailHtml(order, cfg) {
       <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Confirmation</p>
     </div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">Dear ${contact.name || "Applicant"},</p>
+      <p style="margin-top:0;">Dear ${esc(contact.name) || "Applicant"},</p>
       <p>Thank you for your order. ${isPending ? "Your order has been received and is <strong>awaiting payment</strong>. Certificate processing will begin once payment is confirmed." : "Your payment has been received and your certificate(s) will be processed within the stated turnaround time."}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;">
         <div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div>
@@ -244,9 +253,9 @@ function buildCertEmailHtml(order, message, cfg) {
   const contact = order.contactInfo || {};
   const lot = order.items?.[0];
   const raw = (tpl.certificateGreeting || "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team")
-    .replace(/{name}/g, contact.name || "Applicant")
-    .replace(/{lotNumber}/g, lot?.lotNumber || "")
-    .replace(/{address}/g, lot?.planName || "");
+    .replace(/{name}/g, esc(contact.name || "Applicant"))
+    .replace(/{lotNumber}/g, esc(lot?.lotNumber || ""))
+    .replace(/{address}/g, esc(lot?.planName || ""));
   const bodyText = message || raw;
   const htmlBody = bodyText.replace(/\n/g, "<br>");
   const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
@@ -533,6 +542,14 @@ async function handler(req, res) {
     const body = await readBody(req);
     const order = body.order || body; // support both { order, lotAuthority } and flat order
     if (!order.id || !Array.isArray(order.items)) return json(res, 400, { error: "Invalid order." });
+    if (order.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
+    if (!order.contactInfo?.name || !order.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    // Always normalise date to a valid ISO string — never trust client clock alone
+    const parsedDate = order.date ? new Date(order.date) : null;
+    order.date = (parsedDate && !isNaN(parsedDate)) ? parsedDate.toISOString() : new Date().toISOString();
+    // Recalculate total server-side from item prices to prevent fraud
+    const recalcTotal = (order.items || []).reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    order.total = Math.round(recalcTotal * 100) / 100;
 
     let authorityBuf = null;
     let authorityFilename = null;
@@ -569,6 +586,9 @@ async function handler(req, res) {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { status, note } = await readBody(req);
+    if (!status || typeof status !== "string" || !status.trim()) return json(res, 400, { error: "A non-empty status string is required." });
+    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued"];
+    if (!VALID_STATUSES.includes(status)) return json(res, 400, { error: `Invalid status. Allowed: ${VALID_STATUSES.join(", ")}.` });
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === statusMatch[1]);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
@@ -588,7 +608,8 @@ async function handler(req, res) {
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
     const order = d.orders.find(o => o.id === authorityMatch[1]);
-    if (!order?.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
+    if (!order) return json(res, 404, { error: "Order not found." });
+    if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
     const filePath = path.join(UPLOADS_DIR, order.lotAuthorityFile);
     fs.readFile(filePath, (err, data) => {
       if (err) return json(res, 404, { error: "File not found on server." });
@@ -614,6 +635,8 @@ async function handler(req, res) {
     const idx = d.orders.findIndex(o => o.id === sendCertMatch[1]);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
     const order = d.orders[idx];
+    const recipientEmail = order.contactInfo?.email;
+    if (!recipientEmail) return json(res, 400, { error: "Order has no customer email address." });
     const cfg = readConfig();
     const smtp = cfg.smtp || {};
     if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
@@ -628,7 +651,7 @@ async function handler(req, res) {
       const subj = (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
       const mailOpts = {
         from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
-        to: order.contactInfo.email,
+        to: recipientEmail,
         subject: subj,
         html: buildCertEmailHtml(order, message, cfg),
       };
@@ -637,7 +660,7 @@ async function handler(req, res) {
       }
       await transporter.sendMail(mailOpts);
       d.orders[idx].status = "Issued";
-      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `To: ${order.contactInfo.email}` }];
+      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `To: ${recipientEmail}` }];
       writeData(d);
       return json(res, 200, { ok: true });
     } catch (err) {
@@ -647,7 +670,7 @@ async function handler(req, res) {
 
   // ── GET /api/orders/export  (admin — CSV download) ────────────────────────
   if (urlPath === "/api/orders/export" && method === "GET") {
-    const token = new URL("http://x" + req.url).searchParams.get("token");
+    const token = authHeader(req) || new URL("http://x" + req.url).searchParams.get("token");
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
     const rows = [["Order ID","Date","Name","Email","Phone","Items","Total (AUD)","Payment","Status"]];
@@ -692,8 +715,25 @@ async function handler(req, res) {
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { plans } = await readBody(req);
     if (!Array.isArray(plans)) return json(res, 400, { error: "Invalid plans." });
+    if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
+    // Validate each plan is an object with a non-empty id and name
+    for (const p of plans) {
+      if (!p || typeof p !== "object") return json(res, 400, { error: "Each plan must be an object." });
+      if (!p.id || typeof p.id !== "string") return json(res, 400, { error: "Each plan must have a non-empty string id." });
+      if (!p.name || typeof p.name !== "string") return json(res, 400, { error: `Plan '${p.id}' is missing a name.` });
+      // Validate product prices are non-negative numbers
+      if (Array.isArray(p.products)) {
+        for (const prod of p.products) {
+          if (prod && typeof prod === "object" && typeof prod.price === "number" && prod.price < 0)
+            return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has a negative price.` });
+        }
+      }
+    }
+    // Deduplicate plans by id (last occurrence wins)
+    const seen = new Map();
+    for (const p of plans) seen.set(p.id, p);
     const d = readData();
-    d.strataPlans = plans;
+    d.strataPlans = [...seen.values()];
     writeData(d);
     return json(res, 200, { ok: true });
   }
