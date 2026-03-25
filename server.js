@@ -454,7 +454,13 @@ async function handler(req, res) {
     const d = readData();
     // Authenticated admins get full data (incl. orders); public callers get only plans.
     if (validToken(token)) return json(res, 200, d);
-    return json(res, 200, { strataPlans: d.strataPlans });
+    // Strip admin-only fields from products before returning to public callers
+    return json(res, 200, {
+      strataPlans: d.strataPlans.map(plan => ({
+        ...plan,
+        products: (plan.products || []).map(({ managerAdminCharge, ...prod }) => prod),
+      })),
+    });
   }
 
   // ── POST /api/auth  (unified auth endpoint) ───────────────────────────────
@@ -492,18 +498,21 @@ async function handler(req, res) {
       if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
       const { username, password, name } = body;
       if (!username?.trim()) return json(res, 400, { error: "Username is required." });
+      if (username.trim().replace(/[\x00-\x1f\x7f]/g, "").length === 0) return json(res, 400, { error: "Username must not consist of only control characters." });
+      if (username.trim().length > 200) return json(res, 400, { error: "Username must not exceed 200 characters." });
       if (!password) return json(res, 400, { error: "Password is required." });
       if (password.length < 8) return json(res, 400, { error: "Password must be at least 8 characters." });
+      const cleanUsername = username.trim().replace(/[\x00-\x1f\x7f]/g, "");
       const cfg = readConfig();
       const admins = getAdmins(cfg);
-      if (admins.find(a => a.username.toLowerCase() === username.trim().toLowerCase())) {
+      if (admins.find(a => a.username.toLowerCase() === cleanUsername.toLowerCase())) {
         return json(res, 409, { error: "An admin with that username already exists." });
       }
       const newAdmin = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        username: username.trim(),
+        username: cleanUsername,
         password,
-        name: name?.trim() || username.trim(),
+        name: name?.trim().replace(/[\x00-\x1f\x7f]/g, "") || cleanUsername,
       };
       cfg.admins = [...admins, newAdmin];
       writeConfig(cfg);
@@ -591,7 +600,7 @@ async function handler(req, res) {
         ocName:      stripCtrl(item.ocName      || ""),
         productName: stripCtrl(item.productName || ""),
         ocId:        item.ocId   || null,
-        qty:         Math.max(1, Math.floor(Number(item.qty) || 1)),
+        qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
       })),
       selectedShipping: raw.selectedShipping ? {
@@ -631,7 +640,8 @@ async function handler(req, res) {
         }
       }
     }
-    const recalcTotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    const shippingCost = order.selectedShipping ? Math.max(0, Number(order.selectedShipping.price) || 0) : 0;
+    const recalcTotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0) + shippingCost;
     order.total = Math.round(recalcTotal * 100) / 100;
 
     // Duplicate check BEFORE writing any files to disk
@@ -679,7 +689,9 @@ async function handler(req, res) {
     });
     if (needsWrite) writeData(d);
 
-    return json(res, 200, { ok: true, order, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
+    // Strip admin-only fields before returning to the customer
+    const customerOrder = { ...order, items: order.items.map(({ managerAdminCharge, ...item }) => item) };
+    return json(res, 200, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
 
   // ── PUT /api/orders/:id/status  (admin) ───────────────────────────────────
@@ -850,11 +862,18 @@ async function handler(req, res) {
       if (!p || typeof p !== "object") return json(res, 400, { error: "Each plan must be an object." });
       if (!p.id || typeof p.id !== "string") return json(res, 400, { error: "Each plan must have a non-empty string id." });
       if (!p.name || typeof p.name !== "string") return json(res, 400, { error: `Plan '${p.id}' is missing a name.` });
-      // Validate product prices are non-negative numbers
+      // Validate product prices are finite non-negative numbers
       if (Array.isArray(p.products)) {
         for (const prod of p.products) {
-          if (prod && typeof prod === "object" && typeof prod.price === "number" && prod.price < 0)
+          if (!prod || typeof prod !== "object") continue;
+          if (typeof prod.price !== "number" || !Number.isFinite(prod.price))
+            return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' price must be a finite number.` });
+          if (prod.price < 0)
             return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has a negative price.` });
+          if (prod.managerAdminCharge !== undefined) {
+            if (typeof prod.managerAdminCharge !== "number" || !Number.isFinite(prod.managerAdminCharge) || prod.managerAdminCharge < 0)
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has an invalid managerAdminCharge (must be a non-negative number).` });
+          }
         }
       }
     }
@@ -969,7 +988,9 @@ async function handler(req, res) {
       if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass; // ignore masked placeholder
     }
     if (paymentDetails && typeof paymentDetails === "object") {
-      cfg.paymentDetails = { ...cfg.paymentDetails, ...paymentDetails };
+      const sanitised = {};
+      for (const [k, v] of Object.entries(paymentDetails)) sanitised[k] = typeof v === "string" ? stripCRLF(v) : v;
+      cfg.paymentDetails = { ...cfg.paymentDetails, ...sanitised };
     }
     if (emailTemplate && typeof emailTemplate === "object") {
       // Strip CRLF from all email template string fields to prevent header injection

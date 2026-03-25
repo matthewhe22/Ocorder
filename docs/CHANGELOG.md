@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-03-25 — Admin E2E Round 6: Admin Hardening, Shipping Total & Data Leaks
+
+### P2 Security / Data Integrity Fixes
+
+- **BUG-01: CRLF injected into admin `username` via add-admin** — Username now stripped of control chars (`\x00–\x1f`) before storage.
+- **BUG-04: String product price (e.g. `"free"`) passed plan validation → NaN → $0 order** — Plan product validation now requires `typeof price === "number"` and `Number.isFinite(price)`.
+- **BUG-05: `managerAdminCharge` exposed in unauthenticated `GET /api/data`** — Public response now strips `managerAdminCharge` from all plan products.
+- **BUG-06: `selectedShipping.price` not included in `order.total`** — Total now sums item prices plus `selectedShipping.price`; shipping cost also re-validated server-side as non-negative.
+- **BUG-07: `managerAdminCharge` returned to customer in order placement response** — `POST /api/orders` response now strips `managerAdminCharge` from item objects before returning to caller.
+- **BUG-08: CRLF accepted in `paymentDetails` fields on config save** — `stripCRLF()` now applied to all `paymentDetails` string values.
+
+### P3 Fixes
+
+- **BUG-02: No max length on admin username** — `add-admin` now rejects usernames longer than 200 characters.
+- **BUG-03: Negative `managerAdminCharge` accepted in plan products** — Plan product validation now rejects non-numeric or negative `managerAdminCharge`.
+- **BUG-09: No upper cap on `item.qty`** — `qty` now capped at 100 per item.
+
+---
+
 ## 2026-03-25 — Admin E2E Round 5: Field Whitelisting, Config Hardening & Parity
 
 ### P2 Security Fixes
