@@ -3308,7 +3308,7 @@ function SettingsTab({ adminToken, pubConfig }) {
     certificateSubject:       "Your OC Certificate — Order #{orderId}",
     certificateGreeting:      "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
     footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
-    adminNotificationSubject: "New Order — {orderType} #{orderId} — {total}",
+    adminNotificationSubject: "New Order — {orderType} #{orderId}",
     adminNotificationIntro:   "A new order has been placed.",
   };
 
