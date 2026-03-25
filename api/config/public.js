@@ -8,9 +8,12 @@ export default async function handler(req, res) {
   const cfg = await readConfig();
   const pd = cfg.paymentDetails || {};
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  const pm = cfg.paymentMethods || {};
   return res.status(200).json({
     logo: cfg.logo || "",
     stripeEnabled: !!(cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY),
+    bankEnabled:   pm.bankEnabled  !== false,
+    payidEnabled:  pm.payidEnabled !== false,
     paymentDetails: {
       accountName: pd.accountName || "Top Owners Corporation",
       bsb: pd.bsb || "033-065",

@@ -726,17 +726,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
 
   return (
     <div>
-      {/* ── Stripe cancellation banner ── */}
-      {stripeCancelled && (
-        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"8px", padding:"14px 20px", marginBottom:"1.5rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem" }}>
-          <div>
-            <span style={{ fontWeight:600, color:"#92400e" }}>Payment cancelled.</span>
-            {" "}<span style={{ color:"#78350f", fontSize:"0.88rem" }}>Your order was not processed. You can review your selections and try again.</span>
-          </div>
-          <button onClick={() => setStripeCancelled(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"#92400e", fontSize:"1.2rem", lineHeight:1, padding:"0 4px", flexShrink:0 }} aria-label="Dismiss">×</button>
-        </div>
-      )}
-
       {step < 6 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
           <div className="steps">
@@ -777,6 +766,17 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               ↩ Start New Order
             </button>
           )}
+        </div>
+      )}
+
+      {/* ── Stripe cancellation banner ── */}
+      {stripeCancelled && (
+        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"8px", padding:"14px 20px", marginBottom:"1.5rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem" }}>
+          <div>
+            <span style={{ fontWeight:600, color:"#92400e" }}>Payment cancelled.</span>
+            {" "}<span style={{ color:"#78350f", fontSize:"0.88rem" }}>Your order was not processed. You can review your selections and try again.</span>
+          </div>
+          <button onClick={() => setStripeCancelled(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"#92400e", fontSize:"1.2rem", lineHeight:1, padding:"0 4px", flexShrink:0 }} aria-label="Dismiss">×</button>
         </div>
       )}
 
@@ -854,7 +854,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <div className="hiw-ghost">5</div>
               <div className="hiw-emoji">💳</div>
               <div className="hiw-name">Pay your way</div>
-              <div className="hiw-desc">{pubConfig?.stripeEnabled ? "Bank · PayID · Card" : "Bank transfer · PayID"}</div>
+              <div className="hiw-desc">{[pubConfig?.bankEnabled !== false && "Bank", pubConfig?.payidEnabled !== false && "PayID", pubConfig?.stripeEnabled && "Card"].filter(Boolean).join(" · ")}</div>
             </div>
           </div>
 
@@ -973,9 +973,9 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                     <button className="s1-search-btn" style={{ background: "transparent", color: "var(--muted)", padding: "0 8px" }} onClick={() => setLotSearch("")}><Ic n="x" s={14}/></button>
                   )}
                 </div>
-                <div className="lot-cards" style={{ marginTop: "12px" }}>
+                {lotSearch.trim() && <div className="lot-cards" style={{ marginTop: "12px" }}>
                   {plan.lots
-                    .filter(l => !lotSearch.trim() || l.number.toLowerCase().includes(lotSearch.toLowerCase()))
+                    .filter(l => l.number.toLowerCase().includes(lotSearch.toLowerCase()))
                     .map(l => (
                       <div
                         key={l.id}
@@ -988,7 +988,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                       </div>
                     ))
                   }
-                </div>
+                </div>}
               </>
             ) : (
               <>
@@ -1548,9 +1548,9 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
       <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "1rem" }}>Payment Method</div>
 
       {[
-        { id: "bank",   icon: <Ic n="bank" s={20}/>,   name: "Direct Bank Transfer",        desc: "Manual transfer — processing begins on receipt. No fees.", enabled: true },
+        { id: "bank",   icon: <Ic n="bank" s={20}/>,   name: "Direct Bank Transfer",        desc: "Manual transfer — processing begins on receipt. No fees.", enabled: pubConfig?.bankEnabled !== false },
         { id: "stripe", icon: <Ic n="credit" s={20}/>, name: "Credit / Debit Card (Stripe)", desc: "Secure online card payment. Visa, Mastercard, Amex.", enabled: !!pubConfig?.stripeEnabled },
-        { id: "payid",  icon: <span style={{fontWeight:800,fontSize:"0.7rem",letterSpacing:"0.05em"}}>PayID</span>, name: "PayID", desc: "Instant bank transfer via PayID. No transaction fees.", enabled: true },
+        { id: "payid",  icon: <span style={{fontWeight:800,fontSize:"0.7rem",letterSpacing:"0.05em"}}>PayID</span>, name: "PayID", desc: "Instant bank transfer via PayID. No transaction fees.", enabled: pubConfig?.payidEnabled !== false },
       ].filter(m => m.enabled).map(m => (
         <div
           key={m.id}
@@ -1886,7 +1886,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const plan = data.strataPlans.find(p => p.id === planId);
 
-  const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "branding", "storage", "security"];
+  const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
 
   // ── API helper ──────────────────────────────────────────────────────────────
   const savePlans = async (plans) => {
@@ -2213,6 +2213,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             {t === "security" && <Ic n="shield" s={13}/>}
             {t === "settings" && <Ic n="settings" s={13}/>}
             {t === "branding" && <Ic n="image" s={13}/>}
+            {t === "payment" && <Ic n="credit" s={13}/>}
             {t === "storage" && <Ic n="cloud" s={13}/>}{" "}
             {t === "ownerCorps" ? "Owner Corps" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
@@ -2719,6 +2720,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* ── SECURITY ── */}
       {adminTab === "settings" && (
         <SettingsTab adminToken={adminToken} pubConfig={pubConfig} />
+      )}
+
+      {adminTab === "payment" && (
+        <PaymentTab adminToken={adminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
       )}
 
       {adminTab === "branding" && (
@@ -3314,7 +3319,6 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 function SettingsTab({ adminToken, pubConfig }) {
   const codeStyle = { background: "var(--cream)", padding: "1px 4px", borderRadius: "3px" };
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
-  const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
   const DEF_TPL = {
     certificateSubject:       "Your OC Certificate — Order #{orderId}",
     certificateGreeting:      "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
@@ -3325,7 +3329,6 @@ function SettingsTab({ adminToken, pubConfig }) {
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
   const [smtp, setSmtp] = useState(DEF_SMTP);
-  const [payDetails, setPayDetails] = useState(DEF_PAY);
   const [emailTpl, setEmailTpl] = useState(DEF_TPL);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState("");
@@ -3333,11 +3336,6 @@ function SettingsTab({ adminToken, pubConfig }) {
   const [showPass, setShowPass] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
-  const [stripeSecretKey, setStripeSecretKey] = useState("");
-  const [stripePubKey, setStripePubKey] = useState("");
-  const [showStripeKey, setShowStripeKey] = useState(false);
-  const [testingStripe, setTestingStripe] = useState(false);
-  const [stripeTestResult, setStripeTestResult] = useState(null);
 
   useEffect(() => {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
@@ -3345,17 +3343,13 @@ function SettingsTab({ adminToken, pubConfig }) {
       .then(d => {
         setOrderEmail(d.orderEmail || "Orders@tocs.co");
         setSmtp({ ...DEF_SMTP, ...(d.smtp || {}) });
-        setPayDetails({ ...DEF_PAY, ...(d.paymentDetails || {}) });
         setEmailTpl({ ...DEF_TPL, ...(d.emailTemplate || {}) });
-        setStripeSecretKey(d.stripe?.secretKey || "");
-        setStripePubKey(d.stripe?.publishableKey || "");
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
   const updSmtp = (k, v) => { setSmtp(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
-  const updPay  = (k, v) => { setPayDetails(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
   const updTpl  = (k, v) => { setEmailTpl(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
 
   const save = async () => {
@@ -3365,13 +3359,12 @@ function SettingsTab({ adminToken, pubConfig }) {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({
-          orderEmail, smtp, paymentDetails: payDetails,
+          orderEmail, smtp,
           emailTemplate: {
             ...emailTpl,
             adminNotificationSubject: (emailTpl.adminNotificationSubject || "").trim(),
             adminNotificationIntro:   (emailTpl.adminNotificationIntro   || "").trim(),
           },
-          stripe: { secretKey: stripeSecretKey, publishableKey: stripePubKey },
         }),
       });
       if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
@@ -3395,35 +3388,9 @@ function SettingsTab({ adminToken, pubConfig }) {
     setTesting(false);
   };
 
-  const testStripe = async () => {
-    setTestingStripe(true); setStripeTestResult(null); setSaveErr("");
-    try {
-      const r = await fetch("/api/config/settings?action=test-stripe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ stripe: { secretKey: stripeSecretKey } }),
-      });
-      const d = await r.json();
-      if (d.ok) {
-        setStripeTestResult({ ok: true, msg: `✅ Connected · ${d.mode === "test" ? "Test Mode" : "⚠️ Live Mode"} · ${d.accountId} (key from ${d.keySource})` });
-      } else {
-        setStripeTestResult({ ok: false, msg: d.error || "Connection failed." });
-      }
-    } catch { setStripeTestResult({ ok: false, msg: "Unable to connect to server." }); }
-    setTestingStripe(false);
-  };
-
   if (loading) return <div className="panel" style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}>Loading settings…</div>;
 
   const rowSt = { display: "flex", gap: "10px" };
-
-  const stripeModeFromKey = (k) => {
-    if (!k || k === "••••••••") return null;
-    if (k.startsWith("sk_live_")) return { label: "Live Mode", color: "#b45309" };
-    if (k.startsWith("sk_test_")) return { label: "Test Mode", color: "#16a34a" };
-    return null;
-  };
-  const stripeMode = stripeModeFromKey(stripeSecretKey);
 
   return (
     <div style={{ maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -3439,95 +3406,6 @@ function SettingsTab({ adminToken, pubConfig }) {
           <input className="f-input" type="email" placeholder="Orders@tocs.co" value={orderEmail}
             onChange={e => { setOrderEmail(e.target.value); setSaved(false); setSaveErr(""); }}/>
         </div>
-      </div>
-
-      {/* Payment Details */}
-      <div className="panel">
-        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Payment Details</h2>
-        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
-          Bank and PayID details shown to applicants during checkout and on order receipts.
-        </p>
-        <div className="form-row">
-          <label className="f-label">Account Name</label>
-          <input className="f-input" type="text" placeholder="Top Owners Corporation" value={payDetails.accountName}
-            onChange={e => updPay("accountName", e.target.value)}/>
-        </div>
-        <div style={rowSt}>
-          <div className="form-row" style={{ flex: 1 }}>
-            <label className="f-label">BSB</label>
-            <input className="f-input" type="text" placeholder="033-065" value={payDetails.bsb}
-              onChange={e => updPay("bsb", e.target.value)}/>
-          </div>
-          <div className="form-row" style={{ flex: 1 }}>
-            <label className="f-label">Account Number</label>
-            <input className="f-input" type="text" placeholder="522011" value={payDetails.accountNumber}
-              onChange={e => updPay("accountNumber", e.target.value)}/>
-          </div>
-        </div>
-        <div className="form-row" style={{ marginBottom: 0 }}>
-          <label className="f-label">PayID (email)</label>
-          <input className="f-input" type="email" placeholder="accounts@tocs.com.au" value={payDetails.payid}
-            onChange={e => updPay("payid", e.target.value)}/>
-        </div>
-      </div>
-
-      {/* Stripe Payments */}
-      <div className="panel">
-        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Stripe Payments</h2>
-        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
-          Enable card payments via Stripe. Keys are stored securely and take priority over Vercel environment variables.
-        </p>
-
-        {stripeMode && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: stripeMode.color + "18", border: `1px solid ${stripeMode.color}40`, borderRadius: "20px", padding: "3px 12px", marginBottom: "16px" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: stripeMode.color, display: "inline-block" }}/>
-            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: stripeMode.color, letterSpacing: "0.06em" }}>{stripeMode.label}</span>
-          </div>
-        )}
-        {!stripeMode && stripeSecretKey === "" && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "20px", padding: "3px 12px", marginBottom: "16px" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#9ca3af", display: "inline-block" }}/>
-            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", letterSpacing: "0.06em" }}>Not Configured</span>
-          </div>
-        )}
-
-        <div className="form-row">
-          <label className="f-label">Secret Key</label>
-          <div className="pw-wrap">
-            <input className="f-input" type={showStripeKey ? "text" : "password"}
-              placeholder="sk_test_••••  or  sk_live_••••"
-              value={stripeSecretKey}
-              onChange={e => { setStripeSecretKey(e.target.value); setSaved(false); setSaveErr(""); setStripeTestResult(null); }}
-              style={{ paddingRight: "42px" }}/>
-            <button className="pw-toggle" type="button" onClick={() => setShowStripeKey(p => !p)}>
-              <Ic n={showStripeKey ? "eyeOff" : "eye"} s={16}/>
-            </button>
-          </div>
-          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
-            Find this in your Stripe Dashboard → Developers → API keys.
-          </div>
-        </div>
-
-        <div className="form-row" style={{ marginBottom: "1rem" }}>
-          <label className="f-label">Publishable Key</label>
-          <input className="f-input" type="text"
-            placeholder="pk_test_••••  or  pk_live_••••"
-            value={stripePubKey}
-            onChange={e => { setStripePubKey(e.target.value); setSaved(false); setSaveErr(""); }}/>
-          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
-            Optional — used to display card brands and for future client-side integrations. Note: stored for future Stripe.js integration — not currently used by the portal.
-          </div>
-        </div>
-
-        {stripeTestResult?.ok === true  && <div className="alert alert-ok"  style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
-        {stripeTestResult?.ok === false && <div className="alert alert-err" style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
-
-        <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || (stripeSecretKey === "••••••••") || (!stripeSecretKey && !pubConfig?.stripeEnabled)}>
-          {testingStripe
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
-            : <><Ic n="check" s={15}/> Test Stripe Connection</>
-          }
-        </button>
       </div>
 
       {/* SMTP configuration */}
@@ -3638,6 +3516,207 @@ function SettingsTab({ adminToken, pubConfig }) {
         </button>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ─── PAYMENT TAB ──────────────────────────────────────────────────────────────
+function PaymentTab({ adminToken, pubConfig, setPubConfig }) {
+  const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
+
+  const [bankEnabled,  setBankEnabled]  = useState(true);
+  const [payidEnabled, setPayidEnabled] = useState(true);
+  const [payDetails,   setPayDetails]   = useState(DEF_PAY);
+  const [stripeSecretKey, setStripeSecretKey] = useState("");
+  const [stripePubKey,    setStripePubKey]    = useState("");
+  const [showStripeKey,   setShowStripeKey]   = useState(false);
+  const [testingStripe,   setTestingStripe]   = useState(false);
+  const [stripeTestResult, setStripeTestResult] = useState(null);
+  const [saved,    setSaved]   = useState(false);
+  const [saveErr,  setSaveErr] = useState("");
+  const [loading,  setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
+      .then(r => r.json())
+      .then(d => {
+        setPayDetails({ ...DEF_PAY, ...(d.paymentDetails || {}) });
+        setBankEnabled(d.paymentMethods?.bankEnabled  !== false);
+        setPayidEnabled(d.paymentMethods?.payidEnabled !== false);
+        setStripeSecretKey(d.stripe?.secretKey      || "");
+        setStripePubKey(d.stripe?.publishableKey    || "");
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const updPay = (k, v) => { setPayDetails(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
+
+  const save = async () => {
+    setSaveErr("");
+    try {
+      const r = await fetch("/api/config/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({
+          paymentDetails: payDetails,
+          paymentMethods: { bankEnabled, payidEnabled },
+          stripe: { secretKey: stripeSecretKey, publishableKey: stripePubKey },
+        }),
+      });
+      if (r.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 3500);
+        if (setPubConfig) setPubConfig(p => ({ ...p, bankEnabled, payidEnabled }));
+      } else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
+    } catch { setSaveErr("Unable to connect to server."); }
+  };
+
+  const testStripe = async () => {
+    setTestingStripe(true); setStripeTestResult(null);
+    try {
+      const r = await fetch("/api/config/settings?action=test-stripe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ stripe: { secretKey: stripeSecretKey } }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        setStripeTestResult({ ok: true, msg: `✅ Connected · ${d.mode === "test" ? "Test Mode" : "⚠️ Live Mode"} · ${d.accountId} (key from ${d.keySource})` });
+      } else {
+        setStripeTestResult({ ok: false, msg: d.error || "Connection failed." });
+      }
+    } catch { setStripeTestResult({ ok: false, msg: "Unable to connect to server." }); }
+    setTestingStripe(false);
+  };
+
+  if (loading) return <div className="panel" style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}>Loading settings…</div>;
+
+  const rowSt = { display: "flex", gap: "10px" };
+  const stripeModeFromKey = (k) => {
+    if (!k || k === "••••••••") return null;
+    if (k.startsWith("sk_live_")) return { label: "Live Mode", color: "#b45309" };
+    if (k.startsWith("sk_test_")) return { label: "Test Mode", color: "#16a34a" };
+    return null;
+  };
+  const stripeMode = stripeModeFromKey(stripeSecretKey);
+
+  return (
+    <div style={{ maxWidth: "560px", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+
+      {/* Payment Methods toggles */}
+      <div className="panel">
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Payment Methods</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
+          Choose which payment methods are available to applicants during checkout.
+        </p>
+        {[
+          { label: "Direct Bank Transfer", val: bankEnabled,  set: setBankEnabled  },
+          { label: "PayID",                val: payidEnabled, set: setPayidEnabled },
+        ].map(({ label, val, set }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border2)" }}>
+            <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>{label}</span>
+            <button
+              type="button"
+              onClick={() => { set(p => !p); setSaved(false); setSaveErr(""); }}
+              style={{ width: 42, height: 24, borderRadius: 12, border: "none", cursor: "pointer", background: val ? "var(--forest)" : "#d1d5db", transition: "background 0.2s", position: "relative", flexShrink: 0 }}
+            >
+              <span style={{ position: "absolute", top: 3, left: val ? 21 : 3, width: 18, height: 18, borderRadius: "50%", background: "white", transition: "left 0.2s" }}/>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Bank & PayID account details */}
+      <div className="panel">
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Bank &amp; PayID Details</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
+          Shown to applicants during checkout and on order receipts.
+        </p>
+        <div className="form-row">
+          <label className="f-label">Account Name</label>
+          <input className="f-input" type="text" placeholder="Top Owners Corporation" value={payDetails.accountName}
+            onChange={e => updPay("accountName", e.target.value)}/>
+        </div>
+        <div style={rowSt}>
+          <div className="form-row" style={{ flex: 1 }}>
+            <label className="f-label">BSB</label>
+            <input className="f-input" type="text" placeholder="033-065" value={payDetails.bsb}
+              onChange={e => updPay("bsb", e.target.value)}/>
+          </div>
+          <div className="form-row" style={{ flex: 1 }}>
+            <label className="f-label">Account Number</label>
+            <input className="f-input" type="text" placeholder="522011" value={payDetails.accountNumber}
+              onChange={e => updPay("accountNumber", e.target.value)}/>
+          </div>
+        </div>
+        <div className="form-row" style={{ marginBottom: 0 }}>
+          <label className="f-label">PayID (email)</label>
+          <input className="f-input" type="email" placeholder="accounts@tocs.com.au" value={payDetails.payid}
+            onChange={e => updPay("payid", e.target.value)}/>
+        </div>
+      </div>
+
+      {/* Stripe */}
+      <div className="panel">
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>Stripe Payments</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
+          Enable card payments via Stripe. Keys are stored securely and take priority over Vercel environment variables.
+        </p>
+        {stripeMode && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: stripeMode.color + "18", border: `1px solid ${stripeMode.color}40`, borderRadius: "20px", padding: "3px 12px", marginBottom: "16px" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: stripeMode.color, display: "inline-block" }}/>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: stripeMode.color, letterSpacing: "0.06em" }}>{stripeMode.label}</span>
+          </div>
+        )}
+        {!stripeMode && stripeSecretKey === "" && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "20px", padding: "3px 12px", marginBottom: "16px" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#9ca3af", display: "inline-block" }}/>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", letterSpacing: "0.06em" }}>Not Configured</span>
+          </div>
+        )}
+        <div className="form-row">
+          <label className="f-label">Secret Key</label>
+          <div className="pw-wrap">
+            <input className="f-input" type={showStripeKey ? "text" : "password"}
+              placeholder="sk_test_••••  or  sk_live_••••"
+              value={stripeSecretKey}
+              onChange={e => { setStripeSecretKey(e.target.value); setSaved(false); setSaveErr(""); setStripeTestResult(null); }}
+              style={{ paddingRight: "42px" }}/>
+            <button className="pw-toggle" type="button" onClick={() => setShowStripeKey(p => !p)}>
+              <Ic n={showStripeKey ? "eyeOff" : "eye"} s={16}/>
+            </button>
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
+            Find this in your Stripe Dashboard → Developers → API keys.
+          </div>
+        </div>
+        <div className="form-row" style={{ marginBottom: "1rem" }}>
+          <label className="f-label">Publishable Key</label>
+          <input className="f-input" type="text"
+            placeholder="pk_test_••••  or  pk_live_••••"
+            value={stripePubKey}
+            onChange={e => { setStripePubKey(e.target.value); setSaved(false); setSaveErr(""); }}/>
+          <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>
+            Optional — used to display card brands and for future client-side integrations.
+          </div>
+        </div>
+        {stripeTestResult?.ok === true  && <div className="alert alert-ok"  style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
+        {stripeTestResult?.ok === false && <div className="alert alert-err" style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
+        <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || stripeSecretKey === "••••••••" || (!stripeSecretKey && !pubConfig?.stripeEnabled)}>
+          {testingStripe
+            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            : <><Ic n="check" s={15}/> Test Stripe Connection</>
+          }
+        </button>
+      </div>
+
+      {saveErr && <div className="alert alert-err">{saveErr}</div>}
+      {saved   && <div className="alert alert-ok">Settings saved.</div>}
+      <div>
+        <button className="btn btn-blk" style={{ width: "100%" }} onClick={save}>
+          <Ic n="check" s={15}/> Save Payment Settings
+        </button>
+      </div>
     </div>
   );
 }
