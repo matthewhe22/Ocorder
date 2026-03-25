@@ -160,3 +160,4 @@ node server.js
 | 2026-03-23 | Admin email template editor, product save flow fixes |
 | 2026-03-25 | Admin E2E round 1: fraud-proof total, plan schema validation, XSS escaping, status enum, null-safe send-cert, authority 404 disambiguation, input validation |
 | 2026-03-25 | Admin E2E round 2: path traversal fix, order field whitelist, catalog-based item price validation, order ID format, file extension whitelist, lots deduplication, 413/405 responses, config validation |
+| 2026-03-25 | Admin E2E round 3: CRLF server crash fix, authority file write-before-check, paymentDetails XSS in emails, order.id/lotAuthorityFile/orderEmail HTML escaping, email failure auditLog, orderEmail format validation |

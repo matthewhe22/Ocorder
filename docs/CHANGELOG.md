@@ -2,6 +2,30 @@
 
 ---
 
+## 2026-03-25 — Admin E2E Round 3: Docs, Email & Payment Hardening (server.js)
+
+### Medium Severity Bug Fixes
+
+- **CRLF in `lotAuthorityFile` crashed the server (DoS)** — `lotAuthorityFile` is now sanitised with `replace(/[^\w.\-]/g, "_")` before use in the `Content-Disposition` header. The `fs.readFile` callback is wrapped in try/catch so header errors cannot escape to an uncaught handler and crash the process.
+- **Authority file overwritten before duplicate order check** — The duplicate ID check is now performed before `fs.writeFileSync`, so a repeated submission with the same order ID can no longer overwrite the original authority document on disk.
+- **`paymentDetails` fields unescaped in customer confirmation email (XSS)** — `pd.accountName`, `pd.bsb`, `pd.accountNumber`, and `pd.payid` are now all wrapped in `esc()` in `buildCustomerEmailHtml`. A malicious admin storing XSS payloads in payment config can no longer inject HTML into customer bank-transfer/PayID emails.
+
+### Low Severity Bug Fixes
+
+- **`order.lotAuthorityFile` unescaped in admin notification email** — Wrapped in `esc()` in `buildOrderEmailHtml`.
+- **`order.id` unescaped in all three email templates** — Wrapped in `esc()` in every HTML context across all three email builders.
+- **`orderEmail` display text unescaped in customer email footer** — Both the `href` and display text of the contact link now use `esc()`.
+
+### Input Validation
+
+- **`orderEmail` not validated as a proper email address** — `POST /api/config/settings` now checks `orderEmail` against a basic email pattern before saving; returns 400 if it fails.
+
+### Reliability
+
+- **Email failures not recorded in auditLog** — `sendOrderEmail` and `sendCustomerEmail` are now awaited via `Promise.allSettled()`. If either send fails, a `"Email send failed"` entry with the error message is appended to the order's `auditLog`, giving admins an in-app record of delivery failures.
+
+---
+
 ## 2026-03-25 — Admin E2E Round 2: Security & Integrity Hardening (server.js)
 
 ### Critical Bug Fixes

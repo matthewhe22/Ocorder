@@ -143,7 +143,7 @@ function buildOrderEmailHtml(order, tpl) {
 
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Order Details</h3>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-        <tr><td style="padding:6px 0;color:#666;width:38%;">Order ID</td><td style="padding:6px 0;font-weight:600;">${order.id || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;width:38%;">Order ID</td><td style="padding:6px 0;font-weight:600;">${esc(order.id) || "—"}</td></tr>
         <tr><td style="padding:6px 0;color:#666;">Date</td><td style="padding:6px 0;">${date}</td></tr>
         <tr><td style="padding:6px 0;color:#666;">Payment</td><td style="padding:6px 0;">${payment}</td></tr>
         <tr><td style="padding:6px 0;color:#666;">Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${(order.total || 0).toFixed(2)} AUD</td></tr>
@@ -172,7 +172,7 @@ function buildOrderEmailHtml(order, tpl) {
       </table>
 
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Lot Authority Document</h3>
-      <p style="margin-top:8px;">${order.lotAuthorityFile ? `<strong>${order.lotAuthorityFile}</strong> has been uploaded and saved.` : "No lot authority document was provided."}</p>
+      <p style="margin-top:8px;">${order.lotAuthorityFile ? `<strong>${esc(order.lotAuthorityFile)}</strong> has been uploaded and saved.` : "No lot authority document was provided."}</p>
 
       <hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 20px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">This is an automated notification from the TOCS Order Portal. Please do not reply to this email.</p>
@@ -199,17 +199,17 @@ function buildCustomerEmailHtml(order, cfg) {
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:16px 20px;margin:20px 0;">
       <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#92400e;margin-bottom:10px;">Bank Transfer Details</div>
       <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
-        <tr><td style="padding:4px 0;color:#666;width:38%;">Account Name</td><td style="padding:4px 0;font-weight:600;">${pd.accountName||""}</td></tr>
-        <tr><td style="padding:4px 0;color:#666;">BSB</td><td style="padding:4px 0;font-weight:600;">${pd.bsb||""}</td></tr>
-        <tr><td style="padding:4px 0;color:#666;">Account Number</td><td style="padding:4px 0;font-weight:600;">${pd.accountNumber||""}</td></tr>
-        <tr><td style="padding:4px 0;color:#666;">Reference</td><td style="padding:4px 0;font-weight:700;color:#1c3326;">${order.id}</td></tr>
+        <tr><td style="padding:4px 0;color:#666;width:38%;">Account Name</td><td style="padding:4px 0;font-weight:600;">${esc(pd.accountName||"")}</td></tr>
+        <tr><td style="padding:4px 0;color:#666;">BSB</td><td style="padding:4px 0;font-weight:600;">${esc(pd.bsb||"")}</td></tr>
+        <tr><td style="padding:4px 0;color:#666;">Account Number</td><td style="padding:4px 0;font-weight:600;">${esc(pd.accountNumber||"")}</td></tr>
+        <tr><td style="padding:4px 0;color:#666;">Reference</td><td style="padding:4px 0;font-weight:700;color:#1c3326;">${esc(order.id)}</td></tr>
       </table>
     </div>` : order.payment === "payid" ? `
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:16px 20px;margin:20px 0;">
       <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#92400e;margin-bottom:10px;">PayID Details</div>
       <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
-        <tr><td style="padding:4px 0;color:#666;width:38%;">PayID</td><td style="padding:4px 0;font-weight:600;">${pd.payid||""}</td></tr>
-        <tr><td style="padding:4px 0;color:#666;">Reference</td><td style="padding:4px 0;font-weight:700;color:#1c3326;">${order.id}</td></tr>
+        <tr><td style="padding:4px 0;color:#666;width:38%;">PayID</td><td style="padding:4px 0;font-weight:600;">${esc(pd.payid||"")}</td></tr>
+        <tr><td style="padding:4px 0;color:#666;">Reference</td><td style="padding:4px 0;font-weight:700;color:#1c3326;">${esc(order.id)}</td></tr>
       </table>
     </div>` : "";
 
@@ -225,7 +225,7 @@ function buildCustomerEmailHtml(order, cfg) {
       <p>Thank you for your order. ${isPending ? "Your order has been received and is <strong>awaiting payment</strong>. Certificate processing will begin once payment is confirmed." : "Your payment has been received and your certificate(s) will be processed within the stated turnaround time."}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;">
         <div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div>
-        <div style="font-family:monospace;font-size:1.2rem;font-weight:700;color:#1c3326;">${order.id}</div>
+        <div style="font-family:monospace;font-size:1.2rem;font-weight:700;color:#1c3326;">${esc(order.id)}</div>
         <div style="font-size:0.75rem;color:#666;margin-top:4px;">Please keep this for your records. Use it as your payment reference for bank transfers.</div>
       </div>
       ${bankRows}
@@ -241,7 +241,7 @@ function buildCustomerEmailHtml(order, cfg) {
         <tr style="background:#f5f7f5;"><td colspan="2" style="padding:8px 12px;font-weight:700;">Total (incl. GST)</td><td style="padding:8px 12px;text-align:right;font-weight:700;font-size:1.05rem;color:#1c3326;">$${(order.total||0).toFixed(2)}</td></tr>
       </table>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 16px;">
-      <p style="font-size:0.8rem;color:#555;margin:0;">If you have any questions about your order, please contact us at <a href="mailto:${cfg.orderEmail||'info@tocs.co'}" style="color:#2e6b42;">${cfg.orderEmail||'info@tocs.co'}</a> quoting your order reference number.</p>
+      <p style="font-size:0.8rem;color:#555;margin:0;">If you have any questions about your order, please contact us at <a href="mailto:${esc(cfg.orderEmail||'info@tocs.co')}" style="color:#2e6b42;">${esc(cfg.orderEmail||'info@tocs.co')}</a> quoting your order reference number.</p>
     </div>
   </div>
 </body></html>`;
@@ -268,7 +268,7 @@ function buildCertEmailHtml(order, message, cfg) {
     <div style="padding:32px;">
       <p style="margin-top:0;">${htmlBody}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
@@ -600,6 +600,12 @@ async function handler(req, res) {
     const recalcTotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
     order.total = Math.round(recalcTotal * 100) / 100;
 
+    // Duplicate check BEFORE writing any files to disk
+    const d = readData();
+    if (d.orders.find(o => o.id === order.id)) {
+      return json(res, 409, { error: "An order with this ID already exists." });
+    }
+
     let authorityBuf = null;
     let authorityFilename = null;
     if (body.lotAuthority?.data) {
@@ -619,17 +625,25 @@ async function handler(req, res) {
     }
 
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
-    const d = readData();
-    if (d.orders.find(o => o.id === order.id)) {
-      return json(res, 409, { error: "An order with this ID already exists." });
-    }
     d.orders.unshift(order);
     writeData(d);
 
     const cfg = readConfig();
-    // Fire-and-forget both emails
-    sendOrderEmail(order, cfg, authorityBuf, authorityFilename);
-    sendCustomerEmail(order, cfg);
+    // Send emails — capture failures and append them to the order's auditLog
+    const emailResults = await Promise.allSettled([
+      sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
+      sendCustomerEmail(order, cfg),
+    ]);
+    const emailLabels = ["Admin notification", "Customer confirmation"];
+    let needsWrite = false;
+    emailResults.forEach((r, i) => {
+      if (r.status === "rejected") {
+        const entry = { ts: new Date().toISOString(), action: "Email send failed", note: `${emailLabels[i]}: ${r.reason?.message || r.reason}` };
+        const idx2 = d.orders.findIndex(o => o.id === order.id);
+        if (idx2 !== -1) { d.orders[idx2].auditLog = [...(d.orders[idx2].auditLog || []), entry]; needsWrite = true; }
+      }
+    });
+    if (needsWrite) writeData(d);
 
     return json(res, 200, { ok: true, order, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
@@ -664,21 +678,28 @@ async function handler(req, res) {
     const order = d.orders.find(o => o.id === authorityMatch[1]);
     if (!order) return json(res, 404, { error: "Order not found." });
     if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
-    const filePath = path.resolve(UPLOADS_DIR, path.basename(order.lotAuthorityFile));
+    // Sanitise the stored filename: strip control chars (incl. CRLF) to prevent header injection
+    const safeFilename = path.basename(order.lotAuthorityFile).replace(/[^\w.\-]/g, "_");
+    const filePath = path.resolve(UPLOADS_DIR, safeFilename);
     // Guard against path traversal: resolved path must stay inside UPLOADS_DIR
     if (!filePath.startsWith(UPLOADS_DIR + path.sep) && filePath !== UPLOADS_DIR) {
       return json(res, 403, { error: "Forbidden." });
     }
     fs.readFile(filePath, (err, data) => {
       if (err) return json(res, 404, { error: "File not found on server." });
-      const ext = path.extname(order.lotAuthorityFile).toLowerCase();
-      const mimeMap = { ".pdf":"application/pdf", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png" };
-      res.writeHead(200, {
-        "Content-Type": mimeMap[ext] || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${order.lotAuthorityFile}"`,
-        "Content-Length": data.length,
-      });
-      res.end(data);
+      try {
+        const ext = path.extname(safeFilename).toLowerCase();
+        const mimeMap = { ".pdf":"application/pdf", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png" };
+        res.writeHead(200, {
+          "Content-Type": mimeMap[ext] || "application/octet-stream",
+          "Content-Disposition": `attachment; filename="${safeFilename}"`,
+          "Content-Length": data.length,
+        });
+        res.end(data);
+      } catch (headerErr) {
+        console.error("  ❌  Authority download header error:", headerErr.message);
+        if (!res.headersSent) json(res, 500, { error: "Could not send file." });
+      }
     });
     return;
   }
@@ -884,6 +905,7 @@ async function handler(req, res) {
     const cfg = readConfig();
     if (orderEmail !== undefined) {
       if (typeof orderEmail !== "string" || !orderEmail.trim()) return json(res, 400, { error: "orderEmail must be a non-empty string." });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orderEmail.trim())) return json(res, 400, { error: "orderEmail must be a valid email address." });
       cfg.orderEmail = orderEmail.trim();
     }
     if (smtp && typeof smtp === "object") {
