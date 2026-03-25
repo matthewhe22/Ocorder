@@ -121,7 +121,7 @@ function buildOrderEmailHtml(order, tpl) {
   let date = "—";
   try { date = new Date(order.date).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "long", timeStyle: "short" }); } catch {}
   const payment = order.payment === "card" ? "Credit / Debit Card" : order.payment === "invoice" ? "Invoice" : order.payment || "—";
-  const introText = (tpl?.adminNotificationIntro || "A new order has been placed on the TOCS Owner Corporation Certificate Portal. Please review and process it at your earliest convenience.");
+  const introText = esc(tpl?.adminNotificationIntro || "A new order has been placed on the TOCS Owner Corporation Certificate Portal. Please review and process it at your earliest convenience.");
 
   const itemRows = items.map(item => `
     <tr>
@@ -295,7 +295,7 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
     const tpl = cfg.emailTemplate || {};
     const orderType = order.orderCategory === "keys" ? "Keys" : "OC Certificate";
     const firstItem = order.items?.[0];
-    const adminSubject = (tpl.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
+    const adminSubject = (tpl.adminNotificationSubject || "New Order — {orderType} #{orderId}")
       .replace(/{orderId}/g, order.id)
       .replace(/{orderType}/g, orderType)
       .replace(/{total}/g, `$${(order.total || 0).toFixed(2)} AUD`)
@@ -562,6 +562,8 @@ async function handler(req, res) {
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.contactInfo.email)) return json(res, 400, { error: "A valid customer email address is required." });
+    if ((raw.contactInfo.name || "").length > 200) return json(res, 400, { error: "Name must not exceed 200 characters." });
+    if ((raw.contactInfo.companyName || "").length > 200) return json(res, 400, { error: "Company name must not exceed 200 characters." });
     // Validate payment method
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
@@ -579,15 +581,23 @@ async function handler(req, res) {
         phone:       stripCtrl(raw.contactInfo?.phone || ""),
         companyName: stripCtrl(raw.contactInfo?.companyName || ""),
       },
+      status: (raw.payment === "stripe" || raw.payment === "card") ? "Processing" : "Pending Payment",
       payment: raw.payment || "bank",
       items: (raw.items || []).map(item => ({
-        ...item,
-        lotNumber: stripCtrl(item.lotNumber || ""),
-        planName:  stripCtrl(item.planName  || ""),
-        ocName:    stripCtrl(item.ocName    || ""),
+        productId:   item.productId,
+        lotId:       item.lotId,
+        lotNumber:   stripCtrl(item.lotNumber   || ""),
+        planName:    stripCtrl(item.planName    || ""),
+        ocName:      stripCtrl(item.ocName      || ""),
         productName: stripCtrl(item.productName || ""),
+        ocId:        item.ocId   || null,
+        qty:         Math.max(1, Math.floor(Number(item.qty) || 1)),
+        // price and managerAdminCharge set below from server-side catalog
       })),
-      selectedShipping: raw.selectedShipping,
+      selectedShipping: raw.selectedShipping ? {
+        type:  stripCtrl(String(raw.selectedShipping.type  || "")),
+        price: Math.max(0, Number(raw.selectedShipping.price) || 0),
+      } : undefined,
     };
     // Always normalise date to a valid ISO string — never trust client clock alone
     const parsedDate = raw.date ? new Date(raw.date) : null;
@@ -612,7 +622,8 @@ async function handler(req, res) {
             ? product.price
             : (product.secondaryPrice ?? product.price);
         } else {
-          item.price = product.price;
+          // Multiply by qty for non-perOC products (e.g. keys/fobs where user selects quantity)
+          item.price = product.price * (item.qty || 1);
         }
         // Snapshot managerAdminCharge from catalog (keys/fob products only, admin use)
         if (product.managerAdminCharge !== undefined) {
@@ -896,7 +907,13 @@ async function handler(req, res) {
   if (urlPath === "/api/config/public" && method === "GET") {
     const cfg = readConfig();
     const pd = cfg.paymentDetails || {};
+    const pm = cfg.paymentMethods || {};
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     return json(res, 200, {
+      logo: cfg.logo || "",
+      stripeEnabled: !!(cfg.stripe?.secretKey),
+      bankEnabled:   pm.bankEnabled  !== false,
+      payidEnabled:  pm.payidEnabled !== false,
       paymentDetails: {
         accountName: pd.accountName || "Top Owners Corporation",
         bsb: pd.bsb || "033-065",
@@ -916,13 +933,13 @@ async function handler(req, res) {
     const et = cfg.emailTemplate || {};
     return json(res, 200, {
       orderEmail: cfg.orderEmail || "Orders@tocs.co",
-      smtp: { host: smtp.host || "mail-au.smtp2go.com", port: smtp.port || 2525, user: smtp.user || "OCCAPP", pass: smtp.pass || "" },
+      smtp: { host: smtp.host || "mail-au.smtp2go.com", port: smtp.port || 2525, user: smtp.user || "OCCAPP", pass: smtp.pass ? "••••••••" : "" },
       paymentDetails: { accountName: pd.accountName || "Top Owners Corporation", bsb: pd.bsb || "033-065", accountNumber: pd.accountNumber || "522011", payid: pd.payid || "accounts@tocs.com.au" },
       emailTemplate: {
         certificateSubject:       et.certificateSubject       || "Your OC Certificate — Order #{orderId}",
         certificateGreeting:      et.certificateGreeting      || "",
         footer:                   et.footer                   || "",
-        adminNotificationSubject: et.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}",
+        adminNotificationSubject: et.adminNotificationSubject || "New Order — {orderType} #{orderId}",
         adminNotificationIntro:   et.adminNotificationIntro   || "A new order has been placed.",
       },
     });
@@ -939,22 +956,29 @@ async function handler(req, res) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orderEmail.trim())) return json(res, 400, { error: "orderEmail must be a valid email address." });
       cfg.orderEmail = orderEmail.trim();
     }
+    const stripCRLF = (s) => typeof s === "string" ? s.replace(/[\r\n]/g, " ").trim() : s;
     if (smtp && typeof smtp === "object") {
       cfg.smtp = cfg.smtp || {};
-      if (smtp.host !== undefined) cfg.smtp.host = smtp.host;
+      if (smtp.host !== undefined) cfg.smtp.host = stripCRLF(smtp.host);
       if (smtp.port !== undefined) {
         const p = Number(smtp.port);
         if (!Number.isFinite(p) || p <= 0) return json(res, 400, { error: "smtp.port must be a positive number." });
         cfg.smtp.port = p;
       }
-      if (smtp.user !== undefined) cfg.smtp.user = smtp.user;
-      if (smtp.pass !== undefined) cfg.smtp.pass = smtp.pass;
+      if (smtp.user !== undefined) cfg.smtp.user = stripCRLF(smtp.user);
+      if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass; // ignore masked placeholder
     }
     if (paymentDetails && typeof paymentDetails === "object") {
       cfg.paymentDetails = { ...cfg.paymentDetails, ...paymentDetails };
     }
     if (emailTemplate && typeof emailTemplate === "object") {
-      cfg.emailTemplate = { ...cfg.emailTemplate, ...emailTemplate };
+      // Strip CRLF from all email template string fields to prevent header injection
+      const sanitiseTemplate = (obj) => {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) out[k] = typeof v === "string" ? stripCRLF(v) : v;
+        return out;
+      };
+      cfg.emailTemplate = { ...cfg.emailTemplate, ...sanitiseTemplate(emailTemplate) };
     }
     writeConfig(cfg);
     return json(res, 200, { ok: true });

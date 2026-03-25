@@ -2,6 +2,31 @@
 
 ---
 
+## 2026-03-25 — Admin E2E Round 5: Field Whitelisting, Config Hardening & Parity
+
+### P2 Security Fixes
+
+- **BUG-01: `selectedShipping` stored verbatim including `__proto__` injection** — Now whitelisted to `{type, price}` only; `price` cast to non-negative number.
+- **BUG-02: `items[]` used `...item` spread, persisting arbitrary client fields** — Replaced with explicit whitelist: `productId`, `lotId`, `lotNumber`, `planName`, `ocName`, `productName`, `ocId`, `qty` only; `price` and `managerAdminCharge` overridden from server catalog.
+- **BUG-04: CRLF accepted in `emailTemplate` fields (header injection risk)** — `POST /api/config/settings` now strips `\r\n` from all email template string values via `stripCRLF()`.
+- **BUG-05: CRLF accepted in `smtp.host` / `smtp.user`** — Both fields stripped of CRLF on save.
+- **BUG-06: `adminNotificationIntro` rendered as raw HTML in admin notification email** — Now wrapped with `esc()` in `buildOrderEmailHtml`.
+
+### P3 Fixes
+
+- **BUG-03: New orders stored without `status` field** — Orders now created with `"Pending Payment"` (bank/payid/invoice) or `"Processing"` (stripe/card).
+- **BUG-07: `smtp.pass` returned in plaintext in GET `/api/config/settings`** — Now masked as `"••••••••"` when set; POST handler ignores the placeholder on save.
+- **BUG-08: Hardcoded default `adminNotificationSubject` still contained `{total}`** — Both occurrences updated to `"New Order — {orderType} #{orderId}"`.
+- **BUG-09: Local server `/api/config/public` missing `bankEnabled`, `payidEnabled`, `stripeEnabled`, `logo`** — Local server now returns identical shape to Vercel `api/config/public.js`; `Cache-Control: no-store` header added.
+
+### P4 Fixes
+
+- **BUG-10: No length cap on `contactInfo.name` / `companyName`** — Now enforced at 200 chars each.
+- **BUG-11: `qty` stored on items but not used in total (keys/fob orders)** — Non-perOC items now priced as `product.price × qty`; `qty` normalised to a positive integer in the item whitelist.
+- **BUG-12: `smtp.host` accepted internal IPs / CRLF (SSRF vector)** — CRLF stripped from `smtp.host` on save (full hostname validation deferred).
+
+---
+
 ## 2026-03-25 — Admin E2E Round 4: Order Integrity, Input Validation & XSS
 
 ### P2 Security Fixes

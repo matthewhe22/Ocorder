@@ -164,3 +164,4 @@ node server.js
 | 2026-03-25 | Email subject tokens: add {buildingName}/{address}/{lotNumber} substitution; remove {total} from admin notification subject default and live config |
 | 2026-03-25 | Manager Admin Charge field for keys/fob products: stored in plan catalog, snapshotted on order items server-side, exported in CSV (admin only — not shown to applicants) |
 | 2026-03-25 | Admin E2E round 4: planId/productId enforcement, email format validation, control char stripping, lots id validation, dead /api/admin route removed, cert email XSS fix |
+| 2026-03-25 | Admin E2E round 5: item/selectedShipping field whitelisting, order status on creation, CRLF in config, smtp.pass masking, {total} removed from default subject, /api/config/public parity, qty×price for keys |
