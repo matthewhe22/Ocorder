@@ -294,10 +294,14 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
     });
     const tpl = cfg.emailTemplate || {};
     const orderType = order.orderCategory === "keys" ? "Keys" : "OC Certificate";
+    const firstItem = order.items?.[0];
     const adminSubject = (tpl.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
       .replace(/{orderId}/g, order.id)
       .replace(/{orderType}/g, orderType)
-      .replace(/{total}/g, `$${(order.total || 0).toFixed(2)} AUD`);
+      .replace(/{total}/g, `$${(order.total || 0).toFixed(2)} AUD`)
+      .replace(/{buildingName}/g, firstItem?.planName || "")
+      .replace(/{address}/g, firstItem?.planName || "")   // alias — same as {buildingName}
+      .replace(/{lotNumber}/g, firstItem?.lotNumber || "");
     const mailOpts = {
       from: `"TOCS Order Portal" <${toEmail}>`,
       to: toEmail,
