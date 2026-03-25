@@ -124,8 +124,14 @@ node server.js
 | No login rate limiting | Medium | Brute-force login possible |
 | Sessions lost on server restart | Low | SESSIONS Map is in-memory only |
 | SMTP password in settings response | Low | Masked in GET but still stored plaintext |
-| No server-side product price validation vs plan | Medium | item.price trusted from client; only total is recalculated |
 | No cap on order.items array size | Low | No max items per order |
+| Multiple concurrent sessions per user | Low | No session limit; changing password clears all via SESSIONS.clear() |
+| Token lifetime not renewable | Low | 8h token, no refresh endpoint |
+| Invalid base64 silently accepted for authority upload | Low | Buffer.from() decodes garbage; file is stored but content is meaningless |
+| Lots import missing schema validation | Low | Individual lot objects not schema-validated (no id/number check) |
+| Payment field not whitelisted | Low | Any string accepted for payment method |
+| config.json corruption at startup | Low | readConfig() falls back in-memory but doesn't rewrite the file |
+| No audit trail for plan/lots import | Low | Destructive writes leave no log entry |
 
 ---
 
@@ -152,4 +158,5 @@ node server.js
 | 2026-03-21 | Keys/Fob shipping, SP uploads for Stripe, email audit logging |
 | 2026-03-22 | Stripe config UI, bug fixes (admin crash, SMTP test, keys cart) |
 | 2026-03-23 | Admin email template editor, product save flow fixes |
-| 2026-03-25 | Admin E2E hardening: fraud-proof total, plan schema validation, XSS escaping, status enum, null-safe send-cert, authority 404 disambiguation, input validation |
+| 2026-03-25 | Admin E2E round 1: fraud-proof total, plan schema validation, XSS escaping, status enum, null-safe send-cert, authority 404 disambiguation, input validation |
+| 2026-03-25 | Admin E2E round 2: path traversal fix, order field whitelist, catalog-based item price validation, order ID format, file extension whitelist, lots deduplication, 413/405 responses, config validation |

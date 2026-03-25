@@ -2,6 +2,37 @@
 
 ---
 
+## 2026-03-25 — Admin E2E Round 2: Security & Integrity Hardening (server.js)
+
+### Critical Bug Fixes
+
+- **Path traversal via `lotAuthorityFile`** — `POST /api/orders` now uses a field whitelist; `lotAuthorityFile` and all other admin-only fields are stripped before persistence. `GET /api/orders/:id/authority` now resolves the path with `path.basename()` and asserts the result is inside `UPLOADS_DIR`, preventing arbitrary file reads (including `config.json` and `/etc/passwd`).
+
+### High Severity Bug Fixes
+
+- **Per-item prices not validated against catalog (fraud vector)** — `POST /api/orders` now looks up each `item.productId` in the plan's products list and overwrites `item.price` with the server-authoritative price (applying `secondaryPrice` for additional OC items on `perOC` products). Clients can no longer set item prices to 1 cent.
+- **Arbitrary order fields persisted from client** — Field whitelist on order creation: only `id`, `planId`, `lotId`, `orderCategory`, `contactInfo`, `payment`, `items`, `selectedShipping` are stored. Client-supplied `status`, `cancelReason`, `adminNotes`, `lotAuthorityFile` and any other field are stripped before persistence.
+
+### Medium Severity Bug Fixes
+
+- **Order IDs with slashes/spaces permanently unreachable** — `POST /api/orders` rejects IDs containing `/`, `\`, `?`, whitespace, `#`, or control characters. Max length 100 characters.
+- **Executable file extensions accepted for authority upload** — Extension now validated against `[.pdf, .jpg, .jpeg, .png]`; anything else stored as `.bin`.
+- **Duplicate lot IDs accepted in lots import** — `POST /api/lots/import` deduplicates by `id` (last occurrence wins) before writing.
+- **Empty lots array silently wiped all lots** — `POST /api/lots/import` now returns 400 if `lots` array is empty.
+
+### Low Severity Bug Fixes
+
+- **Embedded newlines in CSV fields broke row structure** — CSV export now strips `\r`, `\n`, `\t` from all field values before quoting.
+
+### Input Validation & Error Improvements
+
+- **Oversized body returned connection-reset with no HTTP status** — `readBody()` now sends HTTP 413 with a JSON error body before `req.destroy()`.
+- **Wrong HTTP methods returned 404** — Known API routes now return 405 Method Not Allowed with an `Allow:` header.
+- **Empty `orderEmail` accepted** — `POST /api/config/settings` rejects empty/non-string `orderEmail` with 400.
+- **Non-numeric SMTP port silently fell back to 587** — `smtp.port` now validated as a finite positive number; invalid values return 400.
+
+---
+
 ## 2026-03-25 — Admin E2E Security & Validation Hardening (server.js)
 
 ### Critical Bug Fixes
