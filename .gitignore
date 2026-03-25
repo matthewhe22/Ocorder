@@ -28,6 +28,7 @@ npm-debug.log*
 # Data files (contain live orders / config — not for version control)
 data.json
 config.json
+*.bak
 
 # Credentials / secrets (NEVER commit these)
 .env.development.loca
