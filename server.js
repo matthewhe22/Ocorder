@@ -345,10 +345,20 @@ if (!fs.existsSync(DATA_FILE))   writeData(DEFAULT_DATA);
 if (!fs.existsSync(CONFIG_FILE)) writeConfig(DEFAULT_CONFIG);
 
 // ── Body parser ───────────────────────────────────────────────────────────────
-function readBody(req) {
+function readBody(req, res) {
   return new Promise((resolve, reject) => {
     let body = "";
-    req.on("data", c => { body += c; if (body.length > 2e6) req.destroy(); });
+    req.on("data", c => {
+      body += c;
+      if (body.length > 2e6) {
+        if (res && !res.headersSent) {
+          const msg = JSON.stringify({ error: "Request body too large (max 2 MB)." });
+          res.writeHead(413, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(msg) });
+          res.end(msg);
+        }
+        req.destroy();
+      }
+    });
     req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({}); } });
     req.on("error", reject);
   });
@@ -445,7 +455,7 @@ async function handler(req, res) {
 
   // ── POST /api/auth  (unified auth endpoint) ───────────────────────────────
   if (urlPath === "/api/auth" && method === "POST") {
-    const body = await readBody(req);
+    const body = await readBody(req, res);
     const { action } = body;
 
     // action=login
@@ -539,25 +549,69 @@ async function handler(req, res) {
 
   // ── POST /api/orders  (public — customer places order, JSON + optional base64 file) ─
   if (urlPath === "/api/orders" && method === "POST") {
-    const body = await readBody(req);
-    const order = body.order || body; // support both { order, lotAuthority } and flat order
-    if (!order.id || !Array.isArray(order.items)) return json(res, 400, { error: "Invalid order." });
-    if (order.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
-    if (!order.contactInfo?.name || !order.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    const body = await readBody(req, res);
+    const raw = body.order || body; // support both { order, lotAuthority } and flat order
+    if (!raw.id || !Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
+    // Validate order ID format: no path separators or control characters
+    if (/[/\\?\s#\x00-\x1f]/.test(raw.id)) return json(res, 400, { error: "Order ID must not contain spaces, slashes, or control characters." });
+    if (raw.id.length > 100) return json(res, 400, { error: "Order ID must not exceed 100 characters." });
+    if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
+    if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    // Validate payment method
+    const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
+    if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
+    // Whitelist fields — never persist client-supplied admin fields
+    const order = {
+      id: raw.id,
+      planId: raw.planId,
+      lotId: raw.lotId,
+      orderCategory: raw.orderCategory,
+      contactInfo: raw.contactInfo,
+      payment: raw.payment || "bank",
+      items: raw.items,
+      selectedShipping: raw.selectedShipping,
+    };
     // Always normalise date to a valid ISO string — never trust client clock alone
-    const parsedDate = order.date ? new Date(order.date) : null;
+    const parsedDate = raw.date ? new Date(raw.date) : null;
     order.date = (parsedDate && !isNaN(parsedDate)) ? parsedDate.toISOString() : new Date().toISOString();
-    // Recalculate total server-side from item prices to prevent fraud
-    const recalcTotal = (order.items || []).reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    // Validate + override item prices against the plan's product catalog
+    {
+      const d = readData();
+      const plan = d.strataPlans.find(p => p.id === order.planId);
+      if (plan?.products?.length > 0) {
+        // Count how many times each perOC product appears per lot to apply secondaryPrice
+        const ocCountPerProduct = {}; // key: `${productId}:${lotId}`
+        for (const item of order.items) {
+          if (!item.productId) continue;
+          const product = plan.products.find(p => p.id === item.productId);
+          if (!product) continue;
+          if (product.perOC) {
+            const key = `${item.productId}:${item.lotId || ""}`;
+            ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
+            item.price = ocCountPerProduct[key] === 1
+              ? product.price
+              : (product.secondaryPrice ?? product.price);
+          } else {
+            item.price = product.price;
+          }
+        }
+      }
+    }
+    const recalcTotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
     order.total = Math.round(recalcTotal * 100) / 100;
 
     let authorityBuf = null;
     let authorityFilename = null;
     if (body.lotAuthority?.data) {
       try {
-        authorityBuf = Buffer.from(body.lotAuthority.data, "base64");
-        const ext = path.extname(body.lotAuthority.filename || ".bin") || ".bin";
-        authorityFilename = (order.id || "unknown") + "-lot-authority" + ext;
+        const decoded = Buffer.from(body.lotAuthority.data, "base64");
+        if (decoded.length === 0) throw new Error("Empty or invalid base64 data");
+        // Whitelist allowed file extensions
+        const ALLOWED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
+        const rawExt = path.extname(body.lotAuthority.filename || "").toLowerCase();
+        const ext = ALLOWED_EXTS.includes(rawExt) ? rawExt : ".bin";
+        authorityBuf = decoded;
+        authorityFilename = order.id + "-lot-authority" + ext;
         fs.writeFileSync(path.join(UPLOADS_DIR, authorityFilename), authorityBuf);
         order.lotAuthorityFile = authorityFilename;
         console.log(`  📎  Lot authority saved: ${authorityFilename}`);
@@ -585,7 +639,7 @@ async function handler(req, res) {
   if (statusMatch && method === "PUT") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { status, note } = await readBody(req);
+    const { status, note } = await readBody(req, res);
     if (!status || typeof status !== "string" || !status.trim()) return json(res, 400, { error: "A non-empty status string is required." });
     const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued"];
     if (!VALID_STATUSES.includes(status)) return json(res, 400, { error: `Invalid status. Allowed: ${VALID_STATUSES.join(", ")}.` });
@@ -610,7 +664,11 @@ async function handler(req, res) {
     const order = d.orders.find(o => o.id === authorityMatch[1]);
     if (!order) return json(res, 404, { error: "Order not found." });
     if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
-    const filePath = path.join(UPLOADS_DIR, order.lotAuthorityFile);
+    const filePath = path.resolve(UPLOADS_DIR, path.basename(order.lotAuthorityFile));
+    // Guard against path traversal: resolved path must stay inside UPLOADS_DIR
+    if (!filePath.startsWith(UPLOADS_DIR + path.sep) && filePath !== UPLOADS_DIR) {
+      return json(res, 403, { error: "Forbidden." });
+    }
     fs.readFile(filePath, (err, data) => {
       if (err) return json(res, 404, { error: "File not found on server." });
       const ext = path.extname(order.lotAuthorityFile).toLowerCase();
@@ -630,7 +688,7 @@ async function handler(req, res) {
   if (sendCertMatch && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { message, attachment } = await readBody(req);
+    const { message, attachment } = await readBody(req, res);
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === sendCertMatch[1]);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
@@ -687,7 +745,9 @@ async function handler(req, res) {
         o.status  || "",
       ]);
     }
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    // Strip control characters (including embedded newlines) to prevent row-splitting in spreadsheets
+    const csvEsc = v => `"${String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""')}"`;
+    const csv = rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
     res.writeHead(200, {
       "Content-Type": "text/csv",
       "Content-Disposition": `attachment; filename="tocs-orders-${new Date().toISOString().slice(0,10)}.csv"`,
@@ -699,21 +759,27 @@ async function handler(req, res) {
   if (urlPath === "/api/lots/import" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { planId, lots } = await readBody(req);
+    const { planId, lots } = await readBody(req, res);
     if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
+    if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
+    // Deduplicate by lot id (last occurrence wins)
+    const seenLots = new Map();
+    for (const lot of lots) {
+      if (lot && typeof lot === "object" && lot.id) seenLots.set(lot.id, lot);
+    }
     const d = readData();
     const idx = d.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return json(res, 404, { error: "Plan not found." });
-    d.strataPlans[idx].lots = lots;
+    d.strataPlans[idx].lots = [...seenLots.values()];
     writeData(d);
-    return json(res, 200, { ok: true, count: lots.length });
+    return json(res, 200, { ok: true, count: d.strataPlans[idx].lots.length });
   }
 
   // ── POST /api/plans  (admin — save full plans array) ──────────────────────
   if (urlPath === "/api/plans" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { plans } = await readBody(req);
+    const { plans } = await readBody(req, res);
     if (!Array.isArray(plans)) return json(res, 400, { error: "Invalid plans." });
     if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
     // Validate each plan is an object with a non-empty id and name
@@ -814,13 +880,20 @@ async function handler(req, res) {
   if (urlPath === "/api/config/settings" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { orderEmail, smtp, paymentDetails, emailTemplate } = await readBody(req);
+    const { orderEmail, smtp, paymentDetails, emailTemplate } = await readBody(req, res);
     const cfg = readConfig();
-    if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
+    if (orderEmail !== undefined) {
+      if (typeof orderEmail !== "string" || !orderEmail.trim()) return json(res, 400, { error: "orderEmail must be a non-empty string." });
+      cfg.orderEmail = orderEmail.trim();
+    }
     if (smtp && typeof smtp === "object") {
       cfg.smtp = cfg.smtp || {};
       if (smtp.host !== undefined) cfg.smtp.host = smtp.host;
-      if (smtp.port !== undefined) cfg.smtp.port = Number(smtp.port) || 587;
+      if (smtp.port !== undefined) {
+        const p = Number(smtp.port);
+        if (!Number.isFinite(p) || p <= 0) return json(res, 400, { error: "smtp.port must be a positive number." });
+        cfg.smtp.port = p;
+      }
       if (smtp.user !== undefined) cfg.smtp.user = smtp.user;
       if (smtp.pass !== undefined) cfg.smtp.pass = smtp.pass;
     }
@@ -834,8 +907,30 @@ async function handler(req, res) {
     return json(res, 200, { ok: true });
   }
 
-  // ── 404 for unmatched /api/ ────────────────────────────────────────────────
+  // ── 405 / 404 for unmatched /api/ routes ──────────────────────────────────
   if (urlPath.startsWith("/api/")) {
+    // Return 405 if the path is known but the method is wrong
+    const knownRoutes = [
+      [/^\/api\/auth$/, ["POST"]],
+      [/^\/api\/data$/, ["GET"]],
+      [/^\/api\/orders$/, ["POST"]],
+      [/^\/api\/orders\/export$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
+      [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
+      [/^\/api\/lots\/import$/, ["POST"]],
+      [/^\/api\/plans$/, ["POST"]],
+      [/^\/api\/config\/settings$/, ["GET", "POST"]],
+      [/^\/api\/config\/public$/, ["GET"]],
+      [/^\/api\/config\/test-email$/, ["POST"]],
+      [/^\/api\/admin$/, ["POST"]],
+    ];
+    for (const [pattern, methods] of knownRoutes) {
+      if (pattern.test(urlPath)) {
+        res.setHeader("Allow", methods.join(", "));
+        return json(res, 405, { error: `Method Not Allowed. Allowed: ${methods.join(", ")}.` });
+      }
+    }
     return json(res, 404, { error: "Not found." });
   }
 
