@@ -162,3 +162,4 @@ node server.js
 | 2026-03-25 | Admin E2E round 2: path traversal fix, order field whitelist, catalog-based item price validation, order ID format, file extension whitelist, lots deduplication, 413/405 responses, config validation |
 | 2026-03-25 | Admin E2E round 3: CRLF server crash fix, authority file write-before-check, paymentDetails XSS in emails, order.id/lotAuthorityFile/orderEmail HTML escaping, email failure auditLog, orderEmail format validation |
 | 2026-03-25 | Email subject tokens: add {buildingName}/{address}/{lotNumber} substitution; remove {total} from admin notification subject default and live config |
+| 2026-03-25 | Manager Admin Charge field for keys/fob products: stored in plan catalog, snapshotted on order items server-side, exported in CSV (admin only — not shown to applicants) |

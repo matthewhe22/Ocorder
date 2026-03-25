@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-03-25 — Manager Admin Charge for Keys/Fob Products
+
+### New Feature
+
+- **Manager Admin Charge field on Keys/Fob products** — When setting up a Keys/Fobs/Remotes product for a building, admins can now enter a "Manager Admin Charge (AUD)" amount. This field is:
+  - Only visible in the product add/edit modal when the category is "Keys / Fobs / Remotes"
+  - Not shown to applicants at any point in the order flow
+  - Stored in the strata plan's product record in `data.json`
+  - Snapshotted onto each order item (`item.managerAdminCharge`) at order creation time, taken from the plan catalog server-side (tamper-proof)
+  - Exported as a "Manager Admin Charge (AUD)" column in the admin CSV export — calculated as the sum of each item's charge multiplied by quantity; blank if zero
+
+---
+
 ## 2026-03-25 — Admin E2E Round 3: Docs, Email & Payment Hardening (server.js)
 
 ### Medium Severity Bug Fixes

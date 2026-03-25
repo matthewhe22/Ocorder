@@ -598,6 +598,10 @@ async function handler(req, res) {
           } else {
             item.price = product.price;
           }
+          // Snapshot managerAdminCharge from catalog (keys/fob products only, admin use)
+          if (product.managerAdminCharge !== undefined) {
+            item.managerAdminCharge = product.managerAdminCharge;
+          }
         }
       }
     }
@@ -756,8 +760,9 @@ async function handler(req, res) {
     const token = authHeader(req) || new URL("http://x" + req.url).searchParams.get("token");
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
-    const rows = [["Order ID","Date","Name","Email","Phone","Items","Total (AUD)","Payment","Status"]];
+    const rows = [["Order ID","Date","Name","Email","Phone","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"]];
     for (const o of d.orders) {
+      const adminCharge = (o.items || []).reduce((sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0);
       rows.push([
         o.id,
         new Date(o.date).toLocaleDateString("en-AU"),
@@ -768,6 +773,7 @@ async function handler(req, res) {
         (o.total || 0).toFixed(2),
         o.payment || "",
         o.status  || "",
+        adminCharge > 0 ? adminCharge.toFixed(2) : "",
       ]);
     }
     // Strip control characters (including embedded newlines) to prevent row-splitting in spreadsheets

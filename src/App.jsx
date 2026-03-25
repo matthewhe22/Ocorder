@@ -1149,7 +1149,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
                                     <button className="add-btn" onClick={() => {
                                       const key = `${product.id}-null-${selLot}-keys`;
-                                      setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: selLot, lotNumber: lot.number, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround || "", qty: 1 }]);
+                                      setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: selLot, lotNumber: lot.number, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround || "", qty: 1, managerAdminCharge: product.managerAdminCharge || 0 }]);
                                     }}><Ic n="plus" s={13}/> Add</button>
                                     <div style={{ fontSize: "0.62rem", color: "var(--muted)", textAlign: "center" }}>Qty adjustable after adding</div>
                                   </div>
@@ -1951,6 +1951,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const addProduct = async () => {
     if (!form.name || !form.price) return;
     const shippingCosts = buildShippingCosts();
+    const isKeys = (form.category || "oc") === "keys";
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, products: [...pl.products, {
         id: "P" + Date.now(), name: form.name, description: form.desc || "",
@@ -1958,6 +1959,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         secondaryPrice: form.secondaryPrice ? Math.max(0, parseFloat(form.secondaryPrice)) : undefined,
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
+        ...(isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, parseFloat(form.managerAdminCharge) || 0) } : {}),
         ...(shippingCosts ? { shippingCosts } : {}),
       }]
     });
@@ -1968,6 +1970,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const saveProduct = async () => {
     if (!form.name || !form.price) return;
     const shippingCosts = buildShippingCosts();
+    const isKeys = (form.category || "oc") === "keys";
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, products: pl.products.map(pr => pr.id !== editTarget.id ? pr : {
         ...pr, name: form.name, description: form.desc || "",
@@ -1975,6 +1978,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         secondaryPrice: form.secondaryPrice ? Math.max(0, parseFloat(form.secondaryPrice)) : undefined,
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
+        managerAdminCharge: isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? Math.max(0, parseFloat(form.managerAdminCharge) || 0) : undefined,
         ...(shippingCosts ? { shippingCosts } : { shippingCosts: undefined }),
       })
     });
@@ -2136,7 +2140,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (prod.shippingCosts) {
       Object.entries(prod.shippingCosts).forEach(([k, v]) => { scFields[`sc_${k}`] = v; });
     }
-    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", ...scFields });
+    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", ...scFields });
     setModal("editProduct");
   };
 
@@ -2789,6 +2793,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <label className="f-label">Additional OC Price (AUD, incl. GST)</label>
                 <input className="f-input" type="number" min="0" step="0.01" placeholder="150.00" value={form.secondaryPrice||""} onChange={e => upd("secondaryPrice",e.target.value)}/>
                 <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Leave blank to charge the same rate for all OCs.</div>
+              </div>
+            )}
+            {(form.category || "oc") === "keys" && (
+              <div className="form-row">
+                <label className="f-label">Manager Admin Charge (AUD) <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>(admin only — not shown to applicant)</span></label>
+                <input className="f-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.managerAdminCharge||""} onChange={e => upd("managerAdminCharge",e.target.value)}/>
+                <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Internal charge for admin reporting. Not included in the product price shown to applicants.</div>
               </div>
             )}
             {/* Shipping cost overrides — shown when plan has shipping options */}
