@@ -106,12 +106,13 @@ function readConfig() {
 function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
-function buildOrderEmailHtml(order) {
+function buildOrderEmailHtml(order, tpl) {
   const contact = order.contactInfo || {};
   const items = order.items || [];
   let date = "—";
   try { date = new Date(order.date).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "long", timeStyle: "short" }); } catch {}
   const payment = order.payment === "card" ? "Credit / Debit Card" : order.payment === "invoice" ? "Invoice" : order.payment || "—";
+  const introText = (tpl?.adminNotificationIntro || "A new order has been placed on the TOCS Owner Corporation Certificate Portal. Please review and process it at your earliest convenience.");
 
   const itemRows = items.map(item => `
     <tr>
@@ -129,7 +130,7 @@ function buildOrderEmailHtml(order) {
       <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">New Order Notification</p>
     </div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">A new order has been placed on the TOCS Owner Corporation Certificate Portal. Please review and process it at your earliest convenience.</p>
+      <p style="margin-top:0;">${introText}</p>
 
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Order Details</h3>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
@@ -282,11 +283,17 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
       auth: { user: smtp.user, pass: smtp.pass },
       tls: { rejectUnauthorized: false },
     });
+    const tpl = cfg.emailTemplate || {};
+    const orderType = order.orderCategory === "keys" ? "Keys" : "OC Certificate";
+    const adminSubject = (tpl.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
+      .replace(/{orderId}/g, order.id)
+      .replace(/{orderType}/g, orderType)
+      .replace(/{total}/g, `$${(order.total || 0).toFixed(2)} AUD`);
     const mailOpts = {
       from: `"TOCS Order Portal" <${toEmail}>`,
       to: toEmail,
-      subject: `New Order #${order.id} — $${(order.total || 0).toFixed(2)} AUD`,
-      html: buildOrderEmailHtml(order),
+      subject: adminSubject,
+      html: buildOrderEmailHtml(order, tpl),
     };
     if (authorityBuf && authorityFilename) {
       mailOpts.attachments = [{ filename: authorityFilename, content: authorityBuf }];
@@ -311,10 +318,11 @@ async function sendCustomerEmail(order, cfg) {
       auth: { user: smtp.user, pass: smtp.pass },
       tls: { rejectUnauthorized: false },
     });
+    const customerSubject = `Order Confirmed — ${order.id}`;
     await transporter.sendMail({
       from: `"TOCS Order Portal" <${cfg.orderEmail || "Orders@tocs.co"}>`,
       to: toEmail,
-      subject: `Order Confirmed — ${order.id}`,
+      subject: customerSubject,
       html: buildCustomerEmailHtml(order, cfg),
     });
     console.log(`  ✉️   Customer confirmation sent → ${toEmail}`);
@@ -419,7 +427,11 @@ async function handler(req, res) {
 
   // ── GET /api/data  (public) ────────────────────────────────────────────────
   if (urlPath === "/api/data" && method === "GET") {
-    return json(res, 200, readData());
+    const token = authHeader(req);
+    const d = readData();
+    // Authenticated admins get full data (incl. orders); public callers get only plans.
+    if (validToken(token)) return json(res, 200, d);
+    return json(res, 200, { strataPlans: d.strataPlans });
   }
 
   // ── POST /api/auth  (unified auth endpoint) ───────────────────────────────
@@ -537,6 +549,9 @@ async function handler(req, res) {
 
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
     const d = readData();
+    if (d.orders.find(o => o.id === order.id)) {
+      return json(res, 409, { error: "An order with this ID already exists." });
+    }
     d.orders.unshift(order);
     writeData(d);
 
@@ -745,7 +760,13 @@ async function handler(req, res) {
       orderEmail: cfg.orderEmail || "Orders@tocs.co",
       smtp: { host: smtp.host || "mail-au.smtp2go.com", port: smtp.port || 2525, user: smtp.user || "OCCAPP", pass: smtp.pass || "" },
       paymentDetails: { accountName: pd.accountName || "Top Owners Corporation", bsb: pd.bsb || "033-065", accountNumber: pd.accountNumber || "522011", payid: pd.payid || "accounts@tocs.com.au" },
-      emailTemplate: { certificateSubject: et.certificateSubject || "Your OC Certificate — Order #{orderId}", certificateGreeting: et.certificateGreeting || "", footer: et.footer || "" },
+      emailTemplate: {
+        certificateSubject:       et.certificateSubject       || "Your OC Certificate — Order #{orderId}",
+        certificateGreeting:      et.certificateGreeting      || "",
+        footer:                   et.footer                   || "",
+        adminNotificationSubject: et.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}",
+        adminNotificationIntro:   et.adminNotificationIntro   || "A new order has been placed.",
+      },
     });
   }
 
