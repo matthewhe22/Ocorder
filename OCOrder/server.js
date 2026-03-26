@@ -7,10 +7,11 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIST         = path.join(__dirname, "dist");
-const DATA_FILE    = path.join(__dirname, "data.json");
-const CONFIG_FILE  = path.join(__dirname, "config.json");
-const UPLOADS_DIR  = path.join(__dirname, "uploads");
+const DIST        = path.join(__dirname, "dist");
+const DATA_FILE   = path.join(__dirname, process.env.DATA_FILE   || "data.json");
+const CONFIG_FILE = path.join(__dirname, process.env.CONFIG_FILE || "config.json");
+const UPLOADS_DIR = path.join(__dirname, process.env.UPLOADS_DIR || "uploads");
+const DEMO_MODE   = process.env.DEMO_MODE === "true";
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
