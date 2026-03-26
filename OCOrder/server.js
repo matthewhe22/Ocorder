@@ -675,8 +675,9 @@ async function handler(req, res) {
     // Always use server time — never trust client-supplied date
     order.date = new Date().toISOString();
     // Validate + override item prices against the plan's product catalog
+    // (single readData call — reused below for duplicate check and write)
+    const d = readData();
     {
-      const d = readData();
       const plan = d.strataPlans.find(p => p.id === order.planId);
       // Require a known plan — no plan means no price enforcement
       if (!plan) return json(res, 400, { error: "A valid planId is required." });
