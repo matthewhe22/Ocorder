@@ -1286,14 +1286,17 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  const modeLabel  = DEMO_MODE ? "DEMO \uD83D\uDD04" : "Production";
+  const dataLabel  = (process.env.DATA_FILE   || "data.json").padEnd(27);
+  const cfgLabel   = (process.env.CONFIG_FILE || "config.json").padEnd(27);
   console.log(`
 ╔════════════════════════════════════════════╗
 ║   TOCS Owner Corporation Portal            ║
 ╠════════════════════════════════════════════╣
 ║   Server  : http://${HOST}:${PORT}${" ".repeat(Math.max(0, 22 - HOST.length - String(PORT).length))}║
-║   Env     : ${(process.env.NODE_ENV || "production").padEnd(29)}║
-║   Dist    : ./dist                         ║
-║   Data    : ./data.json                    ║
+║   Mode    : ${modeLabel.padEnd(29)}║
+║   Data    : ${dataLabel}║
+║   Config  : ${cfgLabel}║
 ╚════════════════════════════════════════════╝
 `);
 });
