@@ -166,3 +166,4 @@ node server.js
 | 2026-03-25 | Admin E2E round 4: planId/productId enforcement, email format validation, control char stripping, lots id validation, dead /api/admin route removed, cert email XSS fix |
 | 2026-03-25 | Admin E2E round 5: item/selectedShipping field whitelisting, order status on creation, CRLF in config, smtp.pass masking, {total} removed from default subject, /api/config/public parity, qty×price for keys |
 | 2026-03-25 | Admin E2E round 6: admin username CRLF/length, product price type check, managerAdminCharge hidden from public, shipping in total, managerAdminCharge stripped from customer response, qty cap |
+| 2026-03-26 | Admin E2E round 7: paymentMethods/logo config parity, secondaryPrice type validation, product id required, legacy order status migration, same-password rejection |

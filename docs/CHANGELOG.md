@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-03-26 — Admin E2E Round 7: Config Parity, Plan Validation & Data Migration
+
+### P2 Security / Crash Fixes
+
+- **BUG-07-01: `paymentMethods` silently ignored on `POST /api/config/settings`** — Added `paymentMethods` handling; `bankEnabled`/`payidEnabled` booleans now persisted. `GET /api/config/settings` now returns `paymentMethods` object.
+- **BUG-07-02: String `secondaryPrice` (e.g. `"99"`) stored in catalog → `toFixed()` crash in all email builders** — Plan validation now requires `secondaryPrice` to be a finite non-negative number. Order item price assignment now coerces both `price` and `secondaryPrice` through `Number()`.
+
+### P3 Fixes
+
+- **BUG-07-03: Products without an `id` field accepted silently into plan catalog** — Plan validation now requires every product to have a non-empty string `id`.
+- **BUG-07-04: `logo` field returned by `GET /api/config/public` but unsettable** — `POST /api/config/settings` now accepts a `logo` string and persists it; `GET /api/config/settings` returns the current logo value.
+
+### P4 Fixes
+
+- **BUG-07-05: 84 legacy orders missing `status` field** — `readData()` now back-fills missing `status` as `"Pending Payment"` on every read (non-destructive migration).
+- **BUG-07-06: `change-credentials` accepted new password identical to current** — Now returns 400 `"New password must differ from the current password."`.
+
+---
+
 ## 2026-03-25 — Admin E2E Round 6: Admin Hardening, Shipping Total & Data Leaks
 
 ### P2 Security / Data Integrity Fixes

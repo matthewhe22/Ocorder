@@ -93,7 +93,14 @@ function getAdmins(cfg) {
 
 // ── File helpers ──────────────────────────────────────────────────────────────
 function readData() {
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); } catch { return structuredClone(DEFAULT_DATA); }
+  try {
+    const d = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    // Back-fill status on legacy orders that pre-date the status field
+    if (Array.isArray(d.orders)) {
+      d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
+    }
+    return d;
+  } catch { return structuredClone(DEFAULT_DATA); }
 }
 function writeData(d) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
@@ -547,6 +554,7 @@ async function handler(req, res) {
       if (currentPass !== admins[idx].password) return json(res, 400, { error: "Current password is incorrect." });
       if (newPass) {
         if (newPass.length < 8) return json(res, 400, { error: "New password must be at least 8 characters." });
+        if (newPass === currentPass) return json(res, 400, { error: "New password must differ from the current password." });
         admins[idx].password = newPass;
       }
       if (newUser && newUser.trim()) admins[idx].username = newUser.trim();
@@ -628,8 +636,8 @@ async function handler(req, res) {
           const key = `${item.productId}:${item.lotId || ""}`;
           ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
           item.price = ocCountPerProduct[key] === 1
-            ? product.price
-            : (product.secondaryPrice ?? product.price);
+            ? Number(product.price)
+            : Number(product.secondaryPrice ?? product.price);
         } else {
           // Multiply by qty for non-perOC products (e.g. keys/fobs where user selects quantity)
           item.price = product.price * (item.qty || 1);
@@ -866,10 +874,16 @@ async function handler(req, res) {
       if (Array.isArray(p.products)) {
         for (const prod of p.products) {
           if (!prod || typeof prod !== "object") continue;
+          if (!prod.id || typeof prod.id !== "string")
+            return json(res, 400, { error: `Each product in plan '${p.id}' must have a non-empty string id.` });
           if (typeof prod.price !== "number" || !Number.isFinite(prod.price))
             return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' price must be a finite number.` });
           if (prod.price < 0)
             return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has a negative price.` });
+          if (prod.secondaryPrice !== undefined) {
+            if (typeof prod.secondaryPrice !== "number" || !Number.isFinite(prod.secondaryPrice) || prod.secondaryPrice < 0)
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' secondaryPrice must be a non-negative number.` });
+          }
           if (prod.managerAdminCharge !== undefined) {
             if (typeof prod.managerAdminCharge !== "number" || !Number.isFinite(prod.managerAdminCharge) || prod.managerAdminCharge < 0)
               return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has an invalid managerAdminCharge (must be a non-negative number).` });
@@ -950,10 +964,13 @@ async function handler(req, res) {
     const smtp = cfg.smtp || {};
     const pd = cfg.paymentDetails || {};
     const et = cfg.emailTemplate || {};
+    const pm = cfg.paymentMethods || {};
     return json(res, 200, {
       orderEmail: cfg.orderEmail || "Orders@tocs.co",
+      logo: cfg.logo || "",
       smtp: { host: smtp.host || "mail-au.smtp2go.com", port: smtp.port || 2525, user: smtp.user || "OCCAPP", pass: smtp.pass ? "••••••••" : "" },
       paymentDetails: { accountName: pd.accountName || "Top Owners Corporation", bsb: pd.bsb || "033-065", accountNumber: pd.accountNumber || "522011", payid: pd.payid || "accounts@tocs.com.au" },
+      paymentMethods: { bankEnabled: pm.bankEnabled !== false, payidEnabled: pm.payidEnabled !== false },
       emailTemplate: {
         certificateSubject:       et.certificateSubject       || "Your OC Certificate — Order #{orderId}",
         certificateGreeting:      et.certificateGreeting      || "",
@@ -968,8 +985,13 @@ async function handler(req, res) {
   if (urlPath === "/api/config/settings" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { orderEmail, smtp, paymentDetails, emailTemplate } = await readBody(req, res);
+    const body2 = await readBody(req, res);
+    const { orderEmail, smtp, paymentDetails, emailTemplate, paymentMethods, logo } = body2;
     const cfg = readConfig();
+    if (logo !== undefined) {
+      if (typeof logo !== "string") return json(res, 400, { error: "logo must be a string." });
+      cfg.logo = logo.trim();
+    }
     if (orderEmail !== undefined) {
       if (typeof orderEmail !== "string" || !orderEmail.trim()) return json(res, 400, { error: "orderEmail must be a non-empty string." });
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orderEmail.trim())) return json(res, 400, { error: "orderEmail must be a valid email address." });
@@ -1000,6 +1022,11 @@ async function handler(req, res) {
         return out;
       };
       cfg.emailTemplate = { ...cfg.emailTemplate, ...sanitiseTemplate(emailTemplate) };
+    }
+    if (paymentMethods && typeof paymentMethods === "object") {
+      cfg.paymentMethods = cfg.paymentMethods || {};
+      if (typeof paymentMethods.bankEnabled  === "boolean") cfg.paymentMethods.bankEnabled  = paymentMethods.bankEnabled;
+      if (typeof paymentMethods.payidEnabled === "boolean") cfg.paymentMethods.payidEnabled = paymentMethods.payidEnabled;
     }
     writeConfig(cfg);
     return json(res, 200, { ok: true });
