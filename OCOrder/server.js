@@ -506,6 +506,13 @@ async function handler(req, res) {
       return json(res, 401, { error: "Incorrect username or password." });
     }
 
+    // action=logout
+    if (action === "logout") {
+      const token = authHeader(req);
+      if (token) SESSIONS.delete(token);
+      return json(res, 200, { ok: true });
+    }
+
     // action=list-admins
     if (action === "list-admins") {
       const token = authHeader(req);
