@@ -915,9 +915,15 @@ async function handler(req, res) {
     const d = readData();
     const idx = d.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return json(res, 404, { error: "Plan not found." });
+    const prevCount = (d.strataPlans[idx].lots || []).length;
     d.strataPlans[idx].lots = [...seenLots.values()];
+    const newCount = d.strataPlans[idx].lots.length;
+    d.strataPlans[idx].lotsImportLog = [
+      ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)), // keep last 50 entries
+      { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${newCount} lots` },
+    ];
     writeData(d);
-    return json(res, 200, { ok: true, count: d.strataPlans[idx].lots.length });
+    return json(res, 200, { ok: true, count: newCount });
   }
 
   // ── POST /api/plans  (admin — save full plans array) ──────────────────────
