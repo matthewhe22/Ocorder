@@ -650,7 +650,7 @@ async function handler(req, res) {
     const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
     const order = {
-      id: raw.id,
+      id: serverId,
       planId: raw.planId,
       lotId: raw.lotId,
       orderCategory: raw.orderCategory,
