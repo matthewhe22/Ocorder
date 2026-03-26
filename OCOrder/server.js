@@ -1143,7 +1143,7 @@ async function handler(req, res) {
   if (urlPath === "/api/demo/reset" && method === "POST") {
     if (!DEMO_MODE) return json(res, 403, { error: "Not available in production." });
     writeData(structuredClone(DEMO_SEED_DATA));
-    // Also wipe all active sessions so the demo admin must re-login
+    writeConfig(structuredClone(DEMO_DEFAULT_CONFIG));
     SESSIONS.clear();
     console.log("  🔄  Demo data reset to seed state.");
     return json(res, 200, { ok: true, message: "Demo data has been reset to the initial state." });
