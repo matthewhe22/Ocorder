@@ -789,10 +789,8 @@ async function handler(req, res) {
       try {
         const safeFilename = path.basename(order.lotAuthorityFile).replace(/[^\w.\-]/g, "_");
         const filePath = path.resolve(UPLOADS_DIR, safeFilename);
-        if (filePath.startsWith(UPLOADS_DIR + path.sep) && fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      } catch (e) { console.error("  ❌  Failed to delete authority file:", e.message); }
+        if (filePath.startsWith(UPLOADS_DIR + path.sep)) fs.unlinkSync(filePath);
+      } catch (e) { if (e.code !== "ENOENT") console.error("  ❌  Failed to delete authority file:", e.message); }
     }
     d.orders.splice(idx, 1);
     writeData(d);
