@@ -265,7 +265,7 @@ function buildCertEmailHtml(order, message, cfg) {
     .replace(/{address}/g, esc(lot?.planName || ""));
   const bodyText = message || raw;
   const htmlBody = esc(bodyText).replace(/\n/g, "<br>");
-  const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
