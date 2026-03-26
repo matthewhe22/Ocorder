@@ -633,7 +633,6 @@ async function handler(req, res) {
     if ((raw.contactInfo.companyName || "").length > 200) return json(res, 400, { error: "Company name must not exceed 200 characters." });
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (raw.items.length > 50) return json(res, 400, { error: "Order cannot contain more than 50 items." });
-    // OC category orders must include an authority document
     if (raw.orderCategory === "oc" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for OC certificate orders." });
     // Validate payment method
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
