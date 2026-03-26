@@ -292,7 +292,7 @@ export { KV_AVAILABLE };
 // ── Data helpers ──────────────────────────────────────────────────────────────
 export async function readData() {
   const d = await kvGet(DATA_KEY);
-  if (!d) return DEFAULT_DATA;
+  if (!d) return DEMO_MODE ? structuredClone(DEMO_DEFAULT_DATA) : DEFAULT_DATA;
 
   // One-time migrations for plans stored in Redis before new fields were added.
   let migrated = false;
