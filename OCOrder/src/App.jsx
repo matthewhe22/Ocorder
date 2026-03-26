@@ -2581,7 +2581,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {o.status === "Invoice to be issued" && (
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
-                        {(o.status === "Pending Payment" || o.status === "Awaiting Payment" || o.status === "Invoice sent, awaiting payment" || o.status === "Awaiting Stripe Payment") && (
+                        {o.status === "Pending Payment" && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && o.orderCategory !== "keys" && (
