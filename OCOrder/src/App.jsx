@@ -1936,8 +1936,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       .then(r => r.json()).then(d => setData(d)).catch(() => {});
   };
   const handleLogout = () => {
+    const tok = adminToken;
     setAdminToken(null);
     try { sessionStorage.removeItem("admin_token"); sessionStorage.removeItem("admin_user"); } catch {}
+    if (tok) fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + tok }, body: JSON.stringify({ action: "logout" }) }).catch(() => {});
   };
 
   if (!adminToken) return <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />;
