@@ -411,6 +411,7 @@ export function extractToken(req) {
 const ALLOWED_ORIGINS = [
   "https://occorder.vercel.app",
   "https://tocs.co",
+  "https://occorder-demo.vercel.app",   // demo deployment
   "http://localhost:5173",
   "http://localhost:3000",
 ];
