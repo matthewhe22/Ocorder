@@ -634,9 +634,19 @@ async function handler(req, res) {
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (raw.items.length > 50) return json(res, 400, { error: "Order cannot contain more than 50 items." });
     if (raw.orderCategory === "oc" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for OC certificate orders." });
-    // Validate payment method
+    // Validate payment method against config (prevents bypass of disabled methods)
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
+    {
+      const pmCfg = readConfig();
+      const pm = pmCfg.paymentMethods || {};
+      if ((raw.payment === "stripe" || raw.payment === "card") && !pmCfg.stripe?.secretKey)
+        return json(res, 400, { error: "Stripe payments are not configured. Please choose another payment method." });
+      if (raw.payment === "bank" && pm.bankEnabled === false)
+        return json(res, 400, { error: "Bank transfer payments are currently disabled." });
+      if (raw.payment === "payid" && pm.payidEnabled === false)
+        return json(res, 400, { error: "PayID payments are currently disabled." });
+    }
     // Strip control characters from string values that flow into email subjects / headers
     const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
