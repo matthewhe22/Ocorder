@@ -13,18 +13,21 @@ export default async function handler(req, res) {
   const { orders } = await readData();
 
   const rows = [
-    ["Order ID","Date","Name","Email","Phone","Applicant Type","Owner Name","Company","Delivery Address","Shipping Method","Shipping Cost (AUD)","Items","Total (AUD)","Payment","Status"],
+    ["Order ID","Date","Name","Email","Phone","Building Name","Lot Number","Applicant Type","Owner Name","Company","Delivery Address","Shipping Method","Shipping Cost (AUD)","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"],
     ...orders.map(o => {
       const ci = o.contactInfo || {};
       const effectiveType = ci.applicantType || (ci.companyName ? "agent" : "owner");
       const sa = ci.shippingAddress;
       const deliveryAddr = sa?.street ? [sa.street, sa.suburb, sa.state, sa.postcode].filter(Boolean).join(", ") : "";
+      const adminCharge = (o.items || []).reduce((sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0);
       return [
         o.id,
         new Date(o.date).toLocaleDateString("en-AU"),
         ci.name  ?? "",
         ci.email ?? "",
         ci.phone ?? "",
+        o.items?.[0]?.planName  ?? "",
+        o.items?.[0]?.lotNumber ?? "",
         effectiveType === "agent" ? "Agent" : "Owner",
         ci.ownerName   ?? "",
         ci.companyName ?? "",
@@ -35,6 +38,7 @@ export default async function handler(req, res) {
         (o.total ?? 0).toFixed(2),
         o.payment ?? "",
         o.status  ?? "",
+        adminCharge > 0 ? adminCharge.toFixed(2) : "",
       ];
     }),
   ];

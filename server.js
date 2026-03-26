@@ -826,7 +826,7 @@ async function handler(req, res) {
     const token = authHeader(req) || new URL("http://x" + req.url).searchParams.get("token");
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
-    const rows = [["Order ID","Date","Name","Email","Phone","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"]];
+    const rows = [["Order ID","Date","Name","Email","Phone","Building Name","Lot Number","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"]];
     for (const o of d.orders) {
       const adminCharge = (o.items || []).reduce((sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0);
       rows.push([
@@ -835,6 +835,8 @@ async function handler(req, res) {
         o.contactInfo?.name  || "",
         o.contactInfo?.email || "",
         o.contactInfo?.phone || "",
+        o.items?.[0]?.planName  || "",
+        o.items?.[0]?.lotNumber || "",
         o.items?.length ?? 0,
         (o.total || 0).toFixed(2),
         o.payment || "",

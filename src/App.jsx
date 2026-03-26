@@ -2316,7 +2316,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 </button>
               </div>
               <table className="tbl">
-                <thead><tr><th>Name</th><th>Price (incl.GST)</th><th>2nd OC Price</th><th>Turnaround</th><th>Category</th><th>Per OC</th><th></th></tr></thead>
+                <thead><tr><th>Name</th><th>Price (incl.GST)</th><th>2nd OC Price</th><th>Turnaround</th><th>Category</th><th>Per OC</th><th>Mgr Admin Charge <span style={{fontWeight:400,color:"var(--muted)",fontSize:"0.68rem"}}>(internal)</span></th><th></th></tr></thead>
                 <tbody>
                   {plan.products.map(p => (
                     <tr key={p.id}>
@@ -2326,6 +2326,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td style={{ fontSize: "0.78rem" }}>{p.turnaround}</td>
                       <td><span className={`badge ${(p.category || "oc") === "keys" ? "bg-teal" : "bg-gray"}`}>{(p.category || "oc") === "keys" ? "Keys/Fobs" : "OC Certs"}</span></td>
                       <td><span className={`badge ${p.perOC ? "bg-b" : "bg-gray"}`}>{p.perOC ? "Yes" : "No"}</span></td>
+                      <td>{(p.category || "oc") === "keys" && p.managerAdminCharge !== undefined ? <span style={{fontWeight:600}}>{fmt(p.managerAdminCharge)}</span> : <span style={{color:"var(--muted)"}}>—</span>}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
                         <button className="tbl-act-btn" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
                         <button className="tbl-act-btn danger" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
