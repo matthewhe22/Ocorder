@@ -623,6 +623,21 @@ export default function App() {
 
   const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); };
 
+  // Auto-correct payMethod when pubConfig loads and the current selection is disabled
+  useEffect(() => {
+    if (!pubConfig) return;
+    const methods = [
+      { id: "bank",   enabled: pubConfig.bankEnabled  !== false },
+      { id: "payid",  enabled: pubConfig.payidEnabled !== false },
+      { id: "stripe", enabled: !!pubConfig.stripeEnabled },
+    ];
+    const currentOk = methods.find(m => m.id === payMethod)?.enabled;
+    if (!currentOk) {
+      const first = methods.find(m => m.enabled);
+      if (first) setPayMethod(first.id);
+    }
+  }, [pubConfig]);
+
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
     if (step !== 3 || orderCategory !== "keys") return;
@@ -1920,6 +1935,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ plans }),
       });
+      if (res.status === 401) { handleLogout(); return; }
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || `Save failed (${res.status})`);
@@ -1971,7 +1987,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const addProduct = async () => {
-    if (!form.name || !form.price) return;
+    if (!form.name || !form.id || isNaN(parseFloat(form.price))) return;
     const shippingCosts = buildShippingCosts();
     const isKeys = (form.category || "oc") === "keys";
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
@@ -1990,7 +2006,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const saveProduct = async () => {
-    if (!form.name || !form.price) return;
+    if (!form.name || isNaN(parseFloat(form.price))) return;
     const shippingCosts = buildShippingCosts();
     const isKeys = (form.category || "oc") === "keys";
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
@@ -2414,7 +2430,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── ORDERS ── */}
       {adminTab === "orders" && (() => {
-        const filteredOrders = data.orders.filter(o => {
+        const filteredOrders = (data.orders || []).filter(o => {
           const statusOk = !orderFilter.status || o.status === orderFilter.status;
           const categoryOk = !orderFilter.category || (o.orderCategory || "oc") === orderFilter.category;
           const building = o.items?.[0]?.planName || "";
@@ -2741,11 +2757,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── SECURITY ── */}
       {adminTab === "settings" && (
-        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} />
+        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} onAuthFail={handleLogout} />
       )}
 
       {adminTab === "payment" && (
-        <PaymentTab adminToken={adminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
+        <PaymentTab adminToken={adminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} onAuthFail={handleLogout} />
       )}
 
       {adminTab === "branding" && (
@@ -2813,7 +2829,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             </div>
             <div className="form-row">
               <label className="f-label">1st OC Price (AUD, incl. GST)</label>
-              <input className="f-input" type="number" min="0" step="0.01" placeholder="220.00" value={form.price||""} onChange={e => upd("price",e.target.value)}/>
+              <input className="f-input" type="number" min="0" step="0.01" placeholder="220.00" value={form.price ?? ""} onChange={e => upd("price",e.target.value)}/>
             </div>
             {(form.perOC === "true" || form.perOC === true) && (
               <div className="form-row">
@@ -3338,7 +3354,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ adminToken, pubConfig }) {
+function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
   const codeStyle = { background: "var(--cream)", padding: "1px 4px", borderRadius: "3px" };
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_TPL = {
@@ -3389,6 +3405,7 @@ function SettingsTab({ adminToken, pubConfig }) {
           },
         }),
       });
+      if (r.status === 401) { if (onAuthFail) onAuthFail(); return; }
       if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
       else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
     } catch { setSaveErr("Unable to connect to server."); }
@@ -3543,7 +3560,7 @@ function SettingsTab({ adminToken, pubConfig }) {
 }
 
 // ─── PAYMENT TAB ──────────────────────────────────────────────────────────────
-function PaymentTab({ adminToken, pubConfig, setPubConfig }) {
+function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const DEF_PAY = { accountName: "Top Owners Corporation", bsb: "033-065", accountNumber: "522011", payid: "accounts@tocs.com.au" };
 
   const [bankEnabled,  setBankEnabled]  = useState(true);
@@ -3586,6 +3603,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig }) {
           stripe: { secretKey: stripeSecretKey, publishableKey: stripePubKey },
         }),
       });
+      if (r.status === 401) { if (onAuthFail) onAuthFail(); return; }
       if (r.ok) {
         setSaved(true); setTimeout(() => setSaved(false), 3500);
         if (setPubConfig) setPubConfig(p => ({ ...p, bankEnabled, payidEnabled }));
@@ -4016,6 +4034,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
         body: JSON.stringify({ action: "add-admin", username: addForm.username.trim(), password: addForm.password, name: addForm.name.trim() || undefined }),
       });
       const d = await r.json();
+      if (r.status === 401) { onLogout(); return; }
       if (r.ok) {
         setAddMsg({ type: "ok", text: `Admin "${d.admin.username}" added successfully.` });
         setAddForm({ username: "", password: "", name: "" });
@@ -4027,6 +4046,37 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
       setAddMsg({ type: "err", text: "Unable to connect to server." });
     }
     setAddLoading(false);
+  };
+
+  // ── Reset password modal ─────────────────────────────────────────────────────
+  const [resetTarget, setResetTarget] = useState(null); // { id, username }
+  const [resetPw, setResetPw] = useState("");
+  const [showResetPw, setShowResetPw] = useState(false);
+  const [resetMsg, setResetMsg] = useState(null);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const submitReset = async () => {
+    if (!resetPw) { setResetMsg({ type: "err", text: "Password is required." }); return; }
+    if (resetPw.length < 8) { setResetMsg({ type: "err", text: "Must be at least 8 characters." }); return; }
+    setResetLoading(true); setResetMsg(null);
+    try {
+      const r = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ action: "reset-admin-password", id: resetTarget.id, newPassword: resetPw }),
+      });
+      const d = await r.json();
+      if (r.status === 401) { onLogout(); return; }
+      if (r.ok) {
+        setResetMsg({ type: "ok", text: "Password reset successfully." });
+        setTimeout(() => { setResetTarget(null); setResetPw(""); setResetMsg(null); }, 1800);
+      } else {
+        setResetMsg({ type: "err", text: d.error || "Failed to reset password." });
+      }
+    } catch {
+      setResetMsg({ type: "err", text: "Unable to connect to server." });
+    }
+    setResetLoading(false);
   };
 
   // ── Change own credentials form ─────────────────────────────────────────────
@@ -4095,7 +4145,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
               <tr style={{ borderBottom: "2px solid var(--border)" }}>
                 <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--muted)", fontWeight: 600, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>Name</th>
                 <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--muted)", fontWeight: 600, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em" }}>Username</th>
-                <th style={{ width: 60 }}></th>
+                <th style={{ width: 120 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -4103,7 +4153,14 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
                 <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "8px 8px" }}>{a.name || "—"}{a.username === currentUser && <span style={{ marginLeft: 6, fontSize: "0.7rem", background: "var(--sage)", color: "var(--forest)", borderRadius: 4, padding: "1px 5px", fontWeight: 600 }}>You</span>}</td>
                   <td style={{ padding: "8px 8px", color: "var(--muted)" }}>{a.username}</td>
-                  <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                  <td style={{ padding: "4px 8px", textAlign: "right", display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                    <button
+                      className="tbl-act-btn"
+                      title="Reset password"
+                      onClick={() => { setResetTarget(a); setResetPw(""); setResetMsg(null); setShowResetPw(false); }}
+                    >
+                      <Ic n="key" s={13}/>
+                    </button>
                     <button
                       className="tbl-act-btn danger"
                       title="Remove admin"
@@ -4120,6 +4177,29 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
           </table>
         )}
       </div>
+
+      {/* ── Reset Password Modal ── */}
+      {resetTarget && (
+        <div className="overlay" onClick={() => setResetTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-tt">Reset Password — {resetTarget.username}</h2>
+            {resetMsg && <div className={`alert ${resetMsg.type === "ok" ? "alert-ok" : "alert-warn"}`} style={{ marginBottom: "1rem" }}>{resetMsg.text}</div>}
+            <div className="form-row">
+              <label className="f-label">New Password *</label>
+              <div className="pw-wrap">
+                <input className="f-input" type={showResetPw ? "text" : "password"} placeholder="Min. 8 characters" value={resetPw} onChange={e => { setResetPw(e.target.value); setResetMsg(null); }} style={{ paddingRight: "42px" }}/>
+                <button className="pw-toggle" type="button" onClick={() => setShowResetPw(p => !p)}><Ic n={showResetPw ? "eyeOff" : "eye"} s={16}/></button>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", marginTop: "1.2rem" }}>
+              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => setResetTarget(null)}>Cancel</button>
+              <button className="btn btn-blk" style={{ flex: 1 }} onClick={submitReset} disabled={resetLoading}>
+                {resetLoading ? <><span style={spinStyle}/> Saving…</> : "Reset Password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add Admin ── */}
       <div className="panel" style={{ marginBottom: "1px" }}>

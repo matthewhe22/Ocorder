@@ -158,6 +158,30 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // ── POST action=reset-admin-password ─────────────────────────────────────
+  if (action === "reset-admin-password") {
+    const token = extractToken(req);
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    const { id, newPassword } = body;
+    if (!id) return res.status(400).json({ error: "Admin ID is required." });
+    if (!newPassword) return res.status(400).json({ error: "New password is required." });
+    if (newPassword.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
+
+    const cfg = await readConfig();
+    const admins = getAdmins(cfg);
+    const idx = admins.findIndex(a => a.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Admin not found." });
+
+    admins[idx] = { ...admins[idx], password: newPassword };
+    cfg.admins = admins;
+    cfg.user = cfg.admins[0].username;
+    cfg.pass = cfg.admins[0].password;
+
+    await writeConfig(cfg);
+    return res.status(200).json({ ok: true });
+  }
+
   // ── POST action=change-credentials ────────────────────────────────────────
   if (action === "change-credentials") {
     const token = extractToken(req);

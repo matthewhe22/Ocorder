@@ -541,6 +541,26 @@ async function handler(req, res) {
       return json(res, 200, { ok: true });
     }
 
+    // action=reset-admin-password
+    if (action === "reset-admin-password") {
+      const token = authHeader(req);
+      if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+      const { id, newPassword } = body;
+      if (!id) return json(res, 400, { error: "Admin ID is required." });
+      if (!newPassword) return json(res, 400, { error: "New password is required." });
+      if (newPassword.length < 8) return json(res, 400, { error: "Password must be at least 8 characters." });
+      const cfg = readConfig();
+      const admins = getAdmins(cfg);
+      const idx = admins.findIndex(a => a.id === id);
+      if (idx === -1) return json(res, 404, { error: "Admin not found." });
+      admins[idx] = { ...admins[idx], password: newPassword };
+      cfg.admins = admins;
+      cfg.user = cfg.admins[0].username;
+      cfg.pass = cfg.admins[0].password;
+      writeConfig(cfg);
+      return json(res, 200, { ok: true });
+    }
+
     // action=change-credentials
     if (action === "change-credentials") {
       const token = authHeader(req);
