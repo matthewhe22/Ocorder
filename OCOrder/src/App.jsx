@@ -2523,15 +2523,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <select className="f-select" style={{ flex: "0 0 200px", padding: "6px 10px", fontSize: "0.82rem" }}
               value={orderFilter.status} onChange={e => setOrderFilter(p => ({ ...p, status: e.target.value }))}>
               <option value="">All statuses</option>
-              <option>Pending</option>
+              <option>Pending Payment</option>
               <option>Processing</option>
-              <option>Awaiting Payment</option>
-              <option>Awaiting Stripe Payment</option>
-              <option>Paid</option>
               <option>Issued</option>
               <option>Cancelled</option>
+              <option>On Hold</option>
+              <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
-              <option>Invoice sent, awaiting payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
               <button className="btn btn-out" style={{ padding: "6px 10px", fontSize: "0.78rem" }}
