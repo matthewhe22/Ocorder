@@ -171,12 +171,11 @@ function getAdmins(cfg) {
 function readData() {
   try {
     const d = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    // Back-fill status on legacy orders that pre-date the status field
     if (Array.isArray(d.orders)) {
       d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
     }
     return d;
-  } catch { return structuredClone(DEFAULT_DATA); }
+  } catch { return structuredClone(DEMO_MODE ? DEMO_SEED_DATA : DEFAULT_DATA); }
 }
 function writeData(d) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
