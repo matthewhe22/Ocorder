@@ -290,6 +290,16 @@ function buildCertEmailHtml(order, message, cfg) {
 </body></html>`;
 }
 
+// ── Shared SMTP transporter factory ──────────────────────────────────────────
+function createSmtpTransporter(smtp) {
+  return nodemailer.createTransport({
+    host: smtp.host, port: Number(smtp.port) || 587,
+    secure: Number(smtp.port) === 465,
+    auth: { user: smtp.user, pass: smtp.pass },
+    tls: { rejectUnauthorized: false },
+  });
+}
+
 // ── Send admin notification (with optional authority doc attachment) ────────────
 async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
   const smtp = cfg.smtp || {};
@@ -299,12 +309,7 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
   }
   const toEmail = cfg.orderEmail || "Orders@tocs.co";
   try {
-    const transporter = nodemailer.createTransport({
-      host: smtp.host, port: Number(smtp.port) || 587,
-      secure: Number(smtp.port) === 465,
-      auth: { user: smtp.user, pass: smtp.pass },
-      tls: { rejectUnauthorized: false },
-    });
+    const transporter = createSmtpTransporter(smtp);
     const tpl = cfg.emailTemplate || {};
     const orderType = order.orderCategory === "keys" ? "Keys" : "OC Certificate";
     const firstItem = order.items?.[0];
