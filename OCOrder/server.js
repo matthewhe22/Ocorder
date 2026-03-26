@@ -636,7 +636,9 @@ async function handler(req, res) {
         phone:       stripCtrl(raw.contactInfo?.phone || ""),
         companyName: stripCtrl(raw.contactInfo?.companyName || ""),
       },
-      status: (raw.payment === "stripe" || raw.payment === "card") ? "Processing" : "Pending Payment",
+      status: (raw.payment === "stripe" || raw.payment === "card") ? "Processing"
+            : raw.payment === "invoice" ? "Invoice to be issued"
+            : "Pending Payment",
       payment: raw.payment || "bank",
       items: (raw.items || []).map(item => ({
         productId:   item.productId,
