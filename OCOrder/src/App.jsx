@@ -2569,11 +2569,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${
                         o.status==="Issued"?"bg-b":
                         o.status==="Cancelled"?"bg-r":
-                        o.status==="Paid"?"bg-g":
-                        o.status==="Awaiting Stripe Payment"?"bg-purple":
-                        o.status==="Invoice sent, awaiting payment"?"bg-slate":
+                        o.status==="Processing"?"bg-g":
+                        o.status==="Pending Payment"?"bg-gold":
+                        o.status==="On Hold"?"bg-warn":
+                        o.status==="Awaiting Documents"?"bg-purple":
                         o.status==="Invoice to be issued"?"bg-teal":
-                        "bg-gold"
+                        "bg-slate"
                       }`}>{o.status}</span></td>
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
