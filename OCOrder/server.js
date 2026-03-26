@@ -623,6 +623,8 @@ async function handler(req, res) {
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (raw.items.length > 50) return json(res, 400, { error: "Order cannot contain more than 50 items." });
     if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    if (!raw.contactInfo?.phone || !String(raw.contactInfo.phone).trim()) return json(res, 400, { error: "Customer phone number is required." });
+    if (String(raw.contactInfo.phone).length > 30) return json(res, 400, { error: "Phone number must not exceed 30 characters." });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.contactInfo.email)) return json(res, 400, { error: "A valid customer email address is required." });
     if ((raw.contactInfo.name || "").length > 200) return json(res, 400, { error: "Name must not exceed 200 characters." });
     if ((raw.contactInfo.companyName || "").length > 200) return json(res, 400, { error: "Company name must not exceed 200 characters." });
