@@ -1021,12 +1021,7 @@ async function handler(req, res) {
     }
     const toEmail = cfg.orderEmail || "Orders@tocs.co";
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 587,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createSmtpTransporter(smtp);
       await transporter.verify();
       await transporter.sendMail({
         from: `"TOCS Order Portal" <${toEmail}>`,
