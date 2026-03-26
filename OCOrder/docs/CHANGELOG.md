@@ -2,6 +2,37 @@
 
 ---
 
+## 2026-03-26 — Code Optimisation, Security & Demo/Shadow Environment
+
+### Code Quality & Optimisation
+- **`createSmtpTransporter` helper** — Extracted from 5 duplicated `nodemailer.createTransport` call sites into a single shared function.
+- **`VALID_STATUSES` module constant** — Moved from local variable inside PUT handler to module level; used consistently across all status references.
+- **`send-certificate` + `send-invoice` merged** — Single handler with `isCert` flag replaces two near-identical request handlers.
+- **`filteredOrders` via `useMemo`** — Moved from inline recalculation on every render to memoized computation in Admin component.
+- **SESSIONS expiry cleanup** — Added 30-min interval purge (with `.unref()`) to evict expired session tokens from memory.
+- **TOCTOU fix: authority file deletion** — Replaced `existsSync` guard with `unlinkSync` + `ENOENT` catch.
+- **Double `readData()` eliminated** — POST /api/orders now uses a single data read for both price validation and order write.
+- **`useMemo` import added** to App.jsx.
+
+### Security Fixes
+- **Server-generated order IDs** — Client-supplied `id` field on POST /api/orders is now ignored; server generates `TOCS-{base36}-{hex4}` format.
+- **Stripe payment gate** — Orders with `payment: "stripe"` rejected (400) if Stripe is not configured; bank/payid validated against `paymentMethods` flags.
+- **Dead status strings removed from frontend** — `Mark Paid` button condition simplified from 4 dead status checks to just `"Pending Payment"`.
+- **`orderCategory` dep fix** — Added `orderCategory` to `useEffect` dependency array fixing stale closure bug.
+
+### Demo / Shadow Environment
+- **Environment-variable driven multi-instance** — `DATA_FILE`, `CONFIG_FILE`, `UPLOADS_DIR`, `PORT`, `DEMO_MODE` env vars allow running production and demo instances from the same codebase.
+- **`DEMO_SEED_DATA`** — 2 strata plans (SP10001 Harbour View, SP10002 Parkside Gardens) with 7 pre-seeded orders covering all order statuses.
+- **`DEMO_DEFAULT_CONFIG`** — Demo admin credentials (`demo@tocs.co / Demo@1234`), demo payment details, no SMTP.
+- **Auto-seed on first launch** — Demo mode writes seed data and config at startup if the files don't exist.
+- **`/api/demo/reset` endpoint** — Resets both data and config to seed state, clears all sessions. Returns 403 in production mode.
+- **`demoMode` in `/api/config/public`** — Frontend reads this flag to show/hide the demo banner.
+- **Demo banner in App.jsx** — Yellow top bar displayed when `pubConfig.demoMode === true`, showing credentials and a "Reset Demo" button that calls the reset endpoint and reloads the page.
+- **Startup banner** — Shows `Mode: DEMO 🔄 / Production`, `Data` file, and `Config` file paths.
+- **`npm run demo` script** — `DATA_FILE=demo-data.json CONFIG_FILE=demo-config.json UPLOADS_DIR=uploads-demo PORT=3001 DEMO_MODE=true node server.js`.
+
+---
+
 ## 2026-03-26 — Admin E2E Round 7: Config Parity, Plan Validation & Data Migration
 
 ### P2 Security / Crash Fixes
