@@ -446,9 +446,24 @@ async function handler(req, res) {
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  // CORS — restrict to same origin; adjust ALLOWED_ORIGINS if a separate frontend domain is used
+  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
+  const reqOrigin = req.headers["origin"];
+  if (reqOrigin && ALLOWED_ORIGINS.includes(reqOrigin)) {
+    res.setHeader("Access-Control-Allow-Origin", reqOrigin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Vary", "Origin");
+  }
 
   const { method } = req;
   const urlPath = req.url.split("?")[0];
+
+  // Handle CORS preflight
+  if (method === "OPTIONS") {
+    res.writeHead(reqOrigin && ALLOWED_ORIGINS.includes(reqOrigin) ? 204 : 405);
+    return res.end();
+  }
 
   // ── Health ─────────────────────────────────────────────────────────────────
   if (urlPath === "/health") {
