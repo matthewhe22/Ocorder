@@ -558,6 +558,7 @@ async function handler(req, res) {
       cfg.user = cfg.admins[0].username;
       cfg.pass = cfg.admins[0].password;
       writeConfig(cfg);
+      SESSIONS.clear(); // invalidate all sessions after any password reset
       return json(res, 200, { ok: true });
     }
 
