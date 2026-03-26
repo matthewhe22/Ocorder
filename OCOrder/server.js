@@ -69,8 +69,13 @@ const DEFAULT_CONFIG = {
   },
 };
 
+// ── Valid order statuses ───────────────────────────────────────────────────────
+const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued"];
+
 // ── In-memory sessions  Map<token, { user, exp }> ─────────────────────────────
 const SESSIONS = new Map();
+// Purge expired sessions every 30 minutes to prevent unbounded growth
+setInterval(() => { const now = Date.now(); for (const [t, s] of SESSIONS) if (now > s.exp) SESSIONS.delete(t); }, 30 * 60 * 1000).unref();
 
 function genToken() {
   return crypto.randomBytes(32).toString("hex");
