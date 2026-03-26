@@ -17,9 +17,15 @@
 
 import { createClient } from "redis";
 
-// ── KV key names ──────────────────────────────────────────────────────────────
-const DATA_KEY       = "tocs:data";
-const CONFIG_KEY     = "tocs:config";
+// ── Demo mode ─────────────────────────────────────────────────────────────────
+// Set DEMO_MODE=true in Vercel project env vars to activate the demo instance.
+// Demo data is stored under separate Redis keys (demo:data / demo:config) so
+// production and demo can share the same Redis database without any conflict.
+export const DEMO_MODE = process.env.DEMO_MODE === "true";
+
+// ── KV key names — separate namespaces for production vs demo ─────────────────
+const DATA_KEY   = DEMO_MODE ? "demo:data"   : "tocs:data";
+const CONFIG_KEY = DEMO_MODE ? "demo:config" : "tocs:config";
 
 // Detect whether a Redis URL is configured
 const REDIS_URL   = process.env.REDIS_URL || process.env.KV_URL;
