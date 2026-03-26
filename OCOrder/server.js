@@ -680,22 +680,39 @@ async function handler(req, res) {
       return json(res, 409, { error: "An order with this ID already exists." });
     }
 
+    const AUTH_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
     let authorityBuf = null;
     let authorityFilename = null;
     if (body.lotAuthority?.data) {
       try {
         const decoded = Buffer.from(body.lotAuthority.data, "base64");
         if (decoded.length === 0) throw new Error("Empty or invalid base64 data");
-        // Whitelist allowed file extensions
+        if (decoded.length > AUTH_MAX_BYTES) {
+          return json(res, 400, { error: "Authority document must not exceed 10 MB." });
+        }
+        // Whitelist allowed file extensions and validate magic bytes
         const ALLOWED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
         const rawExt = path.extname(body.lotAuthority.filename || "").toLowerCase();
-        const ext = ALLOWED_EXTS.includes(rawExt) ? rawExt : ".bin";
+        if (!ALLOWED_EXTS.includes(rawExt)) {
+          return json(res, 400, { error: "Authority document must be a PDF, JPG, or PNG file." });
+        }
+        // Validate file magic bytes match the declared extension
+        const isPDF  = decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46; // %PDF
+        const isJPEG = decoded[0] === 0xFF && decoded[1] === 0xD8 && decoded[2] === 0xFF;
+        const isPNG  = decoded[0] === 0x89 && decoded[1] === 0x50 && decoded[2] === 0x4E && decoded[3] === 0x47;
+        const validMagic = (rawExt === ".pdf" && isPDF) || ([".jpg",".jpeg"].includes(rawExt) && isJPEG) || (rawExt === ".png" && isPNG);
+        if (!validMagic) {
+          return json(res, 400, { error: "Authority document content does not match the declared file type." });
+        }
         authorityBuf = decoded;
-        authorityFilename = order.id + "-lot-authority" + ext;
+        authorityFilename = order.id + "-lot-authority" + rawExt;
         fs.writeFileSync(path.join(UPLOADS_DIR, authorityFilename), authorityBuf);
         order.lotAuthorityFile = authorityFilename;
         console.log(`  📎  Lot authority saved: ${authorityFilename}`);
-      } catch (e) { console.error("  ❌  Failed to save authority file:", e.message); }
+      } catch (e) {
+        if (res.headersSent) return;
+        console.error("  ❌  Failed to save authority file:", e.message);
+      }
     }
 
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
