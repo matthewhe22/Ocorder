@@ -1131,7 +1131,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     </div>
                     {lotAuthErr && (
                       <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", color: "var(--red)", fontWeight: 500 }}>
-                        <Ic n="warn" s={13}/> {lotAuthErr}
+                        <Ic n="info" s={13}/> {lotAuthErr}
                       </div>
                     )}
                   </div>
