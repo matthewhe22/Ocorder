@@ -891,6 +891,49 @@ async function handler(req, res) {
     }
   }
 
+  // ── POST /api/orders/:id/send-invoice  (admin) ─────────────────────────────
+  const sendInvMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/send-invoice$/);
+  if (sendInvMatch && method === "POST") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const { message, attachment } = await readBody(req, res);
+    const d = readData();
+    const idx = d.orders.findIndex(o => o.id === sendInvMatch[1]);
+    if (idx === -1) return json(res, 404, { error: "Order not found." });
+    const order = d.orders[idx];
+    const recipientEmail = order.contactInfo?.email;
+    if (!recipientEmail) return json(res, 400, { error: "Order has no customer email address." });
+    const cfg = readConfig();
+    const smtp = cfg.smtp || {};
+    if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtp.host, port: Number(smtp.port) || 587,
+        secure: Number(smtp.port) === 465,
+        auth: { user: smtp.user, pass: smtp.pass },
+        tls: { rejectUnauthorized: false },
+      });
+      const subj = `Invoice for Order #${order.id}`;
+      const bodyHtml = `<p>${esc(message || "").replace(/\n/g, "<br>")}</p>`;
+      const mailOpts = {
+        from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
+        to: recipientEmail,
+        subject: subj,
+        html: bodyHtml,
+      };
+      if (attachment?.data) {
+        mailOpts.attachments = [{ filename: attachment.filename || "Invoice.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+      }
+      await transporter.sendMail(mailOpts);
+      d.orders[idx].status = "Pending Payment";
+      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice sent", note: `To: ${recipientEmail}` }];
+      writeData(d);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 500, { error: err.message });
+    }
+  }
+
   // ── GET /api/orders/export  (admin — CSV download) ────────────────────────
   if (urlPath === "/api/orders/export" && method === "GET") {
     const token = authHeader(req) || new URL("http://x" + req.url).searchParams.get("token");
