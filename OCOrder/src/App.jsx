@@ -652,9 +652,25 @@ export default function App() {
   // 6 steps: 1=Plan, 2=Products, 3=Review, 4=Contact, 5=Payment, 6=Complete
   const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment", "Complete"];
 
+  const handleDemoReset = async () => {
+    if (!window.confirm("Reset all demo data to the initial seed state? This will log you out and clear all orders.")) return;
+    try {
+      await fetch("/api/demo/reset", { method: "POST" });
+    } finally {
+      try { sessionStorage.removeItem("admin_token"); } catch {}
+      window.location.href = "/";
+    }
+  };
+
   return (
     <>
       <style>{CSS}</style>
+      {pubConfig?.demoMode && (
+        <div style={{background:"#f59e0b",color:"#1c1c1c",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:"12px",fontWeight:600,fontSize:"0.82rem",letterSpacing:"0.03em",zIndex:9999,position:"relative"}}>
+          <span>⚠ DEMO MODE — Data is pre-seeded and will not send real emails. Admin: demo@tocs.co / Demo@1234</span>
+          <button onClick={handleDemoReset} style={{background:"#1c1c1c",color:"#f59e0b",border:"none",borderRadius:"4px",padding:"4px 12px",fontWeight:700,cursor:"pointer",fontSize:"0.8rem",letterSpacing:"0.04em"}}>Reset Demo</button>
+        </div>
+      )}
       <div className="app">
         <header className="hdr">
           <img src={pubConfig?.logo || `data:image/png;base64,${LOGO_B64}`} alt="TOCS" className="hdr-logo" />
