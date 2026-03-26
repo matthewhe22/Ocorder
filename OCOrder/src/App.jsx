@@ -647,7 +647,7 @@ export default function App() {
       const cost = calcShippingCost(opt, cart, plan?.products);
       setSelectedShipping({ id: opt.id, name: opt.name, cost, requiresAddress: opt.requiresAddress !== false });
     }
-  }, [step, plan?.id]); // plan.id tracks plan changes; cart is stable while on step 3
+  }, [step, plan?.id, orderCategory]); // plan.id tracks plan changes; cart is stable while on step 3
 
 
   const goToStep = (s) => {
