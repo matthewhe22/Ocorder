@@ -573,19 +573,14 @@ export default function App() {
   };
 
   const placeOrder = async (setPlacing, setErr) => {
-    const id = genOrderId();
     const isKeys = orderCategory === "keys";
     const orderPayment = isKeys ? "invoice" : payMethod;
-    const orderStatus = isKeys ? "Invoice to be issued"
-      : orderPayment === "stripe" ? "Awaiting Stripe Payment"
-      : orderPayment === "bank"   ? "Awaiting Payment"
-      : "Paid";
     const contactInfo = {
       ...contact,
       // Include shippingAddress for keys orders with a paid delivery option
       shippingAddress: (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false) ? contact.shippingAddress : undefined,
     };
-    const o = { id, date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, status: orderStatus, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
+    const o = { date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
     try {
       let body = { order: o };
       if (lotAuthFile) {
