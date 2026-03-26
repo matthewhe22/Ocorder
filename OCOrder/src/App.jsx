@@ -621,7 +621,7 @@ export default function App() {
     }
   };
 
-  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); };
+  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false); };
 
   // Auto-correct payMethod when pubConfig loads and the current selection is disabled
   useEffect(() => {
