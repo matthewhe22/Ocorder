@@ -621,10 +621,9 @@ async function handler(req, res) {
   if (urlPath === "/api/orders" && method === "POST") {
     const body = await readBody(req, res);
     const raw = body.order || body; // support both { order, lotAuthority } and flat order
-    if (!raw.id || !Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
-    // Validate order ID format: no path separators or control characters
-    if (/[/\\?\s#\x00-\x1f]/.test(raw.id)) return json(res, 400, { error: "Order ID must not contain spaces, slashes, or control characters." });
-    if (raw.id.length > 100) return json(res, 400, { error: "Order ID must not exceed 100 characters." });
+    if (!Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
+    // Generate server-side ID — never trust client-supplied IDs
+    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(2).toString("hex").toUpperCase();
     if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
     if (!raw.contactInfo?.phone || !String(raw.contactInfo.phone).trim()) return json(res, 400, { error: "Customer phone number is required." });
     if (String(raw.contactInfo.phone).length > 30) return json(res, 400, { error: "Phone number must not exceed 30 characters." });
