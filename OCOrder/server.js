@@ -1135,7 +1135,18 @@ async function handler(req, res) {
         accountNumber: pd.accountNumber || "522011",
         payid: pd.payid || "accounts@tocs.com.au",
       },
+      demoMode: DEMO_MODE,
     });
+  }
+
+  // ── POST /api/demo/reset  (demo mode only — restore seed data) ─────────────
+  if (urlPath === "/api/demo/reset" && method === "POST") {
+    if (!DEMO_MODE) return json(res, 403, { error: "Not available in production." });
+    writeData(structuredClone(DEMO_SEED_DATA));
+    // Also wipe all active sessions so the demo admin must re-login
+    SESSIONS.clear();
+    console.log("  🔄  Demo data reset to seed state.");
+    return json(res, 200, { ok: true, message: "Demo data has been reset to the initial state." });
   }
 
   // ── GET /api/config/settings  (admin) ─────────────────────────────────────
