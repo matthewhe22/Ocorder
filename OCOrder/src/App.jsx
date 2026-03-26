@@ -2472,23 +2472,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── ORDERS ── */}
       {adminTab === "orders" && (() => {
-        const filteredOrders = (data.orders || []).filter(o => {
-          const statusOk = !orderFilter.status || o.status === orderFilter.status;
-          const categoryOk = !orderFilter.category || (o.orderCategory || "oc") === orderFilter.category;
-          const building = o.items?.[0]?.planName || "";
-          const lot = o.items?.[0]?.lotNumber || "";
-          const planOk = !orderFilter.plan.trim() || building.toLowerCase().includes(orderFilter.plan.trim().toLowerCase()) || (o.items?.[0]?.planId || "").toLowerCase().includes(orderFilter.plan.trim().toLowerCase());
-          const lotOk = !orderFilter.lot.trim() || lot.toLowerCase().includes(orderFilter.lot.trim().toLowerCase());
-          const txt = orderFilter.text.toLowerCase();
-          if (!txt) return statusOk && categoryOk && planOk && lotOk;
-          const textOk = (o.id || "").toLowerCase().includes(txt) ||
-            (o.contactInfo?.name || "").toLowerCase().includes(txt) ||
-            (o.contactInfo?.email || "").toLowerCase().includes(txt) ||
-            (o.contactInfo?.companyName || "").toLowerCase().includes(txt) ||
-            building.toLowerCase().includes(txt) ||
-            lot.toLowerCase().includes(txt);
-          return statusOk && categoryOk && planOk && lotOk && textOk;
-        });
         return (
         <div className="panel">
           {adminToast && (
