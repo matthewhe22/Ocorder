@@ -73,7 +73,7 @@ const DEFAULT_CONFIG = {
 const SESSIONS = new Map();
 
 function genToken() {
-  return [...Array(40)].map(() => Math.floor(Math.random() * 16).toString(16)).join("");
+  return crypto.randomBytes(32).toString("hex");
 }
 function validToken(token) {
   if (!token) return false;
