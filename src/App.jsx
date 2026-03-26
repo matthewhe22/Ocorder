@@ -1987,7 +1987,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const addProduct = async () => {
-    if (!form.name || !form.id || isNaN(parseFloat(form.price))) return;
+    if (!form.name || isNaN(parseFloat(form.price))) return;
     const shippingCosts = buildShippingCosts();
     const isKeys = (form.category || "oc") === "keys";
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
