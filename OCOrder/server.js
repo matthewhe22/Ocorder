@@ -496,7 +496,7 @@ async function handler(req, res) {
       if (!user || !pass) return json(res, 400, { error: "Username and password are required." });
       const cfg = readConfig();
       const admins = getAdmins(cfg);
-      const match = admins.find(a => a.username === user && a.password === pass);
+      const match = admins.find(a => a.username.toLowerCase() === user.toLowerCase() && a.password === pass);
       if (match) {
         const token = genToken();
         SESSIONS.set(token, { user: match.username, exp: Date.now() + 8 * 60 * 60 * 1000 });
