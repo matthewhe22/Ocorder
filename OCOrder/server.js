@@ -188,6 +188,13 @@ function readConfig() {
 }
 function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
 
+// ── Demo-mode startup seeding ─────────────────────────────────────────────────
+// On first launch (or after manual deletion of data files), seed demo content.
+if (DEMO_MODE) {
+  if (!fs.existsSync(DATA_FILE))   writeData(structuredClone(DEMO_SEED_DATA));
+  if (!fs.existsSync(CONFIG_FILE)) writeConfig(structuredClone(DEMO_DEFAULT_CONFIG));
+}
+
 // ── Email helpers ─────────────────────────────────────────────────────────────
 function esc(str) {
   return String(str || "")
