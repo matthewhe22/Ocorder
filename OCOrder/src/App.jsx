@@ -1399,7 +1399,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           {cart.length > 0 && (
             <div style={{ display: "flex", gap: "10px", marginTop: "1px", flexWrap: "wrap" }}>
               <button className="btn btn-out" onClick={() => setStep(2)}><Ic n="arrowL" s={14}/> Edit</button>
-              <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => { setCart([]); setLotAuthFile(null); setContact(DEFAULT_CONTACT); setSelectedShipping(null); setStep(1); }} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
+              <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => reset()} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                 <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                   disabled={
