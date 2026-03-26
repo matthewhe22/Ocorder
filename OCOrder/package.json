@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node build.mjs",
     "start": "node server.js",
-    "dev": "node build.mjs --watch & node server.js"
+    "dev": "node build.mjs --watch & node server.js",
+    "demo": "DATA_FILE=demo-data.json CONFIG_FILE=demo-config.json UPLOADS_DIR=uploads-demo PORT=3001 DEMO_MODE=true node server.js"
   },
   "dependencies": {
     "@azure/identity": "^4.13.0",
