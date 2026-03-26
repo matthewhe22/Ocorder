@@ -1243,6 +1243,7 @@ async function handler(req, res) {
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
       [/^\/api\/config\/public$/, ["GET"]],
       [/^\/api\/config\/test-email$/, ["POST"]],
+      [/^\/api\/demo\/reset$/, ["POST"]],
     ];
     for (const [pattern, methods] of knownRoutes) {
       if (pattern.test(urlPath)) {
