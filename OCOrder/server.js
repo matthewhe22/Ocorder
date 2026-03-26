@@ -709,7 +709,6 @@ async function handler(req, res) {
     order.total = Math.round(recalcTotal * 100) / 100;
 
     // Duplicate check BEFORE writing any files to disk
-    const d = readData();
     if (d.orders.find(o => o.id === order.id)) {
       return json(res, 409, { error: "An order with this ID already exists." });
     }
