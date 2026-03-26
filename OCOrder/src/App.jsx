@@ -1929,6 +1929,23 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
   const [adminToast, setAdminToast] = useState(null);
 
+  const filteredOrders = useMemo(() => (data.orders || []).filter(o => {
+    const statusOk = !orderFilter.status || o.status === orderFilter.status;
+    const categoryOk = !orderFilter.category || (o.orderCategory || "oc") === orderFilter.category;
+    const building = o.items?.[0]?.planName || "";
+    const lot = o.items?.[0]?.lotNumber || "";
+    const planOk = !orderFilter.plan.trim() || building.toLowerCase().includes(orderFilter.plan.trim().toLowerCase()) || (o.items?.[0]?.planId || "").toLowerCase().includes(orderFilter.plan.trim().toLowerCase());
+    const lotOk = !orderFilter.lot.trim() || lot.toLowerCase().includes(orderFilter.lot.trim().toLowerCase());
+    const txt = orderFilter.text.toLowerCase();
+    if (!txt) return statusOk && categoryOk && planOk && lotOk;
+    const textOk = (o.id || "").toLowerCase().includes(txt) ||
+      (o.contactInfo?.name || "").toLowerCase().includes(txt) ||
+      (o.contactInfo?.email || "").toLowerCase().includes(txt) ||
+      (o.contactInfo?.companyName || "").toLowerCase().includes(txt) ||
+      building.toLowerCase().includes(txt) || lot.toLowerCase().includes(txt);
+    return statusOk && categoryOk && planOk && lotOk && textOk;
+  }), [data.orders, orderFilter]);
+
   const handleAuth = (token, user) => {
     setAdminToken(token);
     try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
