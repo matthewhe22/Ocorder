@@ -469,7 +469,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState("portal");
   const [step, setStep] = useState(1);
   const [selPlan, setSelPlan] = useState(null);
-  const [selLot, setSelLot] = useState(null);
+  const [lotNumber, setLotNumber] = useState("");
+  const [selectedOCs, setSelectedOCs] = useState([]);
   const [orderCategory, setOrderCategory] = useState(null); // "oc" | "keys"
   const [cart, setCart] = useState([]);
   const [order, setOrder] = useState(null);
@@ -543,24 +544,29 @@ export default function App() {
   }, [stripeConfirming, stripeOrderId]);
 
   const plan = data.strataPlans.find(p => p.id === selPlan);
-  const lot  = plan?.lots.find(l => l.id === selLot);
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
-  const inCart = (pid, ocId=null) => cart.some(i => i.key === `${pid}-${ocId}-${selLot}`);
+  // When plan changes, initialise selectedOCs to all OCs in the plan
+  useEffect(() => {
+    if (plan) setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    else setSelectedOCs([]);
+  }, [selPlan]);
+
+  const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
 
   const addProd = (product) => {
     if (!product.perOC) {
-      const key = `${product.id}-null-${selLot}`;
+      const key = `${product.id}-null-nooc`;
       if (cart.some(i => i.key === key)) return;
-      setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: selLot, lotNumber: lot.number, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround }]);
+      setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: null, lotNumber, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround }]);
     } else {
-      lot.ownerCorps.forEach((ocId, idx) => {
-        const key = `${product.id}-${ocId}-${selLot}`;
+      selectedOCs.forEach((ocId, idx) => {
+        const key = `${product.id}-${ocId}`;
         if (!cart.some(i => i.key === key)) {
           const oc = plan.ownerCorps[ocId];
           const price = idx === 0 ? product.price : (product.secondaryPrice ?? product.price);
-          setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: selLot, lotNumber: lot.number, ocId, ocName: oc?.name || ocId, price, turnaround: product.turnaround, isSecondaryOC: idx > 0 }]);
+          setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: null, lotNumber, ocId, ocName: oc?.name || ocId, price, turnaround: product.turnaround, isSecondaryOC: idx > 0 }]);
         }
       });
     }
@@ -615,7 +621,7 @@ export default function App() {
     }
   };
 
-  const reset = () => { setStep(1); setSelPlan(null); setSelLot(null); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); };
+  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); };
 
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
@@ -648,7 +654,8 @@ export default function App() {
                 setStep(1);
                 setCart([]);
                 setSelPlan(null);
-                setSelLot(null);
+                setLotNumber("");
+                setSelectedOCs([]);
                 setOrderCategory(null);
               }
               setCurrentView("portal");
@@ -671,7 +678,7 @@ export default function App() {
             <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
           ) : currentView === "portal" ? (
             <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
-              setSelPlan={setSelPlan} lot={lot} selLot={selLot} setSelLot={setSelLot} data={data}
+              setSelPlan={setSelPlan} lotNumber={lotNumber} setLotNumber={setLotNumber} selectedOCs={selectedOCs} setSelectedOCs={setSelectedOCs} data={data}
               cart={cart} setCart={setCart} total={total} addProd={addProd} inCart={inCart}
               order={order} payMethod={payMethod} setPayMethod={setPayMethod}
               placeOrder={placeOrder} reset={reset} contact={contact} setContact={setContact}
@@ -693,13 +700,12 @@ export default function App() {
 }
 
 // ─── PORTAL ───────────────────────────────────────────────────────────────────
-function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLot, setSelLot, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
+function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
-  const [lotSearch, setLotSearch] = useState("");
   const [keysPlacing, setKeysPlacing] = useState(false);
   const [keysPlaceErr, setKeysPlaceErr] = useState("");
   const [step2Attempted, setStep2Attempted] = useState(false);
@@ -758,7 +764,8 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                 setStep(1);
                 setCart([]);
                 setSelPlan(null);
-                setSelLot(null);
+                setLotNumber("");
+                setSelectedOCs([]);
                 setOrderCategory(null);
                 setSearch("");
               }}
@@ -807,7 +814,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
               <div className="s1-search-bar" style={{ background: "#f0f6f2", borderColor: "var(--sage-light)" }}>
                 <Ic n="check" s={16} style={{ color: "var(--sage)", flexShrink: 0 }}/>
                 <span className="s1-search-sel">{plan?.name}</span>
-                <button className="s1-search-btn" onClick={() => { setSelPlan(null); setSelLot(null); setCart([]); setOrderCategory(null); setSearch(""); }}>Change</button>
+                <button className="s1-search-btn" onClick={() => { setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setCart([]); setOrderCategory(null); setSearch(""); }}>Change</button>
               </div>
             )}
           </div>
@@ -875,7 +882,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
             ) : (
               <div className="plan-grid" style={{ marginBottom: "14px" }}>
                 {filteredPlans.map(p => (
-                  <div key={p.id} className="plan-card" onClick={() => { setCart([]); setSelLot(null); setSelPlan(p.id); setSearch(""); }}>
+                  <div key={p.id} className="plan-card" onClick={() => { setCart([]); setLotNumber(""); setSelPlan(p.id); setSearch(""); }}>
                     <div className="pc-id">{p.id}</div>
                     <div className="pc-name">{p.name}</div>
                     <div className="pc-addr">{p.address}</div>
@@ -894,7 +901,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                   <div className="bsel-hdr-check">✓</div>
                   Building Selected
                 </div>
-                <button className="bsel-change" onClick={() => { setSelPlan(null); setSelLot(null); setCart([]); setOrderCategory(null); setSearch(""); }}>
+                <button className="bsel-change" onClick={() => { setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setCart([]); setOrderCategory(null); setSearch(""); }}>
                   Change ↗
                 </button>
               </div>
@@ -957,57 +964,72 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
           <p className="pg-sub">{plan.address} &nbsp;·&nbsp; {plan.id}</p>
 
           <div className="panel" style={{ marginBottom: "1px" }}>
-            <label className="f-label">Select Lot</label>
+            <div className="form-row" style={{ marginBottom: orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 ? "1rem" : 0 }}>
+              <label className="f-label">Lot Number</label>
+              <input
+                className="f-input"
+                placeholder="e.g. Lot 5"
+                value={lotNumber}
+                onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
+              />
+            </div>
 
-            {!selLot ? (
-              <>
-                <div className="s1-search-bar">
-                  <Ic n="search" s={16} style={{ color: "#9a9a8e", flexShrink: 0 }}/>
-                  <input
-                    placeholder="Search by lot number…"
-                    value={lotSearch}
-                    onChange={e => setLotSearch(e.target.value)}
-                    autoFocus
-                  />
-                  {lotSearch && (
-                    <button className="s1-search-btn" style={{ background: "transparent", color: "var(--muted)", padding: "0 8px" }} onClick={() => setLotSearch("")}><Ic n="x" s={14}/></button>
-                  )}
+            {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
+              <div>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
+                  Owner Corporations — select all that apply
                 </div>
-                {lotSearch.trim() && <div className="lot-cards" style={{ marginTop: "12px" }}>
-                  {plan.lots
-                    .filter(l => l.number.toLowerCase().includes(lotSearch.toLowerCase()))
-                    .map(l => (
-                      <div
-                        key={l.id}
-                        className="lot-card"
-                        onClick={() => { setCart([]); setLotAuthFile(null); setSelLot(l.id); setLotSearch(""); }}
-                      >
-                        <div className="lc-num">{l.number}</div>
-                        <div className="lc-detail">{l.level}</div>
-                        <div className="lc-type">{l.type}</div>
-                      </div>
-                    ))
-                  }
-                </div>}
-              </>
-            ) : (
-              <>
-                <div className="s1-search-bar" style={{ background: "#f0f6f2", borderColor: "var(--sage-light)" }}>
-                  <Ic n="check" s={16} style={{ color: "var(--sage)", flexShrink: 0 }}/>
-                  <span className="s1-search-sel">Lot {lot?.number}{lot?.level ? ` — ${lot.level}` : ""}</span>
-                  <button className="s1-search-btn" onClick={() => { setCart([]); setLotAuthFile(null); setSelLot(null); setLotSearch(""); }}>Change</button>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {Object.entries(plan.ownerCorps).map(([ocId, oc], idx) => {
+                    const checked = selectedOCs.includes(ocId);
+                    const isSecondary = checked && selectedOCs.indexOf(ocId) > 0;
+                    const ocProducts = (plan.products || []).filter(p => (p.category || "oc") === "oc" && p.perOC);
+                    const exampleProduct = ocProducts[0];
+                    return (
+                      <label key={ocId} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: `1.5px solid ${checked ? "var(--sage)" : "var(--border)"}`, borderRadius: "6px", cursor: "pointer", background: checked ? "var(--sage-tint)" : "white", transition: "border-color 0.15s, background 0.15s" }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setCart([]);
+                            setSelectedOCs(prev =>
+                              checked ? prev.filter(id => id !== ocId) : [...prev, ocId]
+                            );
+                          }}
+                          style={{ width: "16px", height: "16px", accentColor: "var(--forest)", flexShrink: 0 }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.86rem", color: "var(--forest)" }}>{oc?.name || ocId}</div>
+                          {exampleProduct && checked && (
+                            <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>
+                              {isSecondary
+                                ? `Additional OC rate: ${fmt(exampleProduct.secondaryPrice ?? exampleProduct.price)}`
+                                : `1st OC rate: ${fmt(exampleProduct.price)}`}
+                            </div>
+                          )}
+                        </div>
+                        {checked && <Ic n="check" s={14} style={{ color: "var(--sage)", flexShrink: 0 }}/>}
+                      </label>
+                    );
+                  })}
                 </div>
-                {lot && (
-                  <div style={{ marginTop: "1rem" }}>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Owner Corporations in this lot</div>
-                    <div>{lot.ownerCorps.map(ocId => <span key={ocId} className="oc-pill">{plan.ownerCorps[ocId]?.name || ocId}</span>)}</div>
-                  </div>
+                {selectedOCs.length === 0 && (
+                  <div style={{ fontSize: "0.76rem", color: "var(--red)", marginTop: "8px" }}>Please select at least one Owner Corporation.</div>
                 )}
-              </>
+                {selectedOCs.length > 1 && (() => {
+                  const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                  if (!ocProd || !ocProd.secondaryPrice) return null;
+                  return (
+                    <div style={{ fontSize: "0.76rem", color: "var(--muted)", marginTop: "8px" }}>
+                      <Ic n="info" s={12}/> {selectedOCs.length} OCs selected — 1st at {fmt(ocProd.price)}, additional at {fmt(ocProd.secondaryPrice)} each.
+                    </div>
+                  );
+                })()}
+              </div>
             )}
           </div>
 
-          {selLot && (
+          {lotNumber.trim() && (
             <>
               {/* ── Applicant Details ── */}
               <div style={{ margin: "1.5rem 0 0" }}>
@@ -1100,14 +1122,14 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                   )}
                   <div className="prod-grid" style={{ marginBottom: "2rem" }}>
                     {visibleProducts.map(product => {
-                      const cartItem = orderCategory === "keys" ? cart.find(i => i.productId === product.id && i.lotId === selLot) : null;
+                      const cartItem = orderCategory === "keys" ? cart.find(i => i.productId === product.id) : null;
                       const allAdded = orderCategory === "keys"
                         ? !!cartItem
                         : product.perOC
-                          ? lot.ownerCorps.every(ocId => inCart(product.id, ocId))
+                          ? selectedOCs.length > 0 && selectedOCs.every(ocId => inCart(product.id, ocId))
                           : inCart(product.id, null);
-                      const hasMultiOC = product.perOC && lot.ownerCorps.length > 1;
-                      const multiTotal = product.price + (lot.ownerCorps.length - 1) * (product.secondaryPrice ?? product.price);
+                      const hasMultiOC = product.perOC && selectedOCs.length > 1;
+                      const multiTotal = product.price + (selectedOCs.length - 1) * (product.secondaryPrice ?? product.price);
                       const qty = cartItem?.qty || 1;
                       return (
                         <div key={product.id} className={`prod-card ${allAdded ? "added" : ""}`}>
@@ -1131,7 +1153,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                                 <div className="prod-price-tier">Additional OC: {fmt(product.secondaryPrice)}</div>
                               )}
                               {hasMultiOC && (
-                                <div className="prod-price-sub">×{lot.ownerCorps.length} OCs = {fmt(multiTotal)} total</div>
+                                <div className="prod-price-sub">×{selectedOCs.length} OCs = {fmt(multiTotal)} total</div>
                               )}
                             </div>
                             {orderCategory === "keys" ? (
@@ -1139,17 +1161,17 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                                 {allAdded ? (<>
                                   <button style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", width: "28px", height: "28px", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
                                     onClick={() => {
-                                      if (qty <= 1) { setCart(p => p.filter(i => !(i.productId === product.id && i.lotId === selLot))); }
-                                      else { setCart(p => p.map(i => i.productId === product.id && i.lotId === selLot ? { ...i, qty: i.qty - 1, price: product.price * (i.qty - 1) } : i)); }
+                                      if (qty <= 1) { setCart(p => p.filter(i => !(i.productId === product.id))); }
+                                      else { setCart(p => p.map(i => i.productId === product.id ? { ...i, qty: i.qty - 1, price: product.price * (i.qty - 1) } : i)); }
                                     }}>−</button>
                                   <span style={{ minWidth: "24px", textAlign: "center", fontWeight: 600, fontSize: "0.9rem" }}>{qty}</span>
                                   <button style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", width: "28px", height: "28px", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
-                                    onClick={() => setCart(p => p.map(i => i.productId === product.id && i.lotId === selLot ? { ...i, qty: i.qty + 1, price: product.price * (i.qty + 1) } : i))}>+</button>
+                                    onClick={() => setCart(p => p.map(i => i.productId === product.id ? { ...i, qty: i.qty + 1, price: product.price * (i.qty + 1) } : i))}>+</button>
                                 </>) : (
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
                                     <button className="add-btn" onClick={() => {
-                                      const key = `${product.id}-null-${selLot}-keys`;
-                                      setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: selLot, lotNumber: lot.number, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround || "", qty: 1, managerAdminCharge: product.managerAdminCharge || 0 }]);
+                                      const key = `${product.id}-null-keys`;
+                                      setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: null, lotNumber, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround || "", qty: 1, managerAdminCharge: product.managerAdminCharge || 0 }]);
                                     }}><Ic n="plus" s={13}/> Add</button>
                                     <div style={{ fontSize: "0.62rem", color: "var(--muted)", textAlign: "center" }}>Qty adjustable after adding</div>
                                   </div>
@@ -1158,7 +1180,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
                             ) : (
                               allAdded
                                 ? <div className="added-pill"><Ic n="check" s={12}/> Added</div>
-                                : <button className="add-btn" onClick={() => addProd(product)}><Ic n="plus" s={13}/> Add</button>
+                                : <button className="add-btn" disabled={product.perOC && selectedOCs.length === 0} onClick={() => addProd(product)} style={product.perOC && selectedOCs.length === 0 ? { opacity: 0.4, cursor: "not-allowed" } : {}}><Ic n="plus" s={13}/> Add</button>
                             )}
                           </div>
                         </div>
@@ -1171,17 +1193,17 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lot, selLo
           )}
 
           {/* Validation warnings */}
-          {selLot && (orderCategory === "keys" || contact.applicantType === "agent") && !lotAuthFile && (
+          {lotNumber.trim() && (orderCategory === "keys" || contact.applicantType === "agent") && !lotAuthFile && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
               <Ic n="shield" s={13}/> {contact.applicantType === "agent" ? "An authorisation document is required when applying as an agent. Please upload it above." : "An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above."}
             </div>
           )}
-          {selLot && orderCategory === "oc" && contact.applicantType === "owner" && !lotAuthFile && (
+          {lotNumber.trim() && orderCategory === "oc" && contact.applicantType === "owner" && !lotAuthFile && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
               <Ic n="shield" s={13}/> A Levy Notice is required when applying as an Owner. Please upload it in the Applicant Details section above.
             </div>
           )}
-          {selLot && contact.applicantType === "owner" && !contact.ownerName && (
+          {lotNumber.trim() && contact.applicantType === "owner" && !contact.ownerName && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
               <Ic n="x" s={13}/> Owner Name is required. Please enter it in the Applicant Details section above.
             </div>
