@@ -341,7 +341,7 @@ export async function writeData(d) {
 // ── Config helpers ────────────────────────────────────────────────────────────
 export async function readConfig() {
   const c = await kvGet(CONFIG_KEY);
-  if (!c) return DEFAULT_CONFIG;
+  if (!c) return DEMO_MODE ? structuredClone(DEMO_DEFAULT_CONFIG) : DEFAULT_CONFIG;
 
   // Deep-merge stored config with DEFAULT_CONFIG so env-var fallbacks always
   // fill in any field that is missing or blank in the stored config.
