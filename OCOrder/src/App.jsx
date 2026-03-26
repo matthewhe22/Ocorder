@@ -724,6 +724,18 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const [keysPlacing, setKeysPlacing] = useState(false);
   const [keysPlaceErr, setKeysPlaceErr] = useState("");
   const [step2Attempted, setStep2Attempted] = useState(false);
+  const [lotAuthErr, setLotAuthErr] = useState("");
+  const AUTH_MAX_MB = 10;
+  const handleLotAuthFile = (file) => {
+    if (!file) return;
+    if (file.size > AUTH_MAX_MB * 1024 * 1024) {
+      setLotAuthErr(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is ${AUTH_MAX_MB} MB.`);
+      setLotAuthFile(null);
+    } else {
+      setLotAuthErr("");
+      setLotAuthFile(file);
+    }
+  };
   const [recentOrder, setRecentOrder] = useState(() => {
     try {
       const s = localStorage.getItem("tocs_last_order");
