@@ -758,6 +758,31 @@ async function handler(req, res) {
     return json(res, 200, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
 
+  // ── DELETE /api/orders/:id/delete  (admin — permanently remove a cancelled order) ─
+  const deleteMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/delete$/);
+  if (deleteMatch && method === "DELETE") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const d = readData();
+    const idx = d.orders.findIndex(o => o.id === deleteMatch[1]);
+    if (idx === -1) return json(res, 404, { error: "Order not found." });
+    const order = d.orders[idx];
+    if (order.status !== "Cancelled") return json(res, 400, { error: "Only cancelled orders can be deleted." });
+    // Delete associated authority file if present
+    if (order.lotAuthorityFile) {
+      try {
+        const safeFilename = path.basename(order.lotAuthorityFile).replace(/[^\w.\-]/g, "_");
+        const filePath = path.resolve(UPLOADS_DIR, safeFilename);
+        if (filePath.startsWith(UPLOADS_DIR + path.sep) && fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (e) { console.error("  ❌  Failed to delete authority file:", e.message); }
+    }
+    d.orders.splice(idx, 1);
+    writeData(d);
+    return json(res, 200, { ok: true });
+  }
+
   // ── PUT /api/orders/:id/status  (admin) ───────────────────────────────────
   const statusMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/status$/);
   if (statusMatch && method === "PUT") {
