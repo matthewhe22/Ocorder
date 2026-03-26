@@ -1121,11 +1121,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                           <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }} onClick={() => setLotAuthFile(null)} title="Remove file"><Ic n="trash" s={15}/></button>
                         </div>
                       ) : (
-                        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--border)"; if (e.dataTransfer.files[0]) setLotAuthFile(e.dataTransfer.files[0]); }}>
+                        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: `2px dashed ${lotAuthErr ? "var(--red)" : "var(--border)"}`, borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = lotAuthErr ? "var(--red)" : "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = lotAuthErr ? "var(--red)" : "var(--border)"; if (e.dataTransfer.files[0]) handleLotAuthFile(e.dataTransfer.files[0]); }}>
                           <Ic n="upload" s={24}/>
                           <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--forest)" }}>Click to upload or drag & drop</span>
-                          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max 10 MB</span>
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setLotAuthFile(e.target.files[0]); }}/>
+                          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max {AUTH_MAX_MB} MB</span>
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) handleLotAuthFile(e.target.files[0]); e.target.value = ""; }}/>
                         </label>
                       )}
                     </div>
