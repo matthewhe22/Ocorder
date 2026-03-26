@@ -1768,6 +1768,10 @@ function ConfirmationPage({ order, reset, pubConfig }) {
           <div className="alert alert-warn" style={{ marginTop: "1rem" }}>
             Please transfer <strong>{fmt(order.total)}</strong> and use <strong>{order.id}</strong> as your payment reference. Certificate processing begins on receipt of funds.
           </div>
+        ) : order.payment === "payid" ? (
+          <div className="alert alert-warn" style={{ marginTop: "1rem" }}>
+            Please send <strong>{fmt(order.total)}</strong> via PayID and use <strong>{order.id}</strong> as your payment reference. Certificate processing begins on receipt of funds.
+          </div>
         ) : (
           <div className="alert alert-ok" style={{ marginTop: "1rem" }}>
             Payment received. Your certificate(s) will be processed within the stated turnaround time.
