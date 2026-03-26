@@ -846,13 +846,19 @@ async function handler(req, res) {
       ]);
     }
     // Strip control characters (including embedded newlines) to prevent row-splitting in spreadsheets
-    const csvEsc = v => `"${String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""')}"`;
+    const csvEsc = v => {
+      const s = String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""');
+      // Prefix formula-injection characters to prevent spreadsheet code execution
+      return /^[=+\-@\t]/.test(s) ? `"'${s}"` : `"${s}"`;
+    };
     const csv = rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
+    const csvBuf = Buffer.from(csv, "utf8");
     res.writeHead(200, {
-      "Content-Type": "text/csv",
+      "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="tocs-orders-${new Date().toISOString().slice(0,10)}.csv"`,
+      "Content-Length": csvBuf.length,
     });
-    return res.end(csv);
+    return res.end(csvBuf);
   }
 
   // ── POST /api/lots/import  (admin — import lots from parsed Excel data) ────
