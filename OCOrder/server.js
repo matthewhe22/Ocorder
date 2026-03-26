@@ -362,9 +362,9 @@ function readBody(req, res) {
     let body = "";
     req.on("data", c => {
       body += c;
-      if (body.length > 2e6) {
+      if (body.length > 15e6) {
         if (res && !res.headersSent) {
-          const msg = JSON.stringify({ error: "Request body too large (max 2 MB)." });
+          const msg = JSON.stringify({ error: "Request body too large (max 15 MB)." });
           res.writeHead(413, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(msg) });
           res.end(msg);
         }
