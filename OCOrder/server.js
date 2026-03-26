@@ -852,14 +852,17 @@ async function handler(req, res) {
     return;
   }
 
-  // ── POST /api/orders/:id/send-certificate  (admin) ────────────────────────
+  // ── POST /api/orders/:id/send-certificate  &  send-invoice  (admin) ─────────
   const sendCertMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/send-certificate$/);
-  if (sendCertMatch && method === "POST") {
+  const sendInvMatch  = urlPath.match(/^\/api\/orders\/([^/]+)\/send-invoice$/);
+  if ((sendCertMatch || sendInvMatch) && method === "POST") {
+    const isCert = !!sendCertMatch;
+    const orderId = (sendCertMatch || sendInvMatch)[1];
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { message, attachment } = await readBody(req, res);
     const d = readData();
-    const idx = d.orders.findIndex(o => o.id === sendCertMatch[1]);
+    const idx = d.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
     const order = d.orders[idx];
     const recipientEmail = order.contactInfo?.email;
@@ -868,69 +871,25 @@ async function handler(req, res) {
     const smtp = cfg.smtp || {};
     if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 587,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createSmtpTransporter(smtp);
       const tpl = cfg.emailTemplate || {};
-      const subj = (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
+      const subj = isCert
+        ? (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id)
+        : `Invoice for Order #${order.id}`;
+      const html = isCert
+        ? buildCertEmailHtml(order, message, cfg)
+        : `<p>${esc(message || "").replace(/\n/g, "<br>")}</p>`;
       const mailOpts = {
         from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
-        to: recipientEmail,
-        subject: subj,
-        html: buildCertEmailHtml(order, message, cfg),
+        to: recipientEmail, subject: subj, html,
       };
       if (attachment?.data) {
-        mailOpts.attachments = [{ filename: attachment.filename || "OC-Certificate.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+        const defaultFilename = isCert ? "OC-Certificate.pdf" : "Invoice.pdf";
+        mailOpts.attachments = [{ filename: attachment.filename || defaultFilename, content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
       }
       await transporter.sendMail(mailOpts);
-      d.orders[idx].status = "Issued";
-      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `To: ${recipientEmail}` }];
-      writeData(d);
-      return json(res, 200, { ok: true });
-    } catch (err) {
-      return json(res, 500, { error: err.message });
-    }
-  }
-
-  // ── POST /api/orders/:id/send-invoice  (admin) ─────────────────────────────
-  const sendInvMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/send-invoice$/);
-  if (sendInvMatch && method === "POST") {
-    const token = authHeader(req);
-    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { message, attachment } = await readBody(req, res);
-    const d = readData();
-    const idx = d.orders.findIndex(o => o.id === sendInvMatch[1]);
-    if (idx === -1) return json(res, 404, { error: "Order not found." });
-    const order = d.orders[idx];
-    const recipientEmail = order.contactInfo?.email;
-    if (!recipientEmail) return json(res, 400, { error: "Order has no customer email address." });
-    const cfg = readConfig();
-    const smtp = cfg.smtp || {};
-    if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 587,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
-      const subj = `Invoice for Order #${order.id}`;
-      const bodyHtml = `<p>${esc(message || "").replace(/\n/g, "<br>")}</p>`;
-      const mailOpts = {
-        from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
-        to: recipientEmail,
-        subject: subj,
-        html: bodyHtml,
-      };
-      if (attachment?.data) {
-        mailOpts.attachments = [{ filename: attachment.filename || "Invoice.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
-      }
-      await transporter.sendMail(mailOpts);
-      d.orders[idx].status = "Pending Payment";
-      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice sent", note: `To: ${recipientEmail}` }];
+      d.orders[idx].status = isCert ? "Issued" : "Pending Payment";
+      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: isCert ? "Certificate issued" : "Invoice sent", note: `To: ${recipientEmail}` }];
       writeData(d);
       return json(res, 200, { ok: true });
     } catch (err) {
