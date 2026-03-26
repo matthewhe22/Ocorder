@@ -343,12 +343,7 @@ async function sendCustomerEmail(order, cfg) {
   const toEmail = order.contactInfo?.email;
   if (!toEmail) return;
   try {
-    const transporter = nodemailer.createTransport({
-      host: smtp.host, port: Number(smtp.port) || 587,
-      secure: Number(smtp.port) === 465,
-      auth: { user: smtp.user, pass: smtp.pass },
-      tls: { rejectUnauthorized: false },
-    });
+    const transporter = createSmtpTransporter(smtp);
     const customerSubject = `Order Confirmed — ${order.id}`;
     await transporter.sendMail({
       from: `"TOCS Order Portal" <${cfg.orderEmail || "Orders@tocs.co"}>`,
