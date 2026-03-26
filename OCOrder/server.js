@@ -638,9 +638,8 @@ async function handler(req, res) {
         price: Math.max(0, Number(raw.selectedShipping.price) || 0),
       } : undefined,
     };
-    // Always normalise date to a valid ISO string — never trust client clock alone
-    const parsedDate = raw.date ? new Date(raw.date) : null;
-    order.date = (parsedDate && !isNaN(parsedDate)) ? parsedDate.toISOString() : new Date().toISOString();
+    // Always use server time — never trust client-supplied date
+    order.date = new Date().toISOString();
     // Validate + override item prices against the plan's product catalog
     {
       const d = readData();
