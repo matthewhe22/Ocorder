@@ -182,7 +182,8 @@ function writeData(d) {
 }
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch {
-    writeConfig(DEFAULT_CONFIG); return structuredClone(DEFAULT_CONFIG);
+    const seed = DEMO_MODE ? DEMO_DEFAULT_CONFIG : DEFAULT_CONFIG;
+    writeConfig(seed); return structuredClone(seed);
   }
 }
 function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
