@@ -1191,6 +1191,7 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
+      [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],
       [/^\/api\/lots\/import$/, ["POST"]],
       [/^\/api\/plans$/, ["POST"]],
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
