@@ -2760,7 +2760,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           adminToken={adminToken}
           onClose={() => setSendInvoiceModal(null)}
           onSent={(oid) => {
-            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: "Invoice sent, awaiting payment", auditLog: [...(o.auditLog||[]), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${o.contactInfo?.email}` }] }) }));
+            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: "Pending Payment", auditLog: [...(o.auditLog||[]), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${o.contactInfo?.email}` }] }) }));
             setSendInvoiceModal(null);
           }}
         />
