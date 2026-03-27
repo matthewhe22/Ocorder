@@ -1228,7 +1228,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                             </div>
                             {orderCategory === "keys" ? (
                               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                {allAdded ? (<>
+                                {product.externalUrl ? (
+                                  <button className="add-btn" style={{ background: "var(--forest)", display: "flex", alignItems: "center", gap: "5px" }}
+                                    onClick={() => setExtLinkTarget(product)}>
+                                    <Ic n="arrow" s={12}/> Apply Now
+                                  </button>
+                                ) : allAdded ? (<>
                                   <button style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", width: "28px", height: "28px", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
                                     onClick={() => {
                                       if (qty <= 1) { setCart(p => p.filter(i => !(i.productId === product.id))); }
