@@ -1150,6 +1150,16 @@ async function handler(req, res) {
             if (typeof prod.managerAdminCharge !== "number" || !Number.isFinite(prod.managerAdminCharge) || prod.managerAdminCharge < 0)
               return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has an invalid managerAdminCharge (must be a non-negative number).` });
           }
+          // externalUrl: only allowed on keys-category products, must be http/https, max 2048 chars
+          if (prod.externalUrl !== undefined && prod.externalUrl !== null && prod.externalUrl !== "") {
+            const prodCategory = prod.category || (prod.managerAdminCharge !== undefined ? "keys" : "oc");
+            if (prodCategory !== "keys")
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl is only allowed on Keys/Fobs products.` });
+            if (typeof prod.externalUrl !== "string" || prod.externalUrl.length > 2048)
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl must be a string of max 2048 characters.` });
+            if (!/^https?:\/\/.+/i.test(prod.externalUrl))
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl must start with http:// or https://.` });
+          }
         }
       }
     }
