@@ -757,9 +757,12 @@ async function handler(req, res) {
         qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
       })),
-      selectedShipping: raw.selectedShipping ? {
-        type:  stripCtrl(String(raw.selectedShipping.type  || "")),
-        price: Math.max(0, Number(raw.selectedShipping.price) || 0),
+      // Shipping only applies to keys/fob orders; price validated from catalog below
+      selectedShipping: (order_orderCategory_placeholder === "keys" && raw.selectedShipping) ? {
+        id:    stripCtrl(String(raw.selectedShipping.id   || "")),
+        name:  stripCtrl(String(raw.selectedShipping.name || "")),
+        type:  stripCtrl(String(raw.selectedShipping.type || "")),
+        price: 0, // set from catalog below
       } : undefined,
     };
     // Always use server time — never trust client-supplied date
