@@ -740,7 +740,7 @@ async function handler(req, res) {
       id: serverId,
       planId: raw.planId,
       lotId: raw.lotId,
-      orderCategory: raw.orderCategory,
+      orderCategory: orderCategoryNorm,
       contactInfo: {
         name:        stripCtrl(raw.contactInfo?.name  || ""),
         email:       stripCtrl((raw.contactInfo?.email || "").trim()),
