@@ -18,9 +18,8 @@
 import { createClient } from "redis";
 
 // ── Demo mode ─────────────────────────────────────────────────────────────────
-// Set DEMO_MODE=true in Vercel project env vars to activate the demo instance.
-// Demo data is stored under separate Redis keys (demo:data / demo:config) so
-// production and demo can share the same Redis database without any conflict.
+// Set DEMO_MODE=true in Vercel env vars for the demo project only.
+// In production this is false — behaviour is identical to before.
 export const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 // ── KV key names — separate namespaces for production vs demo ─────────────────
@@ -136,11 +135,11 @@ export const DEFAULT_CONFIG = {
 };
 
 // ── Demo seed data ────────────────────────────────────────────────────────────
-// Used when DEMO_MODE=true and Redis has no demo:data key yet, and by the
-// POST /api/demo/reset endpoint to restore the known state.
+// Used when DEMO_MODE=true and Redis has no demo:data/demo:config key yet,
+// and by POST /api/demo/reset to restore the known state.
 export const DEMO_DEFAULT_CONFIG = {
   admins: [{ id: "demo-admin", username: "demo@tocs.co", password: "Demo@1234", name: "Demo Admin" }],
-  user: "demo@tocs.co", pass: "Demo@1234",   // legacy compat
+  user: "demo@tocs.co", pass: "Demo@1234",
   orderEmail: "demo@tocs.co",
   logo: "",
   smtp: { host: "", port: 2525, user: "", pass: "" },
@@ -169,8 +168,8 @@ export const DEMO_DEFAULT_DATA = {
         { id:"L5", number:"Lot 5 (Parking)", level:"Basement", type:"Parking",     ownerCorps:["OC-A"] },
       ],
       ownerCorps: {
-        "OC-A": { name:"OC A — Residential",  levy:1200 },
-        "OC-B": { name:"OC B — Commercial",   levy:2800 },
+        "OC-A": { name:"OC A — Residential", levy:1200 },
+        "OC-B": { name:"OC B — Commercial",  levy:2800 },
       },
       products: [
         { id:"P1", name:"OC Certificate — Standard",         description:"s151 SMA Owner Corporation Certificate",            price:220, secondaryPrice:150, turnaround:"5 business days",   perOC:true  },
@@ -181,23 +180,23 @@ export const DEMO_DEFAULT_DATA = {
         { id:"K2", name:"Car Park Fob",                      description:"Car park access fob/swipe",                         price:  0,                    turnaround:"2–3 business days", perOC:false, category:"keys" },
       ],
       shippingOptions: [
-        { id:"pickup",  name:"Pickup / Email",  price:0,  requiresAddress:false },
-        { id:"post",    name:"Standard Post",   price:12, requiresAddress:true  },
-        { id:"express", name:"Express Post",    price:25, requiresAddress:true  },
+        { id:"pickup",  name:"Pickup / Email", price:0,  requiresAddress:false },
+        { id:"post",    name:"Standard Post",  price:12, requiresAddress:true  },
+        { id:"express", name:"Express Post",   price:25, requiresAddress:true  },
       ],
     },
     {
       id: "SP10002", name: "Parkside Gardens", address: "12 Garden Street, Melbourne VIC 3000", active: true,
       lots: [
-        { id:"G1", number:"Lot 101",            level:"Level 1",  type:"Residential", ownerCorps:["OC-A"] },
-        { id:"G2", number:"Lot 102",            level:"Level 1",  type:"Residential", ownerCorps:["OC-A"] },
-        { id:"G3", number:"Lot 201",            level:"Level 2",  type:"Residential", ownerCorps:["OC-A"] },
-        { id:"G4", number:"Lot 202",            level:"Level 2",  type:"Residential", ownerCorps:["OC-A"] },
-        { id:"G5", number:"Lot G01 (Garage)",   level:"Basement", type:"Parking",     ownerCorps:["OC-A"] },
+        { id:"G1", number:"Lot 101",          level:"Level 1",  type:"Residential", ownerCorps:["OC-A"] },
+        { id:"G2", number:"Lot 102",          level:"Level 1",  type:"Residential", ownerCorps:["OC-A"] },
+        { id:"G3", number:"Lot 201",          level:"Level 2",  type:"Residential", ownerCorps:["OC-A"] },
+        { id:"G4", number:"Lot 202",          level:"Level 2",  type:"Residential", ownerCorps:["OC-A"] },
+        { id:"G5", number:"Lot G01 (Garage)", level:"Basement", type:"Parking",     ownerCorps:["OC-A"] },
       ],
       ownerCorps: { "OC-A": { name:"Parkside Gardens OC", levy:950 } },
       products: [
-        { id:"Q1", name:"OC Certificate — Standard", description:"s151 SMA Owner Corporation Certificate", price:200, secondaryPrice:140, turnaround:"5 business days",   perOC:true  },
+        { id:"Q1", name:"OC Certificate — Standard", description:"s151 SMA Owner Corporation Certificate",   price:200, secondaryPrice:140, turnaround:"5 business days",   perOC:true  },
         { id:"Q2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:360, secondaryPrice:260, turnaround:"1–2 business days", perOC:true  },
         { id:"Q3", name:"Insurance Certificate",     description:"Building insurance details and certificate", price: 70,                    turnaround:"2 business days",   perOC:false },
       ],
@@ -411,7 +410,6 @@ export function extractToken(req) {
 const ALLOWED_ORIGINS = [
   "https://occorder.vercel.app",
   "https://tocs.co",
-  "https://occorder-demo.vercel.app",   // demo deployment
   "http://localhost:5173",
   "http://localhost:3000",
 ];
