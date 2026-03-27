@@ -565,7 +565,7 @@ async function handler(req, res) {
     if (validToken(token)) return json(res, 200, d);
     // Strip admin-only fields from products before returning to public callers
     return json(res, 200, {
-      strataPlans: d.strataPlans.map(plan => ({
+      strataPlans: d.strataPlans.filter(p => p.active !== false).map(plan => ({
         ...plan,
         products: (plan.products || []).map(({ managerAdminCharge, ...prod }) => prod),
       })),
