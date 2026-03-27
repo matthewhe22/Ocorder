@@ -110,6 +110,7 @@ const DEMO_SEED_DATA = {
         { id:"Q2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:360, secondaryPrice:260, turnaround:"1–2 business days", perOC:true },
         { id:"Q3", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:70, turnaround:"2 business days", perOC:false },
       ],
+      keysShipping: { deliveryCost: 12, expressCost: 25 },
     },
   ],
   orders: [
