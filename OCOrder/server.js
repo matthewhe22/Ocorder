@@ -752,7 +752,7 @@ async function handler(req, res) {
         lotNumber:   stripCtrl(item.lotNumber   || ""),
         planName:    stripCtrl(item.planName    || ""),
         ocName:      stripCtrl(item.ocName      || ""),
-        productName: stripCtrl(item.productName || ""),
+        productName: stripCtrl(item.productName || ""), // overridden from catalog below
         ocId:        item.ocId   || null,
         qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
