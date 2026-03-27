@@ -1147,6 +1147,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               </div>
 
