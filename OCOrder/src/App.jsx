@@ -1108,8 +1108,8 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     </div>
                   )}
 
-                  {/* Authority document — required for keys orders and agents; not required for OC certificate owners */}
-                  {(orderCategory === "keys" || contact.applicantType === "agent") && (
+                  {/* Authority document — required for keys orders only */}
+                  {orderCategory === "keys" && (
                   <div className="form-row" style={{ marginBottom: 0 }}>
                     <label className="f-label">
                       {contact.applicantType === "owner" ? "Levy Notice / Identity Proof" : "Lot Authority Document"}
