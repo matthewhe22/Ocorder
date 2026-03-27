@@ -759,7 +759,7 @@ async function handler(req, res) {
         planName:    "", // overridden from catalog below
         ocName:      stripCtrl(item.ocName      || ""),
         productName: stripCtrl(item.productName || ""), // overridden from catalog below
-        ocId:        item.ocId   || null,
+        ocId:        null, // set from catalog for perOC products only; stripped for non-perOC
         qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
       })),
