@@ -775,8 +775,10 @@ async function handler(req, res) {
       // Require a known active plan — no plan means no price enforcement
       if (!plan) return json(res, 400, { error: "A valid planId is required." });
       if (!plan.products?.length) return json(res, 400, { error: "The specified plan has no products." });
-      // Count how many times each perOC product appears per lot to apply secondaryPrice
-      const ocCountPerProduct = {}; // key: `${productId}:${lotId}`
+      // Count how many times each perOC product appears per OC to apply secondaryPrice;
+      // also detect duplicate (productId, ocId) combinations.
+      const ocCountPerProduct = {}; // key: `${productId}:${ocId}` for perOC, `${productId}:${lotId}` for non-perOC
+      const seenItems = new Set(); // detect true duplicates
       for (const item of order.items) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
         const product = plan.products.find(p => p.id === item.productId);
@@ -791,10 +793,18 @@ async function handler(req, res) {
         if (order.orderCategory === "oc" && isKeysProduct) {
           return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
         }
+        // BUG-6: reject duplicate (productId, ocId) combinations in a single order
+        const dupKey = product.perOC ? `${item.productId}:${item.ocId || ""}` : `${item.productId}:${item.lotId || ""}:${item.qty}`;
+        if (product.perOC && seenItems.has(dupKey)) {
+          return json(res, 400, { error: `Duplicate item: product ${item.productId} for OC ${item.ocId} appears more than once.` });
+        }
+        seenItems.add(dupKey);
         // Snapshot productName from catalog (M-6)
         item.productName = product.name || item.productName;
         if (product.perOC) {
-          const key = `${item.productId}:${item.lotId || ""}`;
+          // BUG-5: perOC products are always qty 1 — one certificate per OC
+          item.qty = 1;
+          const key = `${item.productId}:${item.ocId || ""}`;
           ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
           item.price = ocCountPerProduct[key] === 1
             ? Number(product.price)
