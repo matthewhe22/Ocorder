@@ -746,6 +746,7 @@ export default function App() {
 function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
+  const [extLinkTarget, setExtLinkTarget] = useState(null); // product with externalUrl awaiting confirm
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
