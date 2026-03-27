@@ -93,11 +93,7 @@ const DEMO_SEED_DATA = {
         { id:"P3", name:"Register of Owners Search", description:"Current register of lot owners",           price:55,  turnaround:"3 business days", perOC:false },
         { id:"P4", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:75, turnaround:"2 business days", perOC:false },
       ],
-      shippingOptions: [
-        { id: "pickup", name: "Pickup / Email",    price: 0,  requiresAddress: false },
-        { id: "post",   name: "Standard Post",     price: 12, requiresAddress: true  },
-        { id: "express",name: "Express Post",      price: 25, requiresAddress: true  },
-      ],
+      keysShipping: { deliveryCost: 12, expressCost: 25 },
     },
     {
       id: "SP10002", name: "Parkside Gardens", address: "12 Garden Street, Melbourne VIC 3000", active: true,
