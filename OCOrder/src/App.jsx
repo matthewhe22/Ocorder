@@ -1031,9 +1031,16 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
 
             {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
               <div>
-                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
-                  Owner Corporations — select all that apply
-                </div>
+                {(() => {
+                  const trimmed = lotNumber.trim();
+                  const lot = trimmed ? plan.lots.find(l => l.number.toLowerCase() === trimmed.toLowerCase()) : null;
+                  return (
+                    <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+                      Owner Corporations — select all that apply
+                      {lot && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "var(--forest)", background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "4px", padding: "1px 7px", fontSize: "0.68rem" }}>Auto-assigned from {lot.number}</span>}
+                    </div>
+                  );
+                })()}
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   {Object.entries(plan.ownerCorps).map(([ocId, oc], idx) => {
                     const checked = selectedOCs.includes(ocId);
