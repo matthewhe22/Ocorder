@@ -1204,7 +1204,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                       return (
                         <div key={product.id} className={`prod-card ${allAdded ? "added" : ""}`}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
-                            <div className="prod-name">{product.name}</div>
+                            <div className="prod-name">{product.name}{product.externalUrl && <span style={{ marginLeft: "6px", fontSize: "0.6rem", fontWeight: 700, background: "var(--forest)", color: "white", borderRadius: "3px", padding: "1px 5px", letterSpacing: "0.05em", verticalAlign: "middle" }}>EXTERNAL</span>}</div>
                             {product.perOC && (
                               <div className="tip-wrap">
                                 <span className="per-oc-tag">
