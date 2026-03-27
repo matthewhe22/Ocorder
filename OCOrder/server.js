@@ -849,7 +849,7 @@ async function handler(req, res) {
       if (order.orderCategory === "keys" && order.selectedShipping) {
         const ks = plan.keysShipping || {};
         const shippingType = order.selectedShipping.type;
-        if (shippingType === "express") {
+        if (shippingType.toLowerCase() === "express") {
           order.selectedShipping.price = Math.max(0, Number(ks.expressCost) || 0);
         } else {
           // standard/pickup/delivery — use deliveryCost
