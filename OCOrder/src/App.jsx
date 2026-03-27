@@ -1254,7 +1254,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               disabled={cart.length === 0}
               onClick={() => {
                 const hasErr = (contact.applicantType === "owner" && !contact.ownerName) ||
-                  (lotNumber.trim() && !lotAuthFile && (orderCategory === "keys" || contact.applicantType === "agent"));
+                  (lotNumber.trim() && !lotAuthFile && orderCategory === "keys");
                 if (hasErr) {
                   setStep2Attempted(true);
                   const el = document.querySelector(".alert-warn, .f-input:invalid");
