@@ -14,6 +14,7 @@ export default async function handler(req, res) {
     stripeEnabled: !!(cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY),
     bankEnabled:   pm.bankEnabled  !== false,
     payidEnabled:  pm.payidEnabled !== false,
+    demoMode:      DEMO_MODE,
     paymentDetails: {
       accountName: pd.accountName || "Top Owners Corporation",
       bsb: pd.bsb || "033-065",
