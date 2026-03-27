@@ -885,7 +885,7 @@ async function handler(req, res) {
 
     // Strip admin-only fields before returning to the customer
     const customerOrder = { ...order, items: order.items.map(({ managerAdminCharge, ...item }) => item) };
-    return json(res, 200, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
+    return json(res, 201, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
 
   // ── DELETE /api/orders/:id/delete  (admin — permanently remove a cancelled order) ─
