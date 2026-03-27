@@ -2940,6 +2940,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Internal charge for admin reporting. Not included in the product price shown to applicants.</div>
               </div>
             )}
+            {(form.category || "oc") === "keys" && (
+              <div className="form-row">
+                <label className="f-label">External Application URL <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>(optional)</span></label>
+                <input className="f-input" type="url" placeholder="https://supplier.com/apply" value={form.externalUrl||""} onChange={e => upd("externalUrl",e.target.value)}/>
+                <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>If set, applicants will see an "Apply Now" button that redirects to this URL instead of adding to cart. Their order will be closed on redirect.</div>
+              </div>
+            )}
             {/* Shipping cost overrides — shown when plan has shipping options */}
             {(() => {
               const activePlan = data.strataPlans.find(p => p.id === planId);
