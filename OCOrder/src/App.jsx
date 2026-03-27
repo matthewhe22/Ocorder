@@ -2292,7 +2292,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (prod.shippingCosts) {
       Object.entries(prod.shippingCosts).forEach(([k, v]) => { scFields[`sc_${k}`] = v; });
     }
-    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", ...scFields });
+    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", externalUrl: prod.externalUrl || "", ...scFields });
     setModal("editProduct");
   };
 
