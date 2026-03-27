@@ -781,11 +781,14 @@ async function handler(req, res) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
-        // M-7: cross-validate product category vs order category
+        // M-7: cross-validate product category vs order category.
+        // Keys products are identified server-side by having managerAdminCharge defined.
+        // OC products are perOC OR are supplementary (Register of Owners, Insurance, etc.) — i.e. no managerAdminCharge.
+        const isKeysProduct = product.managerAdminCharge !== undefined;
         if (order.orderCategory === "keys" && product.perOC) {
           return json(res, 400, { error: `Product ${item.productId} is not valid for keys/fobs orders.` });
         }
-        if (order.orderCategory === "oc" && !product.perOC) {
+        if (order.orderCategory === "oc" && isKeysProduct) {
           return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
         }
         // Snapshot productName from catalog (M-6)
