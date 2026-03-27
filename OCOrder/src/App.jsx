@@ -2993,9 +2993,32 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               </select>
             </div>
             <div className="form-row">
-              <label className="f-label">Owner Corp IDs (comma-separated)</label>
-              <input className="f-input" placeholder="OC-A, OC-B" value={form.ocIds||""} onChange={e => upd("ocIds",e.target.value)}/>
-              {plan && <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Available: {Object.keys(plan.ownerCorps).join(", ")}</div>}
+              <label className="f-label">Owner Corporations</label>
+              {plan && Object.keys(plan.ownerCorps).length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                  {Object.entries(plan.ownerCorps).map(([ocId, oc]) => {
+                    const selected = (form.ocIds || "").split(",").map(s => s.trim()).filter(Boolean).includes(ocId);
+                    return (
+                      <label key={ocId} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 12px", border: `1.5px solid ${selected ? "var(--sage)" : "var(--border)"}`, borderRadius: "6px", cursor: "pointer", background: selected ? "var(--sage-tint)" : "white" }}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => {
+                            const cur = (form.ocIds || "").split(",").map(s => s.trim()).filter(Boolean);
+                            const next = selected ? cur.filter(id => id !== ocId) : [...cur, ocId];
+                            upd("ocIds", next.join(", "));
+                          }}
+                          style={{ width: "14px", height: "14px", accentColor: "var(--forest)", flexShrink: 0 }}
+                        />
+                        <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--forest)", fontFamily: "monospace" }}>{ocId}</span>
+                        <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{oc.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "4px" }}>No Owner Corporations defined for this plan. Add OCs first.</div>
+              )}
             </div>
             <div style={{ display: "flex", gap: "8px", marginTop: "0.5rem" }}>
               <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); }}>Cancel</button>
