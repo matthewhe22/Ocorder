@@ -752,7 +752,7 @@ async function handler(req, res) {
         productId:   item.productId,
         lotId:       item.lotId,
         lotNumber:   stripCtrl(item.lotNumber   || ""),
-        planName:    stripCtrl(item.planName    || ""),
+        planName:    "", // overridden from catalog below
         ocName:      stripCtrl(item.ocName      || ""),
         productName: stripCtrl(item.productName || ""), // overridden from catalog below
         ocId:        item.ocId   || null,
