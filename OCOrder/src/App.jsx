@@ -547,10 +547,14 @@ export default function App() {
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
-  // When plan changes, initialise selectedOCs to all OCs in the plan
+  // When plan changes, initialise selectedOCs — if plan has lots, OCs are driven by lot selection; otherwise show all
   useEffect(() => {
-    if (plan) setSelectedOCs(Object.keys(plan.ownerCorps || {}));
-    else setSelectedOCs([]);
+    if (plan) {
+      if (plan.lots && plan.lots.length > 0) setSelectedOCs([]);
+      else setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    } else {
+      setSelectedOCs([]);
+    }
   }, [selPlan]);
 
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
@@ -947,7 +951,14 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div className="search-label" style={{ marginBottom: "12px" }}>What are you ordering?</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                 <button className={`cat-card ${orderCategory === "oc" ? "cat-selected" : ""}`}
-                  onClick={() => { setOrderCategory("oc"); setCart([]); setSelectedShipping(null); }}>
+                  onClick={() => {
+                    setOrderCategory("oc"); setCart([]); setSelectedShipping(null);
+                    // Re-populate OCs from the currently selected lot (if any)
+                    if (lotNumber && plan?.lots?.length) {
+                      const lotObj = plan.lots.find(l => l.number === lotNumber);
+                      if (lotObj) setSelectedOCs(lotObj.ownerCorps || []);
+                    }
+                  }}>
                   {orderCategory === "oc" && <span style={{ position:"absolute", top:10, right:10, color:"var(--forest)" }}><Ic n="check" s={16}/></span>}
                   <div className="cat-card-icon">📄</div>
                   <div className="cat-card-title">OC Certificates</div>
@@ -979,18 +990,80 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <p className="pg-sub">{plan.address} &nbsp;·&nbsp; {plan.id}</p>
 
           <div className="panel" style={{ marginBottom: "1px" }}>
-            <div className="form-row" style={{ marginBottom: orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 ? "1rem" : 0 }}>
+            <div className="form-row" style={{ marginBottom: 0 }}>
               <label className="f-label">Lot Number</label>
-              <input
-                className="f-input"
-                placeholder="e.g. Lot 5"
-                value={lotNumber}
-                onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
-              />
+              {plan.lots && plan.lots.length > 0 ? (
+                <select
+                  className="f-input"
+                  value={lotNumber}
+                  onChange={e => {
+                    const newLot = e.target.value;
+                    setLotNumber(newLot);
+                    setCart([]);
+                    setLotAuthFile(null);
+                    if (newLot) {
+                      const lotObj = plan.lots.find(l => l.number === newLot);
+                      if (lotObj && orderCategory === "oc") setSelectedOCs(lotObj.ownerCorps || []);
+                    } else {
+                      setSelectedOCs([]);
+                    }
+                  }}
+                >
+                  <option value="">— Select a lot —</option>
+                  {plan.lots.map(l => (
+                    <option key={l.id} value={l.number}>
+                      {l.number}{l.level ? ` — Level ${l.level}` : ""}{l.type ? ` (${l.type})` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="f-input"
+                  placeholder="e.g. Lot 5"
+                  value={lotNumber}
+                  onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
+                />
+              )}
             </div>
 
-            {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
-              <div>
+            {orderCategory === "oc" && lotNumber && selectedOCs.length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
+                  Owner Corporations for this lot
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {selectedOCs.map((ocId, idx) => {
+                    const oc = plan.ownerCorps?.[ocId];
+                    const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                    return (
+                      <div key={ocId} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1.5px solid var(--sage)", borderRadius: "6px", background: "var(--sage-tint)" }}>
+                        <Ic n="check" s={14} style={{ color: "var(--sage)", flexShrink: 0 }}/>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.86rem", color: "var(--forest)" }}>{oc?.name || ocId}</div>
+                          {ocProd && (
+                            <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>
+                              {idx === 0 ? `1st OC rate: ${fmt(ocProd.price)}` : `Additional OC rate: ${fmt(ocProd.secondaryPrice ?? ocProd.price)}`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {selectedOCs.length > 1 && (() => {
+                  const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                  if (!ocProd || !ocProd.secondaryPrice) return null;
+                  return (
+                    <div style={{ fontSize: "0.76rem", color: "var(--muted)", marginTop: "8px" }}>
+                      <Ic n="info" s={12}/> {selectedOCs.length} OCs — 1st at {fmt(ocProd.price)}, additional at {fmt(ocProd.secondaryPrice)} each.
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {orderCategory === "oc" && !plan.lots?.length && Object.keys(plan.ownerCorps || {}).length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
                 <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
                   Owner Corporations — select all that apply
                 </div>
@@ -1085,39 +1158,37 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     </div>
                   )}
 
-                  {/* Authority document — always shown; required for all applicant types */}
-                  <div className="form-row" style={{ marginBottom: 0 }}>
-                    <label className="f-label">
-                      {contact.applicantType === "owner" ? "Levy Notice / Identity Proof" : "Lot Authority Document"}
-                      <span style={{ color: "var(--red)" }}> *</span>
-                    </label>
-                    <p style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "8px" }}>
-                      {contact.applicantType === "agent"
-                        ? "Required. Upload a document proving your authority to act for this lot (e.g. authority to act, letter of engagement, power of attorney)."
-                        : contact.applicantType === "owner"
-                          ? "Required. Upload your levy notice or levy certificate to verify ownership of this lot."
-                          : "Required. Upload a document proving your entitlement to this lot (e.g. levy notice, levy certificate, or lot entitlement certificate)."}
-                    </p>
-                    <div style={{ position: "relative" }}>
-                      {lotAuthFile ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)" }}>
-                          <Ic n="doc" s={16}/>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.82rem", fontWeight: 500 }}>{lotAuthFile.name}</div>
-                            <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{(lotAuthFile.size / 1024).toFixed(1)} KB</div>
+                  {/* Authority document — only required for Keys/Fob orders */}
+                  {orderCategory === "keys" && (
+                    <div className="form-row" style={{ marginBottom: 0 }}>
+                      <label className="f-label">
+                        Lot Authority Document
+                        <span style={{ color: "var(--red)" }}> *</span>
+                      </label>
+                      <p style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "8px" }}>
+                        Required. Upload a document proving your authority to receive keys/fobs for this lot (e.g. authority to act, letter of engagement, power of attorney).
+                      </p>
+                      <div style={{ position: "relative" }}>
+                        {lotAuthFile ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)" }}>
+                            <Ic n="doc" s={16}/>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: "0.82rem", fontWeight: 500 }}>{lotAuthFile.name}</div>
+                              <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{(lotAuthFile.size / 1024).toFixed(1)} KB</div>
+                            </div>
+                            <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }} onClick={() => setLotAuthFile(null)} title="Remove file"><Ic n="trash" s={15}/></button>
                           </div>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }} onClick={() => setLotAuthFile(null)} title="Remove file"><Ic n="trash" s={15}/></button>
-                        </div>
-                      ) : (
-                        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--border)"; if (e.dataTransfer.files[0]) setLotAuthFile(e.dataTransfer.files[0]); }}>
-                          <Ic n="upload" s={24}/>
-                          <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--forest)" }}>Click to upload or drag & drop</span>
-                          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max 10 MB</span>
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setLotAuthFile(e.target.files[0]); }}/>
-                        </label>
-                      )}
+                        ) : (
+                          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--border)"; if (e.dataTransfer.files[0]) setLotAuthFile(e.dataTransfer.files[0]); }}>
+                            <Ic n="upload" s={24}/>
+                            <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--forest)" }}>Click to upload or drag & drop</span>
+                            <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max 10 MB</span>
+                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setLotAuthFile(e.target.files[0]); }}/>
+                          </label>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -1208,14 +1279,9 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           )}
 
           {/* Validation warnings */}
-          {lotNumber.trim() && (orderCategory === "keys" || contact.applicantType === "agent") && !lotAuthFile && (
+          {lotNumber.trim() && orderCategory === "keys" && !lotAuthFile && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
-              <Ic n="shield" s={13}/> {contact.applicantType === "agent" ? "An authorisation document is required when applying as an agent. Please upload it above." : "An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above."}
-            </div>
-          )}
-          {lotNumber.trim() && orderCategory === "oc" && contact.applicantType === "owner" && !lotAuthFile && (
-            <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
-              <Ic n="shield" s={13}/> A Levy Notice is required when applying as an Owner. Please upload it in the Applicant Details section above.
+              <Ic n="shield" s={13}/> An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above.
             </div>
           )}
           {lotNumber.trim() && contact.applicantType === "owner" && !contact.ownerName && (
@@ -1228,7 +1294,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             <button className="btn btn-blk btn-lg"
               disabled={cart.length === 0}
               onClick={() => {
-                const hasErr = (contact.applicantType === "owner" && !contact.ownerName) || !lotAuthFile;
+                const hasErr = (contact.applicantType === "owner" && !contact.ownerName) || (orderCategory === "keys" && !lotAuthFile);
                 if (hasErr) {
                   setStep2Attempted(true);
                   const el = document.querySelector(".alert-warn");
