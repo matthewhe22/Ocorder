@@ -46,6 +46,7 @@ const DEFAULT_DATA = {
         { id:"P5", name:"Meeting Minutes — Last 2 Years",      description:"Minutes of AGM and general meetings",              price:110,                    turnaround:"5 business days",   perOC:false },
         { id:"P6", name:"Financial Statements",                description:"Latest audited financial statements",               price: 95,                    turnaround:"5 business days",   perOC:false },
       ],
+      keysShipping: { deliveryCost: 15, expressCost: 25 },
       active: true,
     },
   ],
