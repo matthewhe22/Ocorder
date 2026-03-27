@@ -714,8 +714,11 @@ async function handler(req, res) {
     if ((raw.contactInfo.ocReference || "").length > 100) return json(res, 400, { error: "OC reference must not exceed 100 characters." });
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (raw.items.length > 50) return json(res, 400, { error: "Order cannot contain more than 50 items." });
-    if (raw.orderCategory === "keys" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for Keys/Fobs/Remotes orders." });
-    if (raw.orderCategory === "keys" && !raw.selectedShipping?.type) return json(res, 400, { error: "A shipping method is required for Keys/Fobs/Remotes orders." });
+    // BUG-A1/A2/A3: validate orderCategory is present and a known value (case-sensitive)
+    const orderCategoryNorm = typeof raw.orderCategory === "string" ? raw.orderCategory.toLowerCase() : "";
+    if (!["oc", "keys"].includes(orderCategoryNorm)) return json(res, 400, { error: "orderCategory must be 'oc' or 'keys'." });
+    if (orderCategoryNorm === "keys" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for Keys/Fobs/Remotes orders." });
+    if (orderCategoryNorm === "keys" && !raw.selectedShipping?.type) return json(res, 400, { error: "A shipping method is required for Keys/Fobs/Remotes orders." });
     // Validate payment method against config (prevents bypass of disabled methods)
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
