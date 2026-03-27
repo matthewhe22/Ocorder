@@ -758,7 +758,7 @@ async function handler(req, res) {
         // price and managerAdminCharge set below from server-side catalog
       })),
       // Shipping only applies to keys/fob orders; price validated from catalog below
-      selectedShipping: (order_orderCategory_placeholder === "keys" && raw.selectedShipping) ? {
+      selectedShipping: (raw.orderCategory === "keys" && raw.selectedShipping) ? {
         id:    stripCtrl(String(raw.selectedShipping.id   || "")),
         name:  stripCtrl(String(raw.selectedShipping.name || "")),
         type:  stripCtrl(String(raw.selectedShipping.type || "")),
