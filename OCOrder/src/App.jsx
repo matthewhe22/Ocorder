@@ -1243,11 +1243,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <Ic n="shield" s={13}/> {contact.applicantType === "agent" ? "An authorisation document is required when applying as an agent. Please upload it above." : "An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above."}
             </div>
           )}
-          {lotNumber.trim() && orderCategory === "oc" && contact.applicantType === "owner" && !lotAuthFile && (
-            <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
-              <Ic n="shield" s={13}/> A Levy Notice is required when applying as an Owner. Please upload it in the Applicant Details section above.
-            </div>
-          )}
           {lotNumber.trim() && contact.applicantType === "owner" && !contact.ownerName && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
               <Ic n="x" s={13}/> Owner Name is required. Please enter it in the Applicant Details section above.
