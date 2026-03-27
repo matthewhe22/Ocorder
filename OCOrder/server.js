@@ -728,7 +728,8 @@ async function handler(req, res) {
         return json(res, 400, { error: "PayID payments are currently disabled." });
     }
     // Strip control characters from string values that flow into email subjects / headers
-    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
+    // Strip control characters AND HTML angle brackets (prevent XSS in admin UI and emails)
+    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f<>]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
     const order = {
       id: serverId,
