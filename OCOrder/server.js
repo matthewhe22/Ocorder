@@ -451,7 +451,7 @@ function readBody(req, res) {
         req.destroy();
       }
     });
-    req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({}); } });
+    req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({ _parseError: true }); } });
     req.on("error", reject);
   });
 }
