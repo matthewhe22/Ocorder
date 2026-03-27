@@ -776,12 +776,21 @@ async function handler(req, res) {
       // Require a known active plan — no plan means no price enforcement
       if (!plan) return json(res, 400, { error: "A valid planId is required." });
       if (!plan.products?.length) return json(res, 400, { error: "The specified plan has no products." });
+      // GAP-2: validate order.lotId against plan lots (if provided)
+      if (order.lotId) {
+        const knownLot = plan.lots.find(l => l.id === order.lotId);
+        if (!knownLot) return json(res, 400, { error: `Lot "${order.lotId}" does not exist in the selected plan.` });
+      }
+      // Snapshot plan name onto order itself for display in admin/emails
+      order.planName = plan.name;
       // Count how many times each perOC product appears per OC to apply secondaryPrice;
       // also detect duplicate (productId, ocId) combinations.
-      const ocCountPerProduct = {}; // key: `${productId}:${ocId}` for perOC, `${productId}:${lotId}` for non-perOC
+      const ocCountPerProduct = {}; // key: `${productId}:${ocId}` for perOC
       const seenItems = new Set(); // detect true duplicates
       for (const item of order.items) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
+        // GAP-10: lotNumber required on every item
+        if (!item.lotNumber?.trim()) return json(res, 400, { error: "Each order item must include a lot number." });
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
         // M-7: cross-validate product category vs order category.
@@ -794,14 +803,27 @@ async function handler(req, res) {
         if (order.orderCategory === "oc" && isKeysProduct) {
           return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
         }
-        // BUG-6: reject duplicate (productId, ocId) combinations in a single order
-        const dupKey = product.perOC ? `${item.productId}:${item.ocId || ""}` : `${item.productId}:${item.lotId || ""}:${item.qty}`;
-        if (product.perOC && seenItems.has(dupKey)) {
-          return json(res, 400, { error: `Duplicate item: product ${item.productId} for OC ${item.ocId} appears more than once.` });
+        // GAP-1: for perOC products, ocId must exist in plan.ownerCorps
+        if (product.perOC) {
+          if (!item.ocId || !plan.ownerCorps?.[item.ocId]) {
+            return json(res, 400, { error: `A valid Owner Corporation (ocId) is required for product ${item.productId}. Received: "${item.ocId}"` });
+          }
+          // Snapshot OC name from plan catalog (not client-supplied)
+          item.ocName = plan.ownerCorps[item.ocId]?.name || item.ocId;
+        }
+        // Reject duplicate (productId, ocId) for perOC; reject duplicate (productId, lotId) for non-perOC
+        const dupKey = product.perOC
+          ? `${item.productId}:${item.ocId}`
+          : `${item.productId}:${item.lotId || item.lotNumber}`;
+        if (seenItems.has(dupKey)) {
+          return json(res, 400, { error: product.perOC
+            ? `Duplicate item: product ${item.productId} for OC ${item.ocId} appears more than once.`
+            : `Duplicate item: product ${item.productId} for lot ${item.lotNumber} appears more than once.` });
         }
         seenItems.add(dupKey);
-        // Snapshot productName from catalog (M-6)
+        // Snapshot productName and planName from catalog
         item.productName = product.name || item.productName;
+        item.planName = plan.name;
         if (product.perOC) {
           // BUG-5: perOC products are always qty 1 — one certificate per OC
           item.qty = 1;
