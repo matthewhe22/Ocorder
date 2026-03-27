@@ -1594,6 +1594,39 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         </div>
       )}
 
+      {/* ── External link confirmation dialog ── */}
+      {extLinkTarget && (
+        <div className="overlay" onClick={() => setExtLinkTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "1rem" }}>
+              <span style={{ fontSize: "1.6rem" }}>🔗</span>
+              <h2 className="modal-tt" style={{ margin: 0 }}>Apply via External Provider</h2>
+            </div>
+            <p style={{ fontSize: "0.88rem", color: "var(--ink)", marginBottom: "0.75rem", lineHeight: 1.6 }}>
+              <strong>{extLinkTarget.name}</strong> requires you to apply directly with the supplier.
+            </p>
+            <p style={{ fontSize: "0.88rem", color: "var(--ink)", marginBottom: "0.5rem", lineHeight: 1.6 }}>
+              You will be redirected to:
+            </p>
+            <div style={{ background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "6px", padding: "8px 12px", fontSize: "0.8rem", fontFamily: "monospace", wordBreak: "break-all", marginBottom: "1rem", color: "var(--forest)" }}>
+              {extLinkTarget.externalUrl}
+            </div>
+            <div className="alert alert-warn" style={{ marginBottom: "1rem", fontSize: "0.82rem" }}>
+              <Ic n="info" s={13}/> Your current order will be <strong>closed</strong> when you continue. You can start a new order at any time.
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => setExtLinkTarget(null)}>Cancel</button>
+              <button className="btn btn-blk" style={{ flex: 1 }} onClick={() => {
+                const url = extLinkTarget.externalUrl;
+                setExtLinkTarget(null);
+                reset();
+                window.open(url, "_blank", "noopener,noreferrer");
+              }}>Continue &amp; Close Order <Ic n="arrow" s={13}/></button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
