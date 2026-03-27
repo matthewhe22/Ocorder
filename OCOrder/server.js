@@ -795,15 +795,15 @@ async function handler(req, res) {
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
         // M-7: cross-validate product category vs order category.
-        // Keys products are identified server-side by having managerAdminCharge defined.
-        // OC products are perOC OR are supplementary (Register of Owners, Insurance, etc.) — i.e. no managerAdminCharge.
-        const isKeysProduct = product.managerAdminCharge !== undefined;
-        if (order.orderCategory === "keys" && product.perOC) {
+        // Use the stored product.category field; fall back to managerAdminCharge for legacy products without it.
+        const productCategory = product.category || (product.managerAdminCharge !== undefined ? "keys" : "oc");
+        if (order.orderCategory === "keys" && productCategory !== "keys") {
           return json(res, 400, { error: `Product ${item.productId} is not valid for keys/fobs orders.` });
         }
-        if (order.orderCategory === "oc" && isKeysProduct) {
+        if (order.orderCategory === "oc" && productCategory === "keys") {
           return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
         }
+        const isKeysProduct = productCategory === "keys";
         // GAP-1: for perOC products, ocId must exist in plan.ownerCorps
         if (product.perOC) {
           if (!item.ocId || !plan.ownerCorps?.[item.ocId]) {
