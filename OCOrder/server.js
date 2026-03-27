@@ -781,7 +781,6 @@ async function handler(req, res) {
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
         // M-7: cross-validate product category vs order category
-        const productIsKeys = !!(product.managerAdminCharge !== undefined || product.name?.toLowerCase().includes("key") || product.name?.toLowerCase().includes("fob") || product.name?.toLowerCase().includes("remote"));
         if (order.orderCategory === "keys" && product.perOC) {
           return json(res, 400, { error: `Product ${item.productId} is not valid for keys/fobs orders.` });
         }
