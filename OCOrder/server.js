@@ -743,7 +743,7 @@ async function handler(req, res) {
       orderCategory: orderCategoryNorm,
       contactInfo: {
         name:        stripCtrl(raw.contactInfo?.name  || ""),
-        email:       stripCtrl((raw.contactInfo?.email || "").trim()),
+        email:       stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()),
         phone:       stripCtrl(raw.contactInfo?.phone || ""),
         companyName: stripCtrl(raw.contactInfo?.companyName || ""),
         ocReference: stripCtrl(raw.contactInfo?.ocReference || ""),
