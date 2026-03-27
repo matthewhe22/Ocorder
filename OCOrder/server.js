@@ -699,6 +699,7 @@ async function handler(req, res) {
   // ── POST /api/orders  (public — customer places order, JSON + optional base64 file) ─
   if (urlPath === "/api/orders" && method === "POST") {
     const body = await readBody(req, res);
+    if (body._parseError) return json(res, 400, { error: "Invalid JSON in request body." });
     const raw = body.order || body; // support both { order, lotAuthority } and flat order
     if (!Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
     // Generate server-side ID — never trust client-supplied IDs
