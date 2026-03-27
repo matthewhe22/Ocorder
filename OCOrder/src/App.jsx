@@ -553,6 +553,23 @@ export default function App() {
     else setSelectedOCs([]);
   }, [selPlan]);
 
+  // When lot number changes on an OC order, auto-assign that lot's OCs
+  useEffect(() => {
+    if (!plan || orderCategory !== "oc") return;
+    const trimmed = lotNumber.trim();
+    if (!trimmed) {
+      setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+      return;
+    }
+    const lot = plan.lots.find(l => l.number.toLowerCase() === trimmed.toLowerCase());
+    if (lot && lot.ownerCorps?.length > 0) {
+      setSelectedOCs(lot.ownerCorps);
+    } else {
+      // Lot not found in mapping — keep all OCs selectable
+      setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    }
+  }, [lotNumber, orderCategory]);
+
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
 
   const addProd = (product) => {
