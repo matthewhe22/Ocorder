@@ -770,8 +770,8 @@ async function handler(req, res) {
     // Validate + override item prices against the plan's product catalog
     const d = readData();
     {
-      const plan = d.strataPlans.find(p => p.id === order.planId);
-      // Require a known plan — no plan means no price enforcement
+      const plan = d.strataPlans.find(p => p.id === order.planId && p.active !== false);
+      // Require a known active plan — no plan means no price enforcement
       if (!plan) return json(res, 400, { error: "A valid planId is required." });
       if (!plan.products?.length) return json(res, 400, { error: "The specified plan has no products." });
       // Count how many times each perOC product appears per lot to apply secondaryPrice
@@ -780,6 +780,16 @@ async function handler(req, res) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
+        // M-7: cross-validate product category vs order category
+        const productIsKeys = !!(product.managerAdminCharge !== undefined || product.name?.toLowerCase().includes("key") || product.name?.toLowerCase().includes("fob") || product.name?.toLowerCase().includes("remote"));
+        if (order.orderCategory === "keys" && product.perOC) {
+          return json(res, 400, { error: `Product ${item.productId} is not valid for keys/fobs orders.` });
+        }
+        if (order.orderCategory === "oc" && !product.perOC) {
+          return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
+        }
+        // Snapshot productName from catalog (M-6)
+        item.productName = product.name || item.productName;
         if (product.perOC) {
           const key = `${item.productId}:${item.lotId || ""}`;
           ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
@@ -795,8 +805,21 @@ async function handler(req, res) {
           item.managerAdminCharge = product.managerAdminCharge;
         }
       }
+      // H-3: validate and set shipping cost from plan catalog (not from client)
+      if (order.orderCategory === "keys" && order.selectedShipping) {
+        const ks = plan.keysShipping || {};
+        const shippingType = order.selectedShipping.type;
+        if (shippingType === "express") {
+          order.selectedShipping.price = Math.max(0, Number(ks.expressCost) || 0);
+        } else {
+          // standard/pickup/delivery — use deliveryCost
+          order.selectedShipping.price = Math.max(0, Number(ks.deliveryCost) || 0);
+        }
+      }
     }
-    const shippingCost = order.selectedShipping ? Math.max(0, Number(order.selectedShipping.price) || 0) : 0;
+    // H-4: shipping only applies to keys orders
+    const shippingCost = (order.orderCategory === "keys" && order.selectedShipping)
+      ? Math.max(0, Number(order.selectedShipping.price) || 0) : 0;
     const recalcTotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0) + shippingCost;
     order.total = Math.round(recalcTotal * 100) / 100;
 
