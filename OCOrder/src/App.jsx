@@ -547,10 +547,14 @@ export default function App() {
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
-  // When plan changes, initialise selectedOCs to all OCs in the plan
+  // When plan changes, initialise selectedOCs — if plan has lots, OCs are driven by lot selection; otherwise show all
   useEffect(() => {
-    if (plan) setSelectedOCs(Object.keys(plan.ownerCorps || {}));
-    else setSelectedOCs([]);
+    if (plan) {
+      if (plan.lots && plan.lots.length > 0) setSelectedOCs([]);
+      else setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    } else {
+      setSelectedOCs([]);
+    }
   }, [selPlan]);
 
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
@@ -970,7 +974,14 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div className="search-label" style={{ marginBottom: "12px" }}>What are you ordering?</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                 <button className={`cat-card ${orderCategory === "oc" ? "cat-selected" : ""}`}
-                  onClick={() => { setOrderCategory("oc"); setCart([]); setSelectedShipping(null); }}>
+                  onClick={() => {
+                    setOrderCategory("oc"); setCart([]); setSelectedShipping(null);
+                    // Re-populate OCs from the currently selected lot (if any)
+                    if (lotNumber && plan?.lots?.length) {
+                      const lotObj = plan.lots.find(l => l.number === lotNumber);
+                      if (lotObj) setSelectedOCs(lotObj.ownerCorps || []);
+                    }
+                  }}>
                   {orderCategory === "oc" && <span style={{ position:"absolute", top:10, right:10, color:"var(--forest)" }}><Ic n="check" s={16}/></span>}
                   <div className="cat-card-icon">📄</div>
                   <div className="cat-card-title">OC Certificates</div>
@@ -1002,18 +1013,80 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <p className="pg-sub">{plan.address} &nbsp;·&nbsp; {plan.id}</p>
 
           <div className="panel" style={{ marginBottom: "1px" }}>
-            <div className="form-row" style={{ marginBottom: orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 ? "1rem" : 0 }}>
+            <div className="form-row" style={{ marginBottom: 0 }}>
               <label className="f-label">Lot Number</label>
-              <input
-                className="f-input"
-                placeholder="e.g. Lot 5"
-                value={lotNumber}
-                onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
-              />
+              {plan.lots && plan.lots.length > 0 ? (
+                <select
+                  className="f-input"
+                  value={lotNumber}
+                  onChange={e => {
+                    const newLot = e.target.value;
+                    setLotNumber(newLot);
+                    setCart([]);
+                    setLotAuthFile(null);
+                    if (newLot) {
+                      const lotObj = plan.lots.find(l => l.number === newLot);
+                      if (lotObj && orderCategory === "oc") setSelectedOCs(lotObj.ownerCorps || []);
+                    } else {
+                      setSelectedOCs([]);
+                    }
+                  }}
+                >
+                  <option value="">— Select a lot —</option>
+                  {plan.lots.map(l => (
+                    <option key={l.id} value={l.number}>
+                      {l.number}{l.level ? ` — Level ${l.level}` : ""}{l.type ? ` (${l.type})` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="f-input"
+                  placeholder="e.g. Lot 5"
+                  value={lotNumber}
+                  onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
+                />
+              )}
             </div>
 
-            {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
-              <div>
+            {orderCategory === "oc" && lotNumber && selectedOCs.length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
+                  Owner Corporations for this lot
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {selectedOCs.map((ocId, idx) => {
+                    const oc = plan.ownerCorps?.[ocId];
+                    const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                    return (
+                      <div key={ocId} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1.5px solid var(--sage)", borderRadius: "6px", background: "var(--sage-tint)" }}>
+                        <Ic n="check" s={14} style={{ color: "var(--sage)", flexShrink: 0 }}/>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.86rem", color: "var(--forest)" }}>{oc?.name || ocId}</div>
+                          {ocProd && (
+                            <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>
+                              {idx === 0 ? `1st OC rate: ${fmt(ocProd.price)}` : `Additional OC rate: ${fmt(ocProd.secondaryPrice ?? ocProd.price)}`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {selectedOCs.length > 1 && (() => {
+                  const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                  if (!ocProd || !ocProd.secondaryPrice) return null;
+                  return (
+                    <div style={{ fontSize: "0.76rem", color: "var(--muted)", marginTop: "8px" }}>
+                      <Ic n="info" s={12}/> {selectedOCs.length} OCs — 1st at {fmt(ocProd.price)}, additional at {fmt(ocProd.secondaryPrice)} each.
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {orderCategory === "oc" && !plan.lots?.length && Object.keys(plan.ownerCorps || {}).length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
                 <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
                   Owner Corporations — select all that apply
                 </div>
