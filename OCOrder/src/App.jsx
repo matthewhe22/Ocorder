@@ -736,6 +736,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
+  const [lotInputText, setLotInputText] = useState("");
+  const [lotDropdownOpen, setLotDropdownOpen] = useState(false);
+  // Sync text input when lotNumber is cleared externally (plan change, reset, cancel)
+  useEffect(() => { if (!lotNumber) setLotInputText(""); }, [lotNumber]);
   const [keysPlacing, setKeysPlacing] = useState(false);
   const [keysPlaceErr, setKeysPlaceErr] = useState("");
   const [step2Attempted, setStep2Attempted] = useState(false);
@@ -1015,31 +1019,73 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <div className="panel" style={{ marginBottom: "1px" }}>
             <div className="form-row" style={{ marginBottom: 0 }}>
               <label className="f-label">Lot Number</label>
-              {plan.lots && plan.lots.length > 0 ? (
-                <select
-                  className="f-input"
-                  value={lotNumber}
-                  onChange={e => {
-                    const newLot = e.target.value;
-                    setLotNumber(newLot);
-                    setCart([]);
-                    setLotAuthFile(null);
-                    if (newLot) {
-                      const lotObj = plan.lots.find(l => l.number === newLot);
-                      if (lotObj && orderCategory === "oc") setSelectedOCs(lotObj.ownerCorps || []);
-                    } else {
-                      setSelectedOCs([]);
-                    }
-                  }}
-                >
-                  <option value="">— Select a lot —</option>
-                  {plan.lots.map(l => (
-                    <option key={l.id} value={l.number}>
-                      {l.number}{l.level ? ` — Level ${l.level}` : ""}{l.type ? ` (${l.type})` : ""}
-                    </option>
-                  ))}
-                </select>
-              ) : (
+              {plan.lots && plan.lots.length > 0 ? (() => {
+                const selectLot = (lotNum) => {
+                  setLotNumber(lotNum);
+                  setLotInputText(lotNum);
+                  setLotDropdownOpen(false);
+                  setCart([]);
+                  setLotAuthFile(null);
+                  const lotObj = plan.lots.find(l => l.number === lotNum);
+                  if (lotObj && orderCategory === "oc") setSelectedOCs(lotObj.ownerCorps || []);
+                  else if (!lotNum) setSelectedOCs([]);
+                };
+                const filtered = lotInputText.trim()
+                  ? plan.lots.filter(l => l.number.toLowerCase().includes(lotInputText.trim().toLowerCase()))
+                  : plan.lots;
+                return (
+                  <div style={{ position: "relative" }}>
+                    <input
+                      className="f-input"
+                      placeholder="Type to search lots…"
+                      value={lotInputText}
+                      autoComplete="off"
+                      onFocus={() => setLotDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setLotDropdownOpen(false), 150)}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setLotInputText(val);
+                        setLotDropdownOpen(true);
+                        // If text no longer matches the committed lot, clear it
+                        if (lotNumber && val !== lotNumber) {
+                          setLotNumber("");
+                          setSelectedOCs([]);
+                          setCart([]);
+                          setLotAuthFile(null);
+                        }
+                      }}
+                    />
+                    {lotDropdownOpen && filtered.length > 0 && (
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid var(--border)", borderRadius: "4px", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 50, maxHeight: "220px", overflowY: "auto", marginTop: "2px" }}>
+                        {filtered.map(l => (
+                          <div
+                            key={l.id}
+                            onMouseDown={() => selectLot(l.number)}
+                            style={{ padding: "9px 14px", cursor: "pointer", fontSize: "0.86rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: lotNumber === l.number ? "var(--sage-tint)" : "white" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--sage-tint)"}
+                            onMouseLeave={e => e.currentTarget.style.background = lotNumber === l.number ? "var(--sage-tint)" : "white"}
+                          >
+                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                              {[l.level ? `Level ${l.level}` : "", l.type].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {lotInputText && !lotNumber && filtered.length === 0 && (
+                      <div style={{ fontSize: "0.74rem", color: "var(--red)", marginTop: "4px" }}>
+                        No matching lot found — please check the lot number.
+                      </div>
+                    )}
+                    {lotInputText && !lotNumber && filtered.length > 0 && !lotDropdownOpen && (
+                      <div style={{ fontSize: "0.74rem", color: "var(--muted)", marginTop: "4px" }}>
+                        Please select a lot from the list.
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
                 <input
                   className="f-input"
                   placeholder="e.g. Lot 5"
