@@ -1256,8 +1256,8 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             <button className="btn btn-blk btn-lg"
               disabled={cart.length === 0}
               onClick={() => {
-                const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email || "");
-                const hasErr = (contact.applicantType === "owner" && !contact.ownerName) || !lotAuthFile || !contact.name?.trim() || !emailOk || !contact.phone?.trim();
+                const hasErr = (contact.applicantType === "owner" && !contact.ownerName) ||
+                  (lotNumber.trim() && !lotAuthFile);
                 if (hasErr) {
                   setStep2Attempted(true);
                   const el = document.querySelector(".alert-warn, .f-input:invalid");
