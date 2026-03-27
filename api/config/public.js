@@ -1,5 +1,5 @@
 // GET /api/config/public — Public config (payment details) for checkout flow
-import { readConfig, cors } from "../_lib/store.js";
+import { readConfig, cors, DEMO_MODE } from "../_lib/store.js";
 
 export default async function handler(req, res) {
   cors(res);
