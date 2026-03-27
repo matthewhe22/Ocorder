@@ -2130,6 +2130,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
         managerAdminCharge: isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? Math.max(0, parseFloat(form.managerAdminCharge) || 0) : undefined,
+        externalUrl: isKeys && form.externalUrl?.trim() ? form.externalUrl.trim() : undefined,
         ...(shippingCosts ? { shippingCosts } : { shippingCosts: undefined }),
       })
     });
