@@ -1238,9 +1238,9 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           )}
 
           {/* Validation warnings */}
-          {lotNumber.trim() && (orderCategory === "keys" || contact.applicantType === "agent") && !lotAuthFile && (
+          {lotNumber.trim() && orderCategory === "keys" && !lotAuthFile && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
-              <Ic n="shield" s={13}/> {contact.applicantType === "agent" ? "An authorisation document is required when applying as an agent. Please upload it above." : "An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above."}
+              <Ic n="shield" s={13}/> An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above.
             </div>
           )}
           {lotNumber.trim() && contact.applicantType === "owner" && !contact.ownerName && (
