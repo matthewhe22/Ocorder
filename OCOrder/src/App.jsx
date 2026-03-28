@@ -3456,6 +3456,7 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
 
 // ─── SEND CERTIFICATE MODAL ───────────────────────────────────────────────────
 function SendCertificateModal({ order, adminToken, onClose, onSent }) {
+  const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
   const [certFile, setCertFile] = useState(null);
   const [sending, setSending] = useState(false);
