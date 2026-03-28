@@ -2799,7 +2799,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {o.status === "Pending Payment" && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
-                        {o.status !== "Issued" && o.status !== "Cancelled" && o.orderCategory !== "keys" && (
+                        {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
                           <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && (
