@@ -5,7 +5,6 @@
 //                 POST /api/orders/:id/stripe-confirm  (public — no admin auth)
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
-import nodemailer from "nodemailer";
 import Stripe from "stripe";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
@@ -47,7 +46,7 @@ function buildCertEmailHtml(order, message, cfg) {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const { id, action } = req.query;
@@ -77,7 +76,8 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${order.lotAuthorityFile}"`);
+    const safeFilename = String(order.lotAuthorityFile || "authority").replace(/[^\w.\-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
     return res.send(buf);
   }
@@ -89,7 +89,8 @@ export default async function handler(req, res) {
 
     const { status, note } = req.body || {};
     if (!status) return res.status(400).json({ error: "status is required." });
-    const VALID_STATUSES = ["Pending","Processing","Awaiting Payment","Awaiting Stripe Payment","Paid","Issued","Cancelled","Invoice to be issued","Invoice sent, awaiting payment"];
+    // Must match production server.js status enum exactly
+    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid","Awaiting Stripe Payment"];
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status: "${status}".` });
 
     const data = await readData();
@@ -124,12 +125,7 @@ export default async function handler(req, res) {
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 2525,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createTransporter(smtp);
       const tpl = cfg.emailTemplate || {};
       const isKeys = order.orderCategory === "keys";
       const subj = isKeys
@@ -197,12 +193,7 @@ export default async function handler(req, res) {
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 2525,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createTransporter(smtp);
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
       const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
@@ -516,8 +507,8 @@ export default async function handler(req, res) {
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
 
     const orderToDelete = data.orders[idx];
-    if (["Paid", "Issued", "Complete"].includes(orderToDelete.status)) {
-      return res.status(409).json({ error: "Cannot delete a paid or issued order. Cancel it first." });
+    if (orderToDelete.status !== "Cancelled") {
+      return res.status(409).json({ error: "Only cancelled orders can be deleted. Cancel the order first." });
     }
 
     data.orders.splice(idx, 1);

@@ -5,7 +5,7 @@
 import { readData, writeData, validToken, extractToken, cors } from "./_lib/store.js";
 
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
@@ -34,6 +34,25 @@ export default async function handler(req, res) {
   // ── Save / replace full strataPlans array ─────────────────────────────────
   const { plans } = body;
   if (!Array.isArray(plans)) return res.status(400).json({ error: "Invalid plans." });
+  if (plans.length === 0) return res.status(400).json({ error: "Cannot save an empty plans list — at least one plan is required." });
+
+  // Validate each plan has required fields and sane product data
+  for (const plan of plans) {
+    if (!plan.id || typeof plan.id !== "string" || !plan.id.trim())
+      return res.status(400).json({ error: "Each plan must have a non-empty string id." });
+    if (!plan.name || typeof plan.name !== "string" || !plan.name.trim())
+      return res.status(400).json({ error: `Plan "${plan.id}" must have a non-empty name.` });
+    for (const prod of (plan.products || [])) {
+      if (!prod.id || typeof prod.id !== "string" || !prod.id.trim())
+        return res.status(400).json({ error: `Plan "${plan.id}": each product must have a non-empty id.` });
+      if (typeof prod.price !== "number" || !isFinite(prod.price) || prod.price < 0)
+        return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": price must be a non-negative number.` });
+      if (prod.secondaryPrice !== undefined && (typeof prod.secondaryPrice !== "number" || prod.secondaryPrice < 0))
+        return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": secondaryPrice must be a non-negative number.` });
+      if (prod.externalUrl !== undefined && prod.externalUrl !== "" && !/^https?:\/\/.+/i.test(prod.externalUrl))
+        return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": externalUrl must start with http:// or https://.` });
+    }
+  }
 
   const data = await readData();
   data.strataPlans = plans;

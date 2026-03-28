@@ -662,8 +662,7 @@ async function handler(req, res) {
       if (idx === -1) return json(res, 404, { error: "Admin not found." });
       admins[idx] = { ...admins[idx], password: newPassword };
       cfg.admins = admins;
-      cfg.user = cfg.admins[0].username;
-      cfg.pass = cfg.admins[0].password;
+      cfg.admin = { user: cfg.admins[0].username, pass: cfg.admins[0].password }; // legacy sync
       writeConfig(cfg);
       SESSIONS.clear(); // invalidate all sessions after any password reset
       return json(res, 200, { ok: true });
@@ -1127,7 +1126,25 @@ async function handler(req, res) {
   if (urlPath === "/api/plans" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { plans } = await readBody(req, res);
+    const body = await readBody(req, res);
+    // Support import-lots action (mirrors Vercel api/plans.js sub-route)
+    if (body.action === "import-lots") {
+      const { planId, lots } = body;
+      if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
+      if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
+      const d = readData();
+      const idx = d.strataPlans.findIndex(p => p.id === planId);
+      if (idx === -1) return json(res, 404, { error: "Plan not found." });
+      const prevCount = d.strataPlans[idx].lots?.length || 0;
+      d.strataPlans[idx].lots = lots;
+      d.strataPlans[idx].lotsImportLog = [
+        ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)),
+        { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${lots.length} lots` },
+      ];
+      writeData(d);
+      return json(res, 200, { ok: true, count: lots.length });
+    }
+    const { plans } = body;
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });
     if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
     // Validate each plan is an object with a non-empty id and name

@@ -24,7 +24,7 @@ async function getRawBody(req) {
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
@@ -62,7 +62,9 @@ export default async function handler(req, res) {
     if (expiredOrderId) {
       const data = await readData();
       const idx = data.orders.findIndex(o => o.id === expiredOrderId);
-      if (idx !== -1 && data.orders[idx].status !== "Paid") {
+      // Only remove if not already paid — also verify via Stripe payment_status to guard against
+      // race conditions where stripe-confirm ran just before this webhook arrived.
+      if (idx !== -1 && data.orders[idx].status !== "Paid" && expiredSession.payment_status !== "paid") {
         data.orders.splice(idx, 1);
         await writeData(data);
         console.log(`Stripe webhook: removed expired pending order ${expiredOrderId}`);

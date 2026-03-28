@@ -11,7 +11,7 @@ async function sendMail(smtp, mailOpts) {
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
@@ -73,14 +73,17 @@ export default async function handler(req, res) {
       }
       // base64 byte size = (chars * 3/4)
       const byteSize = Math.ceil((body.lotAuthority.data.length * 3) / 4);
-      if (byteSize > 5 * 1024 * 1024) {
-        return res.status(400).json({ error: "Authority document must be under 5 MB." });
+      if (byteSize > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: "Authority document must be under 10 MB." });
       }
     }
 
-    // Set filename synchronously (no network) so admin can see the doc reference immediately
+    // Set filename synchronously — sanitise client-supplied name to prevent path traversal
+    // and HTTP header injection via Content-Disposition.
     if (body.lotAuthority?.data) {
-      order.lotAuthorityFile = body.lotAuthority.filename;
+      const rawName = String(body.lotAuthority.filename || "document");
+      const ext = rawName.includes(".") ? rawName.split(".").pop().replace(/[^\w]/g, "").slice(0, 5) : "bin";
+      order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
     }
 
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];

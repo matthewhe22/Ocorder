@@ -648,7 +648,7 @@ export default function App() {
       const first = methods.find(m => m.enabled);
       if (first) setPayMethod(first.id);
     }
-  }, [pubConfig]);
+  }, [pubConfig, payMethod]);
 
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
@@ -784,7 +784,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const emailValid = EMAIL_RE.test(contact.email);
   const phoneValid  = !contact.phone || PHONE_RE.test(contact.phone.replace(/\s/g, ""));
   const gst = gstOf(total);
-  const exGstTotal = exGst(total);
 
   return (
     <div>
@@ -1888,9 +1887,9 @@ function ConfirmationPage({ order, reset, pubConfig }) {
             <strong>{fmt(item.price)}</strong>
           </div>
         ))}
-        {order.selectedShipping?.cost > 0 && (
+        {((order.selectedShipping?.cost ?? order.selectedShipping?.price) > 0) && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
-            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost)}</span>
+            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost ?? order.selectedShipping.price)}</span>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
@@ -2062,7 +2061,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── Plan CRUD ───────────────────────────────────────────────────────────────
   const addPlan = async () => {
     if (!form.id || !form.name) return;
-    const plans = [...data.strataPlans, { id: form.id, name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
+    if (data.strataPlans.some(p => p.id === form.id.trim())) {
+      alert(`A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.`);
+      return;
+    }
+    const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
     await savePlans(plans);
     setModal(null); setForm({});
   };
@@ -2742,7 +2745,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     {effectiveType === "agent" && ci.companyName && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Company</td><td style={{ paddingBottom:"4px" }}>{ci.companyName}</td></tr>}
                                     {hasRef && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>OC Reference</td><td style={{ paddingBottom:"4px" }}>{ci.ocReference}</td></tr>}
                                     {hasAddr && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Delivery Address</td><td style={{ paddingBottom:"4px" }}>{ci.shippingAddress.street}, {ci.shippingAddress.suburb} {ci.shippingAddress.state} {ci.shippingAddress.postcode}</td></tr>}
-                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost)}</td></tr>}
+                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost ?? o.selectedShipping.price)}</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
