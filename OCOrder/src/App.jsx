@@ -473,6 +473,7 @@ export default function App() {
     try { return sessionStorage.getItem("admin_token") || null; } catch { return null; }
   });
   const [pubConfig, setPubConfig] = useState(null);
+  const [appLoading, setAppLoading] = useState(true);
   const [stripeConfirming, setStripeConfirming] = useState(false);
   const [stripeConfirmErr, setStripeConfirmErr] = useState("");
   const [stripeOrderId, setStripeOrderId] = useState(null);
