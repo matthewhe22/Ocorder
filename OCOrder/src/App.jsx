@@ -3337,6 +3337,35 @@ function AdminLogin({ onAuth, pubConfig }) {
 
 
 
+// ─── FOCUS TRAP HOOK ──────────────────────────────────────────────────────────
+// Auto-focuses the first interactive element in a modal and traps Tab within it.
+// Returns a ref to attach to the modal container div.
+function useFocusTrap(onEscape) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const FOCUSABLE = 'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const first = el.querySelector(FOCUSABLE);
+    if (first) first.focus();
+    const trap = (e) => {
+      if (e.key === "Escape") { onEscape?.(); return; }
+      if (e.key !== "Tab") return;
+      const els = [...el.querySelectorAll(FOCUSABLE)];
+      if (!els.length) return;
+      const idx = els.indexOf(document.activeElement);
+      if (e.shiftKey) {
+        if (idx <= 0) { e.preventDefault(); els[els.length - 1].focus(); }
+      } else {
+        if (idx === els.length - 1) { e.preventDefault(); els[0].focus(); }
+      }
+    };
+    el.addEventListener("keydown", trap);
+    return () => el.removeEventListener("keydown", trap);
+  }, [onEscape]);
+  return ref;
+}
+
 // ─── CANCEL ORDER MODAL ───────────────────────────────────────────────────────
 function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
   const [reason, setReason] = useState("");
