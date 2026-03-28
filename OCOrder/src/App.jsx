@@ -2589,8 +2589,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${p.perOC ? "bg-b" : "bg-gray"}`}>{p.perOC ? "Yes" : "No"}</span></td>
                       <td>{(p.category || "oc") === "keys" && p.managerAdminCharge !== undefined ? <span style={{fontWeight:600}}>{fmt(p.managerAdminCharge)}</span> : <span style={{color:"var(--muted)"}}>—</span>}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
-                        <button className="tbl-act-btn" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
-                        <button className="tbl-act-btn danger" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
+                        <button className="tbl-act-btn" aria-label="Edit product" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
+                        <button className="tbl-act-btn danger" aria-label="Delete product" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
                       </td>
                     </tr>
                   ))}
