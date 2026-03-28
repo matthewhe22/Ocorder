@@ -486,8 +486,10 @@ export default function App() {
     // orders only to authenticated callers; unauthenticated callers get strataPlans only.
     const savedTok = (() => { try { return sessionStorage.getItem("admin_token"); } catch { return null; } })();
     const dataHeaders = savedTok ? { "Authorization": "Bearer " + savedTok } : {};
-    fetch("/api/data", { headers: dataHeaders }).then(r => r.json()).then(d => setData(d)).catch(() => {});
-    fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {});
+    Promise.all([
+      fetch("/api/data", { headers: dataHeaders }).then(r => r.json()).then(d => setData(d)).catch(() => {}),
+      fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {}),
+    ]).finally(() => setAppLoading(false));
     // Detect Stripe payment redirect: /complete?orderId=xxx&stripeOk=1
     const params = new URLSearchParams(window.location.search);
     if (params.get("stripeOk") === "1" && params.get("orderId")) {
