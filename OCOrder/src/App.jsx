@@ -741,6 +741,9 @@ export default function App() {
               adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
           )}
         </main>
+        <footer style={{ textAlign: "center", padding: "18px 16px 14px", fontSize: "0.7rem", color: "var(--muted)", borderTop: "1px solid var(--border)", letterSpacing: "0.02em" }}>
+          Last updated {__BUILD_DATE__}
+        </footer>
       </div>
     </>
   );
