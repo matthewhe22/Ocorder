@@ -2389,9 +2389,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   // ── Order actions ───────────────────────────────────────────────────────────
+  const adminToastTimer = useRef(null);
   const showAdminToast = (type, msg) => {
+    if (adminToastTimer.current) clearTimeout(adminToastTimer.current);
     setAdminToast({ type, msg });
-    setTimeout(() => setAdminToast(null), 4000);
+    adminToastTimer.current = setTimeout(() => setAdminToast(null), 4000);
   };
 
   const updateOrderStatus = async (oid, status) => {
