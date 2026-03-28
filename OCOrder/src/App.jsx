@@ -3368,6 +3368,7 @@ function useFocusTrap(onEscape) {
 
 // ─── CANCEL ORDER MODAL ───────────────────────────────────────────────────────
 function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
+  const trapRef = useFocusTrap(onClose);
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
