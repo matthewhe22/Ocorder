@@ -1552,7 +1552,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 </div>
               )}
               <div className="cart-gst-row">
-                <span>GST (10%) included in total</span>
+                <span>Subtotal (ex. GST)</span>
+                <span>{fmt(exGst(total))}</span>
+              </div>
+              <div className="cart-gst-row">
+                <span>GST (10%)</span>
                 <span>{fmt(gstOf(total))}</span>
               </div>
               <div className="cart-grand-row">
