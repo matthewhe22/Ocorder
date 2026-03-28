@@ -660,8 +660,8 @@ export default function App() {
     if (s < step) setStep(s);
   };
 
-  // 6 steps: 1=Plan, 2=Products, 3=Review, 4=Contact, 5=Payment, 6=Complete
-  const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment", "Complete"];
+  // 5 wizard steps; step 6 = confirmation page, outside the wizard track
+  const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment"];
 
   const handleDemoReset = async () => {
     if (!window.confirm("Reset all demo data to the initial seed state? This will log you out and clear all orders.")) return;
