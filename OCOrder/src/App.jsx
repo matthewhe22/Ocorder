@@ -1059,7 +1059,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <div className="panel" style={{ marginBottom: "1px" }}>
             <div className="form-row" style={{ marginBottom: 0 }}>
               <label className="f-label">Lot Number</label>
-<<<<<<< HEAD
               {plan.lots && plan.lots.length > 0 ? (() => {
                 const selectLot = (lotNum) => {
                   setLotNumber(lotNum);
