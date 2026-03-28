@@ -1888,9 +1888,9 @@ function ConfirmationPage({ order, reset, pubConfig }) {
             <strong>{fmt(item.price)}</strong>
           </div>
         ))}
-        {order.selectedShipping?.cost > 0 && (
+        {((order.selectedShipping?.cost ?? order.selectedShipping?.price) > 0) && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
-            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost)}</span>
+            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost ?? order.selectedShipping.price)}</span>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
