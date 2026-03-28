@@ -13,13 +13,13 @@ from lxml import etree
 import copy
 
 # ── Color palette ──────────────────────────────────────────────────────────────
-FOREST_GREEN  = RGBColor(0x2D, 0x50, 0x16)
-SAGE_GREEN    = RGBColor(0x8F, 0xAF, 0x7E)
-CREAM         = RGBColor(0xF5, 0xF0, 0xE8)
-CHARCOAL      = RGBColor(0x2C, 0x2C, 0x2C)
-WHITE         = RGBColor(0xFF, 0xFF, 0xFF)
-LIGHT_SAGE    = RGBColor(0xD6, 0xE8, 0xC8)
-MID_GREEN     = RGBColor(0x4A, 0x7A, 0x28)
+FOREST_GREEN  = RGBColor(0x1B, 0x3F, 0x6B)   # deep navy blue
+SAGE_GREEN    = RGBColor(0x5B, 0x9B, 0xD5)   # sky blue
+CREAM         = RGBColor(0xEB, 0xF5, 0xFB)   # very light blue
+CHARCOAL      = RGBColor(0x1A, 0x2A, 0x3A)   # dark blue-charcoal
+WHITE         = RGBColor(0xE0, 0xF0, 0xFF)   # light blue (slide backgrounds)
+LIGHT_SAGE    = RGBColor(0xC5, 0xDC, 0xF0)   # pale blue
+MID_GREEN     = RGBColor(0x2E, 0x6D, 0xA4)   # medium blue
 
 # ── Slide dimensions (16:9 widescreen) ────────────────────────────────────────
 SLIDE_W = Inches(13.33)
