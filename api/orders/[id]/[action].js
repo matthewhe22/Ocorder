@@ -5,7 +5,6 @@
 //                 POST /api/orders/:id/stripe-confirm  (public — no admin auth)
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
-import nodemailer from "nodemailer";
 import Stripe from "stripe";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
