@@ -516,8 +516,8 @@ export default async function handler(req, res) {
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
 
     const orderToDelete = data.orders[idx];
-    if (["Paid", "Issued", "Complete"].includes(orderToDelete.status)) {
-      return res.status(409).json({ error: "Cannot delete a paid or issued order. Cancel it first." });
+    if (orderToDelete.status !== "Cancelled") {
+      return res.status(409).json({ error: "Only cancelled orders can be deleted. Cancel the order first." });
     }
 
     data.orders.splice(idx, 1);
