@@ -64,19 +64,6 @@ const getApplicantType = (ci) => ci?.applicantType || (ci?.companyName ? "agent"
 
 // Fixed shipping options for Keys/Fob orders.
 // Costs for "keys-std" and "keys-express" come from plan.keysShipping.
-const KEYS_SHIPPING_OPTIONS = [
-  { id: "keys-pickup",  name: "Pick up from BM",      requiresAddress: false },
-  { id: "keys-std",     name: "Standard Delivery",     requiresAddress: true  },
-  { id: "keys-express", name: "Express Delivery",      requiresAddress: true  },
-  { id: "keys-none",    name: "No Shipment Required",  requiresAddress: false },
-];
-
-const getKeysShippingCost = (optId, keysShipping) => {
-  if (optId === "keys-std")     return keysShipping?.deliveryCost ?? 0;
-  if (optId === "keys-express") return keysShipping?.expressCost  ?? 0;
-  return 0; // pickup and none are always $0
-};
-
 // Compute the effective shipping cost for an option, considering per-product overrides
 const calcShippingCost = (opt, cartItems, products) => {
   const prodMap = new Map((products || []).map(p => [p.id, p]));
