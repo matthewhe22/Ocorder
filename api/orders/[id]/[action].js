@@ -77,7 +77,8 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${order.lotAuthorityFile}"`);
+    const safeFilename = String(order.lotAuthorityFile || "authority").replace(/[^\w.\-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
     return res.send(buf);
   }
