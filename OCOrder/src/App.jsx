@@ -1364,6 +1364,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               )}
 
               {/* ── Shipping Method Selector (Keys/Fobs orders only — OC certs are delivered by email) ── */}
+              {orderCategory === "keys" && (plan?.shippingOptions || []).length === 0 && (
+                <div style={{ marginTop: "1rem", padding: "12px 16px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "6px", fontSize: "0.85rem", color: "#92400e" }}>
+                  No shipping methods are configured for this building. Please contact the strata manager to arrange delivery.
+                </div>
+              )}
               {(() => {
                 const planShipping = plan?.shippingOptions || [];
                 if (orderCategory !== "keys" || planShipping.length === 0) return null;
