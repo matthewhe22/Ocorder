@@ -2742,7 +2742,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     {effectiveType === "agent" && ci.companyName && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Company</td><td style={{ paddingBottom:"4px" }}>{ci.companyName}</td></tr>}
                                     {hasRef && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>OC Reference</td><td style={{ paddingBottom:"4px" }}>{ci.ocReference}</td></tr>}
                                     {hasAddr && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Delivery Address</td><td style={{ paddingBottom:"4px" }}>{ci.shippingAddress.street}, {ci.shippingAddress.suburb} {ci.shippingAddress.state} {ci.shippingAddress.postcode}</td></tr>}
-                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost)}</td></tr>}
+                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost ?? o.selectedShipping.price)}</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
