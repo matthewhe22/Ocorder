@@ -1910,9 +1910,17 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
             <span style={{ color: "var(--forest)", fontWeight: 600 }}>{fmt(selectedShipping.cost)}</span>
           </div>
         )}
-        <div style={{ borderTop: "1px solid var(--border2)", marginTop: "10px", paddingTop: "10px", display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "0.88rem" }}>
-          <span style={{ color: "var(--forest)" }}>Total (incl. GST)</span>
-          <span style={{ color: "var(--forest)" }}>{fmt(total)}</span>
+        <div style={{ borderTop: "1px solid var(--border2)", marginTop: "10px", paddingTop: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "4px" }}>
+            <span>Subtotal (ex. GST)</span><span>{fmt(exGst(total))}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "8px" }}>
+            <span>GST (10%)</span><span>{fmt(gstOf(total))}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "0.88rem" }}>
+            <span style={{ color: "var(--forest)" }}>Total (incl. GST)</span>
+            <span style={{ color: "var(--forest)" }}>{fmt(total)}</span>
+          </div>
         </div>
       </div>
     </div>
