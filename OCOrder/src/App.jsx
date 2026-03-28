@@ -648,7 +648,7 @@ export default function App() {
       const first = methods.find(m => m.enabled);
       if (first) setPayMethod(first.id);
     }
-  }, [pubConfig]);
+  }, [pubConfig, payMethod]);
 
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
