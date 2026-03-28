@@ -1892,7 +1892,7 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
         ))}
         {selectedShipping && selectedShipping.cost > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: "8px" }}>
-            <span style={{ color: "var(--muted)" }}>{selectedShipping.label}</span>
+            <span style={{ color: "var(--muted)" }}>{selectedShipping.name}</span>
             <span style={{ color: "var(--forest)", fontWeight: 600 }}>{fmt(selectedShipping.cost)}</span>
           </div>
         )}
