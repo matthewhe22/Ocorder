@@ -2276,28 +2276,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setModal("manageShipping");
   };
 
-  const openKeysShipping = (p) => {
-    setEditTarget({ type: "plan", id: p.id });
-    setForm({
-      keysDeliveryCost: p.keysShipping?.deliveryCost ?? 0,
-      keysExpressCost:  p.keysShipping?.expressCost  ?? 0,
-    });
-    setModal("keysShipping");
-  };
-
-  const saveKeysShipping = async () => {
-    const deliveryCost = Math.max(0, parseFloat(form.keysDeliveryCost) || 0);
-    const expressCost  = Math.max(0, parseFloat(form.keysExpressCost)  || 0);
-    const plans = data.strataPlans.map(p =>
-      p.id !== editTarget.id ? p
-        : { ...p, keysShipping: { deliveryCost, expressCost } }
-    );
-    await savePlans(plans);
-    setModal(null);
-    setEditTarget(null);
-    setForm({});
-  };
-
   const addShippingOption = async () => {
     if (!form.shippingName || form.shippingCost === "" || form.shippingCost === undefined) return;
     const newOpt = { id: "ship-" + Date.now(), name: form.shippingName, cost: Math.max(0, parseFloat(form.shippingCost)), requiresAddress: form.shippingRequiresAddress !== false };
