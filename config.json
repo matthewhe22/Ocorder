@@ -1,0 +1,24 @@
+{
+  "admin": {
+    "user": "info@tocs.co",
+    "pass": "Tocs@Vote"
+  },
+  "orderEmail": "Orders@tocs.co",
+  "smtp": {
+    "host": "mail-au.smtp2go.com",
+    "port": 2525,
+    "user": "OCCAPP",
+    "pass": "28YWYogqGMszjzkt"
+  },
+  "paymentDetails": {
+    "accountName": "Top Owners Corporation",
+    "bsb": "033-065",
+    "accountNumber": "522011",
+    "payid": "accounts@tocs.com.au"
+  },
+  "emailTemplate": {
+    "certificateSubject": "Your OC Certificate — Order #{orderId}",
+    "certificateGreeting": "Dear {name},\n\nPlease find attached your Owner Corporation Certificate for Lot {lotNumber} at {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team",
+    "footer": "TOCS Owners Corporation Solution  |  info@tocs.co"
+  }
+}

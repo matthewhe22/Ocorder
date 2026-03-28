@@ -1,0 +1,10 @@
+{"type":"server-started","port":54768,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:54768","screen_dir":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-a.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-b.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-c.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-d.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-c-v2.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-c-v3.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-c-v4.html"}
+{"type":"screen-added","file":"/Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/.superpowers/brainstorm/88362-1774070677/concept-c-v5.html"}
+{"type":"server-stopped","reason":"owner process exited"}

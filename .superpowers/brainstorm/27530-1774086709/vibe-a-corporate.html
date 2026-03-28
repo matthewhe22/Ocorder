@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vibe A — Crisp & Corporate</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #eaecee;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 0 48px;
+  }
+
+  .page-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #8a9098; margin: 20px 0 0;
+    text-align: center;
+  }
+
+  /* ── Full-width nav bar ── */
+  .topnav {
+    width: 100%;
+    background: white;
+    border-bottom: 3px solid #1c3326;
+    padding: 0 40px;
+    display: flex;
+    align-items: stretch;
+    height: 56px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    margin-bottom: 28px;
+  }
+  .topnav-brand {
+    display: flex; align-items: center; gap: 12px;
+    border-right: 1px solid #eee;
+    padding-right: 24px; margin-right: 24px;
+  }
+  .brand-badge {
+    width: 32px; height: 32px;
+    background: #1c3326;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 15px; font-weight: 800;
+    letter-spacing: -0.04em;
+    font-family: 'Inter', sans-serif;
+    flex-shrink: 0;
+  }
+  .brand-name { font-size: 14px; font-weight: 700; color: #1a2020; letter-spacing: -0.01em; }
+  .brand-sub { font-size: 10px; color: #7a8a82; font-weight: 500; }
+  .topnav-right {
+    margin-left: auto;
+    display: flex; align-items: center;
+    font-size: 11px; color: #8a9a90; gap: 20px;
+  }
+  .topnav-link { font-weight: 500; color: #4a7255; cursor: pointer; }
+
+  /* ── Main container ── */
+  .container {
+    width: 100%; max-width: 720px;
+    padding: 0 20px;
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    font-size: 11px; color: #8a9490; margin-bottom: 18px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .breadcrumb-sep { color: #c0cac5; }
+  .breadcrumb-current { color: #1a2020; font-weight: 600; }
+
+  /* Page title block */
+  .page-title-block {
+    margin-bottom: 24px;
+  }
+  .page-title-block h1 {
+    font-size: 26px; font-weight: 700; color: #1a2020;
+    letter-spacing: -0.02em; margin-bottom: 4px;
+  }
+  .page-title-block p {
+    font-size: 13px; color: #6a7a72;
+  }
+
+  /* Progress steps — horizontal tracker */
+  .progress-bar {
+    background: white;
+    border: 1px solid #dde4e0;
+    border-radius: 8px;
+    padding: 16px 24px;
+    display: flex; align-items: center;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .prog-step {
+    display: flex; align-items: center; gap: 10px; flex: 1;
+  }
+  .prog-step:last-child { flex: 0; }
+  .prog-circle {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #e8f0ec; border: 2px solid #b8d4c0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #4a7255;
+    flex-shrink: 0;
+  }
+  .prog-circle.active {
+    background: #1c3326; border-color: #1c3326; color: white;
+  }
+  .prog-circle.done {
+    background: #4a7255; border-color: #4a7255; color: white; font-size: 12px;
+  }
+  .prog-text { font-size: 11px; font-weight: 600; color: #3a4a40; }
+  .prog-text.dim { color: #9aaa9e; font-weight: 400; }
+  .prog-connector { flex: 1; height: 1px; background: #d0dcd6; margin: 0 10px; }
+
+  /* ── Two-column layout ── */
+  .two-col {
+    display: grid; grid-template-columns: 1fr 320px;
+    gap: 16px; margin-bottom: 16px;
+  }
+
+  /* Search panel */
+  .panel-card {
+    background: white;
+    border: 1px solid #dde4e0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .panel-card-header {
+    background: #f5f8f6;
+    border-bottom: 1px solid #e4ede8;
+    padding: 12px 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-card-header-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #1c3326;
+  }
+  .panel-card-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #3a4a40;
+  }
+  .panel-card-body { padding: 16px 18px; }
+
+  /* Search input */
+  .search-field {
+    border: 1.5px solid #cdd8d2;
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px;
+    background: #fcfcfc;
+  }
+  .search-field:hover { border-color: #8ab09a; }
+  .search-field-icon { font-size: 14px; color: #8a9a90; }
+  .search-field-text { font-size: 13px; color: #a8b4ae; flex: 1; }
+
+  /* Result list */
+  .result-item {
+    padding: 10px 12px;
+    border: 1px solid #e8eeea;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    background: white;
+  }
+  .result-item:hover { border-color: #8ab09a; background: #f5faf6; }
+  .result-item.active { border-color: #1c3326; background: #f0f6f2; }
+  .result-icon { font-size: 16px; }
+  .result-name { font-size: 13px; font-weight: 600; color: #1a2020; }
+  .result-meta { font-size: 10px; color: #8a9a90; margin-top: 1px; }
+  .result-chevron { margin-left: auto; font-size: 12px; color: #b0beb6; }
+
+  /* Right sidebar — How It Works */
+  .sidebar-card {
+    background: white;
+    border: 1px solid #dde4e0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .sidebar-header {
+    background: #1c3326; padding: 12px 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sidebar-header-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.9);
+  }
+  .sidebar-body { padding: 4px 0; }
+  .sidebar-step {
+    padding: 14px 18px;
+    display: flex; gap: 14px; align-items: flex-start;
+    border-bottom: 1px solid #f0f4f2;
+  }
+  .sidebar-step:last-child { border-bottom: none; }
+  .sidebar-step-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #e8f0ec; border: 1.5px solid #c0d8c8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #4a7255;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .sidebar-step-num.active {
+    background: #1c3326; border-color: #1c3326; color: white;
+  }
+  .sidebar-step-name { font-size: 12px; font-weight: 600; color: #1a2020; margin-bottom: 2px; }
+  .sidebar-step-desc { font-size: 10px; color: #7a8a80; line-height: 1.4; }
+  .sidebar-step-icon { font-size: 18px; margin-top: 2px; margin-left: auto; }
+
+  /* Category selector */
+  .cat-section {
+    background: white; border: 1px solid #dde4e0;
+    border-radius: 8px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    margin-bottom: 16px;
+  }
+  .cat-section-header {
+    background: #f5f8f6; border-bottom: 1px solid #e4ede8;
+    padding: 12px 18px; display: flex; align-items: center; gap: 8px;
+  }
+  .cat-section-body {
+    padding: 16px 18px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .cat-opt {
+    border: 1.5px solid #dde4e0; border-radius: 6px;
+    padding: 14px 14px; cursor: pointer; display: flex;
+    align-items: center; gap: 10px;
+  }
+  .cat-opt:hover { border-color: #8ab09a; background: #f8fbf9; }
+  .cat-opt.selected { border-color: #1c3326; background: #f0f6f2; }
+  .cat-opt-radio {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid #b0beb6; display: flex;
+    align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .cat-opt.selected .cat-opt-radio {
+    border-color: #1c3326;
+  }
+  .cat-opt.selected .cat-opt-radio::after {
+    content: ''; width: 7px; height: 7px;
+    border-radius: 50%; background: #1c3326; display: block;
+  }
+  .cat-opt-icon { font-size: 20px; }
+  .cat-opt-name { font-size: 13px; font-weight: 600; color: #1a2020; }
+  .cat-opt-desc { font-size: 10px; color: #7a8a80; margin-top: 1px; }
+
+  /* Action row */
+  .action-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .continue-btn {
+    background: #1c3326; color: white; border: none;
+    border-radius: 6px; padding: 13px 28px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Inter', sans-serif;
+    box-shadow: 0 2px 8px rgba(28,51,38,0.2);
+  }
+  .continue-secondary {
+    font-size: 12px; color: #8a9a90;
+  }
+
+  /* Footer */
+  .site-footer {
+    width: 100%; background: white; border-top: 1px solid #dde4e0;
+    padding: 14px 40px; margin-top: 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: #8a9a90;
+  }
+  .site-footer a { color: #4a7255; }
+
+  .note-strip {
+    width: 100%; max-width: 720px; margin-top: 16px; padding: 0 20px;
+  }
+  .note-inner {
+    background: rgba(28,51,38,0.06); border-radius: 8px;
+    padding: 12px 16px; font-size: 11px; color: #5a7060; line-height: 1.6;
+  }
+  .note-inner strong { color: #1c3326; }
+</style>
+</head>
+<body>
+
+<!-- Nav bar -->
+<div class="topnav">
+  <div class="topnav-brand">
+    <div class="brand-badge">TC</div>
+    <div>
+      <div class="brand-name">TOCS Order Portal</div>
+      <div class="brand-sub">Owner Corporation Solutions</div>
+    </div>
+  </div>
+  <div class="topnav-right">
+    <span>NSW Strata Services</span>
+    <span class="topnav-link">Admin Login</span>
+  </div>
+</div>
+
+<div class="page-label">Vibe A — Crisp & Corporate</div>
+
+<div class="container">
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb">
+    Home <span class="breadcrumb-sep">›</span>
+    <span class="breadcrumb-current">New Order</span>
+  </div>
+
+  <!-- Page title -->
+  <div class="page-title-block">
+    <h1>Place an Order</h1>
+    <p>Order certificates, keys, fobs, swipes and other Owner Corporation items</p>
+  </div>
+
+  <!-- Progress tracker -->
+  <div class="progress-bar">
+    <div class="prog-step">
+      <div class="prog-circle active">1</div>
+      <div class="prog-text">Select Building</div>
+    </div>
+    <div class="prog-connector"></div>
+    <div class="prog-step">
+      <div class="prog-circle">2</div>
+      <div class="prog-text dim">Choose Items</div>
+    </div>
+    <div class="prog-connector"></div>
+    <div class="prog-step">
+      <div class="prog-circle">3</div>
+      <div class="prog-text dim">Your Details</div>
+    </div>
+    <div class="prog-connector"></div>
+    <div class="prog-step">
+      <div class="prog-circle">4</div>
+      <div class="prog-text dim">Payment</div>
+    </div>
+  </div>
+
+  <!-- Two column: search left, how it works right -->
+  <div class="two-col">
+
+    <!-- Left: search -->
+    <div class="panel-card">
+      <div class="panel-card-header">
+        <div class="panel-card-header-dot"></div>
+        <div class="panel-card-title">Find Your Building</div>
+      </div>
+      <div class="panel-card-body">
+        <div class="search-field">
+          <span class="search-field-icon">🔍</span>
+          <span class="search-field-text">Search by building name or strata plan…</span>
+        </div>
+        <div class="result-item active">
+          <span class="result-icon">🏢</span>
+          <div>
+            <div class="result-name">The Horizon</div>
+            <div class="result-meta">SP 12345 · Parramatta NSW</div>
+          </div>
+          <span class="result-chevron">›</span>
+        </div>
+        <div class="result-item">
+          <span class="result-icon">🏢</span>
+          <div>
+            <div class="result-name">Park Central</div>
+            <div class="result-meta">SP 67890 · Sydney NSW</div>
+          </div>
+          <span class="result-chevron">›</span>
+        </div>
+        <div class="result-item">
+          <span class="result-icon">🏢</span>
+          <div>
+            <div class="result-name">Riverside Apartments</div>
+            <div class="result-meta">SP 23456 · Penrith NSW</div>
+          </div>
+          <span class="result-chevron">›</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: How it works -->
+    <div class="sidebar-card">
+      <div class="sidebar-header">
+        <div class="sidebar-header-title">How It Works</div>
+      </div>
+      <div class="sidebar-body">
+        <div class="sidebar-step">
+          <div class="sidebar-step-num active">1</div>
+          <div>
+            <div class="sidebar-step-name">Find Your Building</div>
+            <div class="sidebar-step-desc">Search by strata plan number or building name</div>
+          </div>
+          <div class="sidebar-step-icon">🏢</div>
+        </div>
+        <div class="sidebar-step">
+          <div class="sidebar-step-num">2</div>
+          <div>
+            <div class="sidebar-step-name">Select Items</div>
+            <div class="sidebar-step-desc">Choose certificates, keys, fobs or other items</div>
+          </div>
+          <div class="sidebar-step-icon">🛒</div>
+        </div>
+        <div class="sidebar-step">
+          <div class="sidebar-step-num">3</div>
+          <div>
+            <div class="sidebar-step-name">Enter Your Details</div>
+            <div class="sidebar-step-desc">Provide applicant and contact information</div>
+          </div>
+          <div class="sidebar-step-icon">📋</div>
+        </div>
+        <div class="sidebar-step">
+          <div class="sidebar-step-num">4</div>
+          <div>
+            <div class="sidebar-step-name">Pay & Submit</div>
+            <div class="sidebar-step-desc">Bank transfer · PayID · Card</div>
+          </div>
+          <div class="sidebar-step-icon">💳</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Category selector -->
+  <div class="cat-section">
+    <div class="cat-section-header">
+      <div class="panel-card-header-dot"></div>
+      <div class="panel-card-title">What do you need?</div>
+    </div>
+    <div class="cat-section-body">
+      <div class="cat-opt selected">
+        <div class="cat-opt-radio"></div>
+        <span class="cat-opt-icon">📄</span>
+        <div>
+          <div class="cat-opt-name">OC Certificates</div>
+          <div class="cat-opt-desc">Owner Corporation strata title documents</div>
+        </div>
+      </div>
+      <div class="cat-opt">
+        <div class="cat-opt-radio"></div>
+        <span class="cat-opt-icon">🔑</span>
+        <div>
+          <div class="cat-opt-name">Keys & Access</div>
+          <div class="cat-opt-desc">Keys, fobs, swipes and access devices</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="action-row">
+    <button class="continue-btn">Continue → Step 2</button>
+    <span class="continue-secondary">Building selected: The Horizon</span>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="site-footer">
+  <span>TOCS Owner Corporation Solutions</span>
+  <span><a href="#">Privacy Policy</a> · NSW Strata Services</span>
+</div>
+
+<div class="note-strip">
+  <div class="note-inner">
+    <strong>Crisp & Corporate:</strong> Full-width nav bar with TC badge · Breadcrumb trail · "Place an Order" page title · Horizontal progress tracker at top · Two-column layout: building search left, How It Works right as a structured list · Radio-button category selector · Clean structured footer
+  </div>
+</div>
+
+</body>
+</html>
