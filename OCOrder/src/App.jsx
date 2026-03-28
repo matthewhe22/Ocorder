@@ -3615,10 +3615,10 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Send Invoice" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0 }}>Send Invoice</h2>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
         <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "1rem" }}>
           To: <strong style={{ color: "var(--ink)" }}>{contact.name}</strong> &lt;{contact.email}&gt; · Order {order.id}
