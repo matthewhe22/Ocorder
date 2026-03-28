@@ -536,6 +536,20 @@ export default function App() {
       });
   }, [stripeConfirming, stripeOrderId]);
 
+  // Browser back button: push a history entry on step advance so back returns to previous step
+  useEffect(() => {
+    if (step > 1 && step < 6) window.history.pushState({ step }, "");
+  }, [step]);
+  useEffect(() => {
+    const onPop = (e) => {
+      const prev = e.state?.step;
+      if (prev && prev > 1 && prev < 6) setStep(prev - 1);
+      else if (step > 1 && step < 6) setStep(s => Math.max(1, s - 1));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [step]);
+
   const plan = data.strataPlans.find(p => p.id === selPlan);
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
