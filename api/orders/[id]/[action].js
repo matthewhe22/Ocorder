@@ -126,12 +126,7 @@ export default async function handler(req, res) {
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 2525,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createTransporter(smtp);
       const tpl = cfg.emailTemplate || {};
       const isKeys = order.orderCategory === "keys";
       const subj = isKeys
