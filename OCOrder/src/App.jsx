@@ -2635,8 +2635,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${l.type==="Residential"?"bg-b":l.type==="Commercial"?"bg-gold":"bg-gray"}`}>{l.type}</span></td>
                       <td style={{ fontSize: "0.78rem" }}>{l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
-                        <button className="tbl-act-btn" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
-                        <button className="tbl-act-btn danger" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
+                        <button className="tbl-act-btn" aria-label="Edit lot" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
+                        <button className="tbl-act-btn danger" aria-label="Delete lot" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
                       </td>
                     </tr>
                   ))}
