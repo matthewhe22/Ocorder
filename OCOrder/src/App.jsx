@@ -3320,7 +3320,7 @@ function AdminLogin({ onAuth, pubConfig }) {
           }
         </button>
         <div style={{ textAlign: "center", marginTop: "1.25rem" }}>
-          <a href="mailto:info@tocs.co" style={{ fontSize: "0.75rem", color: "var(--muted)", textDecoration: "none" }}>Forgot password? Contact admin</a>
+          <a href="mailto:info@tocs.co?subject=Admin%20Password%20Reset%20Request&body=Please%20reset%20my%20admin%20password." style={{ fontSize: "0.75rem", color: "var(--muted)", textDecoration: "none" }}>Forgot password? Contact admin</a>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
