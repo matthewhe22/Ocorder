@@ -662,8 +662,7 @@ async function handler(req, res) {
       if (idx === -1) return json(res, 404, { error: "Admin not found." });
       admins[idx] = { ...admins[idx], password: newPassword };
       cfg.admins = admins;
-      cfg.user = cfg.admins[0].username;
-      cfg.pass = cfg.admins[0].password;
+      cfg.admin = { user: cfg.admins[0].username, pass: cfg.admins[0].password }; // legacy sync
       writeConfig(cfg);
       SESSIONS.clear(); // invalidate all sessions after any password reset
       return json(res, 200, { ok: true });
