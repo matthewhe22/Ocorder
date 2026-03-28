@@ -517,9 +517,12 @@ export default function App() {
   // Call stripe-confirm endpoint after Stripe redirects back with ?stripeOk=1
   useEffect(() => {
     if (!stripeConfirming || !stripeOrderId) return;
-    fetch(`/api/orders/${stripeOrderId}/stripe-confirm`, { method: "POST" })
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000);
+    fetch(`/api/orders/${stripeOrderId}/stripe-confirm`, { method: "POST", signal: ctrl.signal })
       .then(r => r.json())
       .then(d => {
+        clearTimeout(timeout);
         if (d.success && d.order) {
           setOrder(d.order);
           setStripeConfirming(false);
@@ -530,8 +533,12 @@ export default function App() {
           setStripeConfirming(false);
         }
       })
-      .catch(() => {
-        setStripeConfirmErr("Network error. Please contact support at info@tocs.co.");
+      .catch((err) => {
+        clearTimeout(timeout);
+        const msg = err?.name === "AbortError"
+          ? "Payment confirmation timed out. Please contact support at info@tocs.co."
+          : "Network error. Please contact support at info@tocs.co.";
+        setStripeConfirmErr(msg);
         setStripeConfirming(false);
       });
   }, [stripeConfirming, stripeOrderId]);
