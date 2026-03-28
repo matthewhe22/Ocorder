@@ -1446,7 +1446,8 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                 <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                   disabled={
-                    (orderCategory === "keys" && plan?.shippingOptions?.length > 0 && !selectedShipping) ||
+                    (orderCategory === "keys" && (plan?.shippingOptions || []).length === 0) ||
+                    (orderCategory === "keys" && (plan?.shippingOptions || []).length > 0 && !selectedShipping) ||
                     (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
                   }
                   onClick={() => {
