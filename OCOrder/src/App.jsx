@@ -1640,7 +1640,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           </div>
 
           <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
-            <button className="btn btn-out" onClick={() => setStep(3)}><Ic n="arrowL" s={14}/> Back</button>
+            <button className="btn btn-out" onClick={() => { setNameTouched(false); setEmailTouched(false); setPhoneTouched(false); setStep(3); }}><Ic n="arrowL" s={14}/> Back</button>
             {orderCategory === "keys" ? (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}
                 onClick={() => {
