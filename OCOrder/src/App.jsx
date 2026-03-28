@@ -1090,7 +1090,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                           >
                             <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
                             <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                              {[l.level ? `Level ${l.level}` : "", l.type].filter(Boolean).join(" · ")}
+                              {[l.level, l.type].filter(Boolean).join(" · ")}
                             </span>
                           </div>
                         ))}
