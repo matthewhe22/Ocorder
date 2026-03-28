@@ -1027,6 +1027,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 value={lotNumber}
                 onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
               />
+              {lotNumber.trim() && (plan.lots || []).length > 0 && !(plan.lots || []).find(l => l.number.toLowerCase() === lotNumber.trim().toLowerCase()) && (
+                <div style={{ fontSize: "0.75rem", color: "#b45309", marginTop: "5px" }}>
+                  Lot number not found in this building's records. Please check and try again.
+                </div>
+              )}
             </div>
 
             {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
