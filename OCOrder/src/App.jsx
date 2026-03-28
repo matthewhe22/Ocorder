@@ -3399,10 +3399,10 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: "480px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Cancel Order" style={{ maxWidth: "480px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0, color: "var(--red)" }}>Cancel Order</h2>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
 
         <div className="alert alert-warn" style={{ marginBottom: "1.2rem" }}>
