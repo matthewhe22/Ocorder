@@ -747,7 +747,8 @@ async function handler(req, res) {
         companyName: stripCtrl(raw.contactInfo?.companyName || ""),
         ocReference: stripCtrl(raw.contactInfo?.ocReference || ""),
       },
-      status: (raw.payment === "stripe" || raw.payment === "card") ? "Processing"
+      status: raw.payment === "stripe" ? "Awaiting Stripe Payment"
+            : raw.payment === "card" ? "Processing"
             : raw.payment === "invoice" ? "Invoice to be issued"
             : "Pending Payment",
       payment: raw.payment || "bank",
