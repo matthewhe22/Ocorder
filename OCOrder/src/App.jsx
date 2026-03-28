@@ -2776,13 +2776,15 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><strong>{fmt(o.total)}</strong></td>
                       <td><span className={`badge ${
                         o.status==="Issued"?"bg-b":
+                        o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
-                        o.status==="Processing"?"bg-g":
+                        o.status==="Processing"?"bg-teal":
                         o.status==="Pending Payment"?"bg-gold":
                         o.status==="On Hold"?"bg-warn":
                         o.status==="Awaiting Documents"?"bg-purple":
                         o.status==="Invoice to be issued"?"bg-teal":
-                        "bg-slate"
+                        o.status==="Awaiting Stripe Payment"?"bg-slate":
+                        "bg-gray"
                       }`}>{o.status}</span></td>
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
