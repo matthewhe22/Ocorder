@@ -1132,7 +1132,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                   value={lotNumber}
                   onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
                 />
->>>>>>> origin/master
               )}
             </div>
 
