@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animation Concepts — TOCS Order Process</title>
+<style>
+  :root {
+    --forest: #1c3326;
+    --sage: #4a7255;
+    --sage2: #5a8a67;
+    --cream: #f7f3ec;
+    --sand: #ede8df;
+    --border: #d8d2c8;
+    --muted: #8a9488;
+    --ink: #1a1f1c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f0ede8;
+    color: var(--ink);
+    padding: 32px 24px 60px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Georgia', serif;
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--forest);
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 36px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .concept-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(28,51,38,0.1);
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.2s;
+    border: 2.5px solid transparent;
+  }
+  .concept-card:hover {
+    box-shadow: 0 8px 32px rgba(28,51,38,0.18);
+    transform: translateY(-2px);
+  }
+  .concept-card.selected {
+    border-color: var(--forest);
+  }
+
+  .preview {
+    height: 240px;
+    position: relative;
+    overflow: hidden;
+    background: var(--cream);
+  }
+
+  .card-body {
+    padding: 18px 20px 20px;
+    border-top: 1px solid #eee;
+  }
+  .card-label {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage);
+    background: rgba(74,114,85,0.1);
+    padding: 3px 8px;
+    border-radius: 20px;
+    margin-bottom: 8px;
+  }
+  .card-title {
+    font-size: 1.0rem;
+    font-weight: 600;
+    color: var(--forest);
+    margin-bottom: 6px;
+  }
+  .card-desc {
+    font-size: 0.78rem;
+    color: #555;
+    line-height: 1.6;
+  }
+  .selected-badge {
+    display: none;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--forest);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .concept-card.selected .selected-badge { display: block; }
+
+  /* ============================================================
+     CONCEPT A — Animated Pipeline / Step Flow
+     ============================================================ */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 20px 16px;
+    gap: 0;
+  }
+  .pipe-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    animation: pipeIn 0.5s ease forwards;
+  }
+  .pipe-step:nth-child(1) { animation-delay: 0.1s; }
+  .pipe-step:nth-child(3) { animation-delay: 0.7s; }
+  .pipe-step:nth-child(5) { animation-delay: 1.3s; }
+  .pipe-step:nth-child(7) { animation-delay: 1.9s; }
+  .pipe-step:nth-child(9) { animation-delay: 2.5s; }
+  .pipe-step:nth-child(11) { animation-delay: 3.1s; }
+
+  @keyframes pipeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .pipe-dot {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--forest);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    position: relative;
+  }
+  .pipe-dot.active {
+    box-shadow: 0 0 0 6px rgba(28,51,38,0.14);
+    animation: pulse-dot 2s ease-in-out infinite;
+    animation-delay: 3.6s;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 6px rgba(28,51,38,0.14); }
+    50% { box-shadow: 0 0 0 10px rgba(28,51,38,0.08); }
+  }
+  .pipe-dot.done { background: var(--sage); }
+  .pipe-lbl {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forest);
+    text-align: center;
+    max-width: 48px;
+    line-height: 1.3;
+  }
+  .pipe-connector {
+    flex: 1;
+    height: 2px;
+    background: #e0dbd4;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 22px;
+    min-width: 8px;
+    max-width: 28px;
+  }
+  .pipe-connector::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: var(--sage);
+    animation: fillLine 0.5s ease forwards;
+  }
+  .pipe-connector:nth-child(2)::after { animation-delay: 0.5s; }
+  .pipe-connector:nth-child(4)::after { animation-delay: 1.1s; }
+  .pipe-connector:nth-child(6)::after { animation-delay: 1.7s; }
+  .pipe-connector:nth-child(8)::after { animation-delay: 2.3s; }
+  .pipe-connector:nth-child(10)::after { animation-delay: 2.9s; }
+  @keyframes fillLine {
+    from { width: 0%; }
+    to { width: 100%; }
+  }
+
+  /* doc icon */
+  .cert-icon {
+    width: 16px;
+    height: 20px;
+    background: white;
+    border: 2px solid rgba(255,255,255,0.8);
+    border-radius: 2px;
+    position: relative;
+  }
+  .cert-icon::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 3px; right: 3px;
+    height: 2px;
+    background: rgba(28,51,38,0.4);
+    box-shadow: 0 3px 0 rgba(28,51,38,0.4), 0 6px 0 rgba(28,51,38,0.4);
+  }
+
+  /* ============================================================
+     CONCEPT B — Scrolling "How It Works" vertical reveal
+     ============================================================ */
+  .howitworks {
+    padding: 16px 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+  }
+  .hw-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateX(-16px);
+    animation: slideIn 0.5s ease forwards;
+  }
+  .hw-row:nth-child(1) { animation-delay: 0.2s; }
+  .hw-row:nth-child(2) { animation-delay: 0.7s; }
+  .hw-row:nth-child(3) { animation-delay: 1.2s; }
+  .hw-row:nth-child(4) { animation-delay: 1.7s; }
+  .hw-row:nth-child(5) { animation-delay: 2.2s; }
+  @keyframes slideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .hw-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--forest);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .hw-icon {
+    font-size: 18px;
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .hw-text strong {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--forest);
+    letter-spacing: 0.04em;
+  }
+  .hw-text span {
+    font-size: 0.68rem;
+    color: #777;
+  }
+  .hw-vline {
+    width: 1px;
+    height: 10px;
+    background: var(--border);
+    margin-left: 13px;
+    opacity: 0;
+    animation: fadeIn 0.3s ease forwards;
+  }
+  .hw-vline:nth-child(2) { animation-delay: 0.6s; }
+  .hw-vline:nth-child(4) { animation-delay: 1.1s; }
+  .hw-vline:nth-child(6) { animation-delay: 1.6s; }
+  .hw-vline:nth-child(8) { animation-delay: 2.1s; }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  /* ============================================================
+     CONCEPT C — Document journey / morphing certificate
+     ============================================================ */
+  .doc-journey {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 20px;
+  }
+  .stage-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+  .stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    opacity: 0;
+    animation: stageCycle 12s infinite;
+  }
+  .stage:nth-child(1) { animation-delay: 0s; }
+  .stage:nth-child(2) { animation-delay: 3s; }
+  .stage:nth-child(3) { animation-delay: 6s; }
+  .stage:nth-child(4) { animation-delay: 9s; }
+
+  @keyframes stageCycle {
+    0%   { opacity: 0; transform: scale(0.92) translateY(8px); }
+    5%   { opacity: 1; transform: scale(1) translateY(0); }
+    25%  { opacity: 1; transform: scale(1) translateY(0); }
+    30%  { opacity: 0; transform: scale(1.04) translateY(-8px); }
+    100% { opacity: 0; }
+  }
+
+  .big-icon {
+    font-size: 48px;
+    line-height: 1;
+  }
+  .stage-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--forest);
+  }
+  .stage-sub {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 160px;
+    line-height: 1.5;
+  }
+  .stage-dots {
+    display: flex;
+    gap: 5px;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .sdot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--border);
+    animation: dotActive 12s infinite;
+  }
+  .sdot:nth-child(1) { animation-delay: 0s; }
+  .sdot:nth-child(2) { animation-delay: 3s; }
+  .sdot:nth-child(3) { animation-delay: 6s; }
+  .sdot:nth-child(4) { animation-delay: 9s; }
+  @keyframes dotActive {
+    0%, 5% { background: var(--forest); transform: scale(1.3); }
+    30%, 100% { background: var(--border); transform: scale(1); }
+  }
+
+  /* ============================================================
+     CONCEPT D — Animated mini-portal mockup
+     ============================================================ */
+  .mini-portal {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--cream);
+    position: relative;
+    overflow: hidden;
+  }
+  .mp-header {
+    background: var(--forest);
+    color: white;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mp-header .logo-dot {
+    width: 16px;
+    height: 16px;
+    background: var(--sage);
+    border-radius: 50%;
+  }
+  .mp-stepbar {
+    background: rgba(200,200,200,0.3);
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.55rem;
+    color: #888;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .mp-sdot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ccc;
+    border: 2px solid #ccc;
+    font-size: 0.45rem;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .mp-sdot.done { background: var(--forest); border-color: var(--forest); }
+  .mp-sdot.curr { background: var(--forest); border-color: var(--forest); box-shadow: 0 0 0 3px rgba(28,51,38,0.18); }
+  .mp-sline { height: 1px; flex: 1; background: #ddd; }
+  .mp-sline.done { background: var(--sage); opacity: 0.5; }
+
+  .mp-body {
+    flex: 1;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mp-screen {
+    position: absolute;
+    inset: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    opacity: 0;
+    animation: screenCycle 18s infinite;
+  }
+  .mp-screen:nth-child(1) { animation-delay: 0s; }
+  .mp-screen:nth-child(2) { animation-delay: 4.5s; }
+  .mp-screen:nth-child(3) { animation-delay: 9s; }
+  .mp-screen:nth-child(4) { animation-delay: 13.5s; }
+
+  @keyframes screenCycle {
+    0%   { opacity: 0; transform: translateX(20px); }
+    4%   { opacity: 1; transform: translateX(0); }
+    22%  { opacity: 1; transform: translateX(0); }
+    25%  { opacity: 0; transform: translateX(-20px); }
+    100% { opacity: 0; }
+  }
+
+  .mp-heading {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--forest);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .mp-search {
+    height: 22px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border);
+    background: white;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 5px;
+    font-size: 0.6rem;
+    color: #aaa;
+  }
+  .mp-card {
+    background: white;
+    border-left: 3px solid var(--sage);
+    border-radius: 0 5px 5px 0;
+    padding: 6px 8px;
+    font-size: 0.6rem;
+    color: var(--forest);
+  }
+  .mp-card strong { display: block; font-weight: 700; margin-bottom: 2px; }
+  .mp-card span { color: var(--muted); font-size: 0.56rem; }
+  .mp-product {
+    background: white;
+    border-radius: 5px;
+    padding: 6px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.6rem;
+  }
+  .mp-badge {
+    background: var(--forest);
+    color: white;
+    font-size: 0.5rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+  }
+  .mp-review-row {
+    background: white;
+    border-radius: 5px;
+    padding: 5px 8px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    color: var(--ink);
+  }
+  .mp-success {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .mp-tick {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--forest);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    animation: tickPop 0.4s ease 13.68s both;
+  }
+  @keyframes tickPop {
+    0% { transform: scale(0); }
+    70% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+  .mp-ok-text {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--forest);
+    text-align: center;
+  }
+  .mp-ok-sub {
+    font-size: 0.56rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* Concept D stepbar states */
+  .mp-screen:nth-child(1) ~ .mp-stepbar { display: none; }
+
+  /* Selection UI */
+  .choose-bar {
+    text-align: center;
+    margin-top: 28px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .choose-bar strong {
+    color: var(--forest);
+    font-size: 0.82rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Order Process Animation — Concept Designs</h1>
+<p class="subtitle">Click a concept to select it &nbsp;·&nbsp; All animations are live previews</p>
+
+<div class="grid">
+
+  <!-- ==================== CONCEPT A ==================== -->
+  <div class="concept-card" onclick="select(this,'A')">
+    <div class="selected-badge">✓ Selected</div>
+    <div class="preview">
+      <div class="pipeline" id="pipelineA">
+        <div class="pipe-step">
+          <div class="pipe-dot done">🏢</div>
+          <div class="pipe-lbl">Find Building</div>
+        </div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-step">
+          <div class="pipe-dot done">📄</div>
+          <div class="pipe-lbl">Pick Products</div>
+        </div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-step">
+          <div class="pipe-dot done">🔍</div>
+          <div class="pipe-lbl">Review</div>
+        </div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-step">
+          <div class="pipe-dot done">✉️</div>
+          <div class="pipe-lbl">Contact</div>
+        </div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-step">
+          <div class="pipe-dot active">💳</div>
+          <div class="pipe-lbl">Payment</div>
+        </div>
+        <div class="pipe-connector" style="opacity:0.3"></div>
+        <div class="pipe-step" style="opacity:0.35">
+          <div class="pipe-dot" style="background:#ccc;">✅</div>
+          <div class="pipe-lbl" style="color:#aaa">Complete</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-label">Concept A</div>
+      <div class="card-title">Animated Horizontal Pipeline</div>
+      <div class="card-desc">Steps appear one-by-one with connecting lines filling between them. A pulsing "current step" dot shows where you are. Clean, minimal, professional — mirrors the existing step indicator bar but made prominent and instructive.</div>
+    </div>
+  </div>
+
+  <!-- ==================== CONCEPT B ==================== -->
+  <div class="concept-card" onclick="select(this,'B')">
+    <div class="selected-badge">✓ Selected</div>
+    <div class="preview" style="background:#fff;">
+      <div class="howitworks">
+        <div class="hw-row">
+          <div class="hw-num">1</div>
+          <div class="hw-icon">🏢</div>
+          <div class="hw-text">
+            <strong>Find Your Building</strong>
+            <span>Search by address or strata plan number</span>
+          </div>
+        </div>
+        <div class="hw-vline"></div>
+        <div class="hw-row">
+          <div class="hw-num">2</div>
+          <div class="hw-icon">📋</div>
+          <div class="hw-text">
+            <strong>Select Products</strong>
+            <span>Choose certificates, registers or keys</span>
+          </div>
+        </div>
+        <div class="hw-vline"></div>
+        <div class="hw-row">
+          <div class="hw-num">3</div>
+          <div class="hw-icon">✅</div>
+          <div class="hw-text">
+            <strong>Review &amp; Pay</strong>
+            <span>Bank transfer, PayID or Stripe</span>
+          </div>
+        </div>
+        <div class="hw-vline"></div>
+        <div class="hw-row">
+          <div class="hw-num">4</div>
+          <div class="hw-icon">📬</div>
+          <div class="hw-text">
+            <strong>Receive Certificate</strong>
+            <span>Issued and emailed within 2–3 business days</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-label">Concept B</div>
+      <div class="card-title">Vertical "How It Works" Reveal</div>
+      <div class="card-desc">Four numbered steps slide in from the left in sequence. Each line gives the step name and a short description of what to expect. Clear, editorial, text-forward — great for first-time applicants who want to understand the process before starting.</div>
+    </div>
+  </div>
+
+  <!-- ==================== CONCEPT C ==================== -->
+  <div class="concept-card" onclick="select(this,'C')">
+    <div class="selected-badge">✓ Selected</div>
+    <div class="preview">
+      <div class="doc-journey">
+        <div class="stage-container">
+          <div class="stage">
+            <div class="big-icon">🏢</div>
+            <div class="stage-title">Search Your Building</div>
+            <div class="stage-sub">Enter your building address or strata plan number to get started</div>
+          </div>
+          <div class="stage">
+            <div class="big-icon">📋</div>
+            <div class="stage-title">Choose Certificates</div>
+            <div class="stage-sub">Select OC certificates, registers, insurance or keys &amp; fobs</div>
+          </div>
+          <div class="stage">
+            <div class="big-icon">💳</div>
+            <div class="stage-title">Pay Securely</div>
+            <div class="stage-sub">Bank transfer, PayID or instant payment via Stripe</div>
+          </div>
+          <div class="stage">
+            <div class="big-icon">🎉</div>
+            <div class="stage-title">Certificate Issued</div>
+            <div class="stage-sub">Documents emailed to you within 2–3 business days</div>
+          </div>
+          <div class="stage-dots">
+            <div class="sdot"></div>
+            <div class="sdot"></div>
+            <div class="sdot"></div>
+            <div class="sdot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-label">Concept C</div>
+      <div class="card-title">Auto-Cycling Story Cards</div>
+      <div class="card-desc">Four full-screen "moments" fade in and out automatically every 3 seconds, each with a large icon, bold heading, and one-line explanation. Progress dots show position. High-impact, visually rich, draws the eye immediately on page load.</div>
+    </div>
+  </div>
+
+  <!-- ==================== CONCEPT D ==================== -->
+  <div class="concept-card" onclick="select(this,'D')">
+    <div class="selected-badge">✓ Selected</div>
+    <div class="preview" style="background:#e8e4df; padding: 16px; display:flex; align-items:center; justify-content:center;">
+      <div style="width:100%; max-width:300px; background:white; border-radius:8px; overflow:hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+        <div class="mp-header">
+          <div class="logo-dot"></div>
+          TOCS Order Platform
+        </div>
+        <!-- Animated stepbar -->
+        <div class="mp-stepbar" id="stepbar">
+          <div class="mp-sdot done">✓</div>
+          <div class="mp-sline done"></div>
+          <div class="mp-sdot done">✓</div>
+          <div class="mp-sline done"></div>
+          <div class="mp-sdot curr">3</div>
+          <div class="mp-sline"></div>
+          <div class="mp-sdot">4</div>
+          <div class="mp-sline"></div>
+          <div class="mp-sdot">5</div>
+        </div>
+        <div class="mp-body">
+          <!-- Screen 1: Building search -->
+          <div class="mp-screen">
+            <div class="mp-heading">Find Your Building</div>
+            <div class="mp-search">
+              <span>🔍</span> 45 Marina Drive…
+            </div>
+            <div class="mp-card">
+              <strong>SP 12345 — Harbourside</strong>
+              <span>45 Marina Drive · 48 lots · 2 Owner Corporations</span>
+            </div>
+          </div>
+          <!-- Screen 2: Product selection -->
+          <div class="mp-screen">
+            <div class="mp-heading">Select Products</div>
+            <div class="mp-product">
+              <span>OC Certificate (Full)</span>
+              <div class="mp-badge">Added ✓</div>
+            </div>
+            <div class="mp-product">
+              <span>Insurance Certificate</span>
+              <div style="font-size:0.6rem; color:var(--sage); font-weight:600;">+ Add</div>
+            </div>
+          </div>
+          <!-- Screen 3: Review -->
+          <div class="mp-screen">
+            <div class="mp-heading">Review Order</div>
+            <div class="mp-review-row"><span>OC Certificate (Full)</span><span>$45.00</span></div>
+            <div class="mp-review-row" style="font-weight:700; border-top:1px solid #eee; margin-top:2px; padding-top:5px;"><span>Total</span><span style="color:var(--forest)">$45.00</span></div>
+          </div>
+          <!-- Screen 4: Complete -->
+          <div class="mp-screen">
+            <div class="mp-success">
+              <div class="mp-tick">✓</div>
+              <div class="mp-ok-text">Order Placed!</div>
+              <div class="mp-ok-sub">Confirmation sent to<br>you@email.com</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-label">Concept D</div>
+      <div class="card-title">Animated Mini-Portal Mockup</div>
+      <div class="card-desc">A live, scaled-down replica of the actual portal animates through the 4 key screens. The real step bar, search, product, and confirmation screens play out sequentially. Most immersive — shows applicants exactly what to expect before they start.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="choose-bar">
+  <strong>Click any concept to select it</strong> — or tell me in the chat which appeals most, and why.
+</div>
+
+<script>
+function select(el, choice) {
+  document.querySelectorAll('.concept-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  if (window.__recordChoice) window.__recordChoice(choice, el.querySelector('.card-title').textContent);
+}
+</script>
+</body>
+</html>

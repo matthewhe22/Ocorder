@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept A — Animated Horizontal Pipeline</title>
+<style>
+  :root {
+    --forest: #1c3326;
+    --sage: #4a7255;
+    --cream: #f7f3ec;
+    --muted: #8a9488;
+    --border: #d8d2c8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+  }
+
+  /* ── badge ── */
+  .badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage);
+    background: rgba(74,114,85,0.12);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+
+  /* ── section title ── */
+  h2 {
+    font-family: Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 400;
+    color: var(--forest);
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 48px;
+    text-align: center;
+  }
+
+  /* ── pipeline wrapper ── */
+  .pipeline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    width: 100%;
+    max-width: 780px;
+  }
+
+  /* ── step ── */
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: stepIn 0.55s cubic-bezier(.4,0,.2,1) forwards;
+    flex: 0 0 auto;
+    width: 96px;
+  }
+  .step:nth-child(1)  { animation-delay: 0.15s; }
+  .step:nth-child(3)  { animation-delay: 0.70s; }
+  .step:nth-child(5)  { animation-delay: 1.25s; }
+  .step:nth-child(7)  { animation-delay: 1.80s; }
+  .step:nth-child(9)  { animation-delay: 2.35s; }
+  .step:nth-child(11) { animation-delay: 2.90s; }
+
+  @keyframes stepIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── dot ── */
+  .dot {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--forest);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    position: relative;
+    box-shadow: 0 2px 10px rgba(28,51,38,0.22);
+    transition: transform 0.2s;
+  }
+  .dot.done {
+    background: var(--sage);
+  }
+  .dot.current {
+    background: var(--forest);
+    animation: pulse 2s ease-in-out infinite;
+    animation-delay: 3.45s;
+  }
+  .dot.pending {
+    background: #c8c4be;
+    box-shadow: none;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(28,51,38,0.3); }
+    50%       { box-shadow: 0 0 0 12px rgba(28,51,38,0.0); }
+  }
+
+  .dot-number {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid var(--border);
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--forest);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dot.done .dot-number {
+    background: #e6f0e9;
+    border-color: var(--sage);
+    color: var(--sage);
+  }
+  .dot.current .dot-number {
+    background: var(--forest);
+    border-color: var(--forest);
+    color: white;
+  }
+  .dot.pending .dot-number {
+    color: #aaa;
+  }
+
+  /* ── label ── */
+  .lbl {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--forest);
+    text-align: center;
+    line-height: 1.4;
+  }
+  .lbl-sub {
+    font-size: 0.62rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .step.pending .lbl,
+  .step.pending .lbl-sub {
+    color: #aaa;
+  }
+
+  /* ── connector line ── */
+  .connector {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    margin-top: 25px; /* align to center of 52px dot */
+    position: relative;
+    overflow: hidden;
+    min-width: 16px;
+    max-width: 60px;
+  }
+  .connector::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--sage);
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: fillLine 0.4s ease forwards;
+  }
+  .connector:nth-child(2)  ::after { animation-delay: 0.55s; }
+  .connector:nth-child(4)  { }
+  .connector:nth-child(2)::after  { animation-delay: 0.55s; }
+  .connector:nth-child(4)::after  { animation-delay: 1.10s; }
+  .connector:nth-child(6)::after  { animation-delay: 1.65s; }
+  .connector:nth-child(8)::after  { animation-delay: 2.20s; }
+  .connector:nth-child(10)::after { animation-delay: 2.75s; opacity: 0.35; }
+
+  @keyframes fillLine {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+  }
+  .connector.dim::after { opacity: 0.3; }
+
+  /* ── current label callout ── */
+  .callout {
+    margin-top: 52px;
+    background: var(--forest);
+    color: white;
+    border-radius: 10px;
+    padding: 14px 28px;
+    font-size: 0.8rem;
+    text-align: center;
+    opacity: 0;
+    animation: fadeUp 0.5s ease 3.6s forwards;
+    max-width: 400px;
+  }
+  .callout strong { display: block; font-size: 0.9rem; margin-bottom: 4px; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── concept label ── */
+  .concept-tag {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="badge">Concept A</div>
+<h2>How Your Order Works</h2>
+<p class="sub">Six simple steps from search to certificate</p>
+
+<div class="pipeline">
+
+  <div class="step">
+    <div class="dot done">
+      🏢
+      <div class="dot-number">✓</div>
+    </div>
+    <div class="lbl">Find Building</div>
+    <div class="lbl-sub">Search address or strata plan</div>
+  </div>
+
+  <div class="connector"></div>
+
+  <div class="step">
+    <div class="dot done">
+      📋
+      <div class="dot-number">✓</div>
+    </div>
+    <div class="lbl">Select Products</div>
+    <div class="lbl-sub">Certs, registers, keys</div>
+  </div>
+
+  <div class="connector"></div>
+
+  <div class="step">
+    <div class="dot done">
+      🔍
+      <div class="dot-number">✓</div>
+    </div>
+    <div class="lbl">Review Order</div>
+    <div class="lbl-sub">Check items &amp; pricing</div>
+  </div>
+
+  <div class="connector"></div>
+
+  <div class="step">
+    <div class="dot done">
+      ✉️
+      <div class="dot-number">✓</div>
+    </div>
+    <div class="lbl">Your Details</div>
+    <div class="lbl-sub">Name, email &amp; phone</div>
+  </div>
+
+  <div class="connector"></div>
+
+  <div class="step">
+    <div class="dot current">
+      💳
+      <div class="dot-number" style="background:var(--forest);border-color:var(--forest);color:white;">5</div>
+    </div>
+    <div class="lbl">Payment</div>
+    <div class="lbl-sub">Bank, PayID or Stripe</div>
+  </div>
+
+  <div class="connector dim"></div>
+
+  <div class="step pending">
+    <div class="dot pending">
+      🎉
+      <div class="dot-number">6</div>
+    </div>
+    <div class="lbl">Complete</div>
+    <div class="lbl-sub">Certificate issued &amp; emailed</div>
+  </div>
+
+</div>
+
+<div class="callout">
+  <strong>Step 5 — Choose Payment Method</strong>
+  Pay by bank transfer, PayID or instant Stripe checkout
+</div>
+
+<div class="concept-tag">Concept A · Animated Horizontal Pipeline</div>
+
+</body>
+</html>

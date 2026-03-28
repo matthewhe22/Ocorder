@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept B — Vertical How It Works</title>
+<style>
+  :root {
+    --forest: #1c3326;
+    --sage: #4a7255;
+    --cream: #f7f3ec;
+    --sand: #ede8df;
+    --muted: #8a9488;
+    --border: #d8d2c8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage);
+    background: rgba(74,114,85,0.12);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+
+  h2 {
+    font-family: Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 400;
+    color: var(--forest);
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 44px;
+    text-align: center;
+  }
+
+  /* ── outer card ── */
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 36px 44px;
+    max-width: 540px;
+    width: 100%;
+    box-shadow: 0 4px 24px rgba(28,51,38,0.09);
+  }
+
+  /* ── step row ── */
+  .step-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: slideIn 0.5s cubic-bezier(.4,0,.2,1) forwards;
+  }
+  .step-row:nth-child(1) { animation-delay: 0.2s; }
+  .step-row:nth-child(3) { animation-delay: 0.8s; }
+  .step-row:nth-child(5) { animation-delay: 1.4s; }
+  .step-row:nth-child(7) { animation-delay: 2.0s; }
+  .step-row:nth-child(9) { animation-delay: 2.6s; }
+
+  @keyframes slideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ── left column: number + line ── */
+  .step-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .num {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--forest);
+    color: white;
+    font-size: 1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(28,51,38,0.2);
+  }
+  .num.done {
+    background: var(--sage);
+    font-size: 1.1rem;
+  }
+  .vline {
+    width: 2px;
+    flex: 1;
+    min-height: 36px;
+    background: var(--border);
+    margin-top: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .vline::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 0%;
+    background: var(--sage);
+    animation: fillV 0.4s ease forwards;
+    opacity: 0.6;
+  }
+  /* match parent step-row delays */
+  .step-row:nth-child(1) .vline::after { animation-delay: 0.65s; }
+  .step-row:nth-child(3) .vline::after { animation-delay: 1.25s; }
+  .step-row:nth-child(5) .vline::after { animation-delay: 1.85s; }
+  .step-row:nth-child(7) .vline::after { animation-delay: 2.45s; }
+
+  @keyframes fillV {
+    from { height: 0%; }
+    to   { height: 100%; }
+  }
+
+  /* ── right column: content ── */
+  .step-content {
+    padding-top: 8px;
+    padding-bottom: 24px;
+  }
+  .step-icon {
+    font-size: 1.5rem;
+    margin-bottom: 6px;
+    line-height: 1;
+  }
+  .step-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--forest);
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    font-size: 0.78rem;
+    color: #666;
+    line-height: 1.6;
+  }
+  .step-tag {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: rgba(74,114,85,0.1);
+    color: var(--sage);
+  }
+
+  /* last step — no bottom padding, no vline */
+  .step-row:last-child .step-content { padding-bottom: 0; }
+
+  .concept-tag {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="badge">Concept B</div>
+<h2>How It Works</h2>
+<p class="sub">Everything you need to know before you begin</p>
+
+<div class="card">
+
+  <div class="step-row">
+    <div class="step-left">
+      <div class="num done">🏢</div>
+      <div class="vline"></div>
+    </div>
+    <div class="step-content">
+      <div class="step-title">Search Your Building</div>
+      <div class="step-desc">Enter your building address or strata plan number. We'll find your Owner Corporation and available products.</div>
+      <span class="step-tag">Takes 30 seconds</span>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-left">
+      <div class="num done">📋</div>
+      <div class="vline"></div>
+    </div>
+    <div class="step-content">
+      <div class="step-title">Choose Your Products</div>
+      <div class="step-desc">Select OC certificates by lot, registers, insurance certificates, meeting minutes, or keys and fobs. Mix and match as needed.</div>
+      <span class="step-tag">Fully itemised pricing</span>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-left">
+      <div class="num done">✉️</div>
+      <div class="vline"></div>
+    </div>
+    <div class="step-content">
+      <div class="step-title">Enter Your Details</div>
+      <div class="step-desc">Provide your name, email address and phone number. Your confirmation and documents will be sent here.</div>
+      <span class="step-tag">Your data is private</span>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-left">
+      <div class="num done">💳</div>
+      <div class="vline"></div>
+    </div>
+    <div class="step-content">
+      <div class="step-title">Pay Securely</div>
+      <div class="step-desc">Choose bank transfer, PayID or instant Stripe checkout. Your order is confirmed immediately on payment.</div>
+      <span class="step-tag">Bank · PayID · Stripe</span>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-left">
+      <div class="num" style="background:var(--forest); font-size:1.1rem;">🎉</div>
+    </div>
+    <div class="step-content">
+      <div class="step-title">Receive Your Certificate</div>
+      <div class="step-desc">Documents are issued and emailed to you within 2–3 business days. Keys and fobs are dispatched or available for pickup.</div>
+      <span class="step-tag">2–3 business days</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="concept-tag">Concept B · Vertical How It Works</div>
+
+</body>
+</html>
