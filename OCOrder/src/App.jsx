@@ -2101,7 +2101,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
         Privacy Policy
       </h1>
       <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: "2.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1.5rem" }}>
-        Top Owners Corporation Solution · Last updated: March 2026
+        Top Owners Corporation Solution · Last updated: {__BUILD_DATE__}
       </p>
 
       {sections.map(({ heading, body }) => (
