@@ -557,6 +557,23 @@ export default function App() {
     }
   }, [selPlan]);
 
+  // When lot number changes on an OC order, auto-assign that lot's OCs
+  useEffect(() => {
+    if (!plan || orderCategory !== "oc") return;
+    const trimmed = lotNumber.trim();
+    if (!trimmed) {
+      setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+      return;
+    }
+    const lot = plan.lots.find(l => l.number.toLowerCase() === trimmed.toLowerCase());
+    if (lot && lot.ownerCorps?.length > 0) {
+      setSelectedOCs(lot.ownerCorps);
+    } else {
+      // Lot not found in mapping — keep all OCs selectable
+      setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    }
+  }, [lotNumber, orderCategory]);
+
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
 
   const addProd = (product) => {
@@ -635,7 +652,7 @@ export default function App() {
       const first = methods.find(m => m.enabled);
       if (first) setPayMethod(first.id);
     }
-  }, [pubConfig]);
+  }, [pubConfig, payMethod]);
 
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
@@ -733,6 +750,7 @@ export default function App() {
 function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
+  const [extLinkTarget, setExtLinkTarget] = useState(null); // product with externalUrl awaiting confirm
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
@@ -774,7 +792,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const emailValid = EMAIL_RE.test(contact.email);
   const phoneValid  = !contact.phone || PHONE_RE.test(contact.phone.replace(/\s/g, ""));
   const gst = gstOf(total);
-  const exGstTotal = exGst(total);
 
   return (
     <div>
@@ -1298,7 +1315,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                       return (
                         <div key={product.id} className={`prod-card ${allAdded ? "added" : ""}`}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
-                            <div className="prod-name">{product.name}</div>
+                            <div className="prod-name">{product.name}{product.externalUrl && <span style={{ marginLeft: "6px", fontSize: "0.6rem", fontWeight: 700, background: "var(--forest)", color: "white", borderRadius: "3px", padding: "1px 5px", letterSpacing: "0.05em", verticalAlign: "middle" }}>EXTERNAL</span>}</div>
                             {product.perOC && (
                               <div className="tip-wrap">
                                 <span className="per-oc-tag">
@@ -1322,7 +1339,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                             </div>
                             {orderCategory === "keys" ? (
                               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                {allAdded ? (<>
+                                {product.externalUrl ? (
+                                  <button className="add-btn" style={{ background: "var(--forest)", display: "flex", alignItems: "center", gap: "5px" }}
+                                    onClick={() => setExtLinkTarget(product)}>
+                                    <Ic n="arrow" s={12}/> Apply Now
+                                  </button>
+                                ) : allAdded ? (<>
                                   <button style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", width: "28px", height: "28px", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
                                     onClick={() => {
                                       if (qty <= 1) { setCart(p => p.filter(i => !(i.productId === product.id))); }
@@ -1454,6 +1476,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               )}
 
               {/* ── Shipping Method Selector (Keys/Fobs orders only — OC certs are delivered by email) ── */}
+              {orderCategory === "keys" && (plan?.shippingOptions || []).length === 0 && (
+                <div style={{ marginTop: "1rem", padding: "12px 16px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "6px", fontSize: "0.85rem", color: "#92400e" }}>
+                  No shipping methods are configured for this building. Please contact the strata manager to arrange delivery.
+                </div>
+              )}
               {(() => {
                 const planShipping = plan?.shippingOptions || [];
                 if (orderCategory !== "keys" || planShipping.length === 0) return null;
@@ -1531,7 +1558,8 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                 <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                   disabled={
-                    (orderCategory === "keys" && plan?.shippingOptions?.length > 0 && !selectedShipping) ||
+                    (orderCategory === "keys" && (plan?.shippingOptions || []).length === 0) ||
+                    (orderCategory === "keys" && (plan?.shippingOptions || []).length > 0 && !selectedShipping) ||
                     (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
                   }
                   onClick={() => {
@@ -1608,7 +1636,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
             <button className="btn btn-out" onClick={() => setStep(3)}><Ic n="arrowL" s={14}/> Back</button>
             {orderCategory === "keys" ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}
+                onClick={() => {
+                  if (!contact.name || !contact.email || !emailValid || !contact.phone || !phoneValid) {
+                    setNameTouched(true); setPhoneTouched(true); setEmailTouched(true);
+                  }
+                }}>
                 {keysPlaceErr && <div className="alert alert-warn" style={{ margin: 0 }}>{keysPlaceErr}</div>}
                 <button
                   className="btn btn-blk btn-lg"
@@ -1680,6 +1713,39 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         <div style={{ textAlign:"center", padding:"2rem 0 0.5rem", marginTop:"3rem", borderTop:"1px solid var(--border)", fontSize:"0.75rem", color:"var(--muted)" }}>
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
           {" · "}Top Owners Corporation Solution
+        </div>
+      )}
+
+      {/* ── External link confirmation dialog ── */}
+      {extLinkTarget && (
+        <div className="overlay" onClick={() => setExtLinkTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "1rem" }}>
+              <span style={{ fontSize: "1.6rem" }}>🔗</span>
+              <h2 className="modal-tt" style={{ margin: 0 }}>Apply via External Provider</h2>
+            </div>
+            <p style={{ fontSize: "0.88rem", color: "var(--ink)", marginBottom: "0.75rem", lineHeight: 1.6 }}>
+              <strong>{extLinkTarget.name}</strong> requires you to apply directly with the supplier.
+            </p>
+            <p style={{ fontSize: "0.88rem", color: "var(--ink)", marginBottom: "0.5rem", lineHeight: 1.6 }}>
+              You will be redirected to:
+            </p>
+            <div style={{ background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "6px", padding: "8px 12px", fontSize: "0.8rem", fontFamily: "monospace", wordBreak: "break-all", marginBottom: "1rem", color: "var(--forest)" }}>
+              {extLinkTarget.externalUrl}
+            </div>
+            <div className="alert alert-warn" style={{ marginBottom: "1rem", fontSize: "0.82rem" }}>
+              <Ic n="info" s={13}/> Your current order will be <strong>closed</strong> when you continue. You can start a new order at any time.
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => setExtLinkTarget(null)}>Cancel</button>
+              <button className="btn btn-blk" style={{ flex: 1 }} onClick={() => {
+                const url = extLinkTarget.externalUrl;
+                setExtLinkTarget(null);
+                reset();
+                window.open(url, "_blank", "noopener,noreferrer");
+              }}>Continue &amp; Close Order <Ic n="arrow" s={13}/></button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1944,9 +2010,9 @@ function ConfirmationPage({ order, reset, pubConfig }) {
             <strong>{fmt(item.price)}</strong>
           </div>
         ))}
-        {order.selectedShipping?.cost > 0 && (
+        {((order.selectedShipping?.cost ?? order.selectedShipping?.price) > 0) && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
-            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost)}</span>
+            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost ?? order.selectedShipping.price)}</span>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
@@ -2118,7 +2184,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── Plan CRUD ───────────────────────────────────────────────────────────────
   const addPlan = async () => {
     if (!form.id || !form.name) return;
-    const plans = [...data.strataPlans, { id: form.id, name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
+    if (data.strataPlans.some(p => p.id === form.id.trim())) {
+      alert(`A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.`);
+      return;
+    }
+    const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
     await savePlans(plans);
     setModal(null); setForm({});
   };
@@ -2166,6 +2236,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
         ...(isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, parseFloat(form.managerAdminCharge) || 0) } : {}),
+        ...(isKeys && form.externalUrl?.trim() ? { externalUrl: form.externalUrl.trim() } : {}),
         ...(shippingCosts ? { shippingCosts } : {}),
       }]
     });
@@ -2185,6 +2256,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
         managerAdminCharge: isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? Math.max(0, parseFloat(form.managerAdminCharge) || 0) : undefined,
+        externalUrl: isKeys && form.externalUrl?.trim() ? form.externalUrl.trim() : undefined,
         ...(shippingCosts ? { shippingCosts } : { shippingCosts: undefined }),
       })
     });
@@ -2333,7 +2405,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
-  const markPaid      = (oid) => updateOrderStatus(oid, "Processing");
+  const markPaid      = (oid) => updateOrderStatus(oid, "Paid");
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
@@ -2346,7 +2418,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (prod.shippingCosts) {
       Object.entries(prod.shippingCosts).forEach(([k, v]) => { scFields[`sc_${k}`] = v; });
     }
-    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", ...scFields });
+    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", externalUrl: prod.externalUrl || "", ...scFields });
     setModal("editProduct");
   };
 
@@ -2796,7 +2868,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     {effectiveType === "agent" && ci.companyName && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Company</td><td style={{ paddingBottom:"4px" }}>{ci.companyName}</td></tr>}
                                     {hasRef && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>OC Reference</td><td style={{ paddingBottom:"4px" }}>{ci.ocReference}</td></tr>}
                                     {hasAddr && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Delivery Address</td><td style={{ paddingBottom:"4px" }}>{ci.shippingAddress.street}, {ci.shippingAddress.suburb} {ci.shippingAddress.state} {ci.shippingAddress.postcode}</td></tr>}
-                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost)}</td></tr>}
+                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost ?? o.selectedShipping.price)}</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
@@ -2996,6 +3068,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Internal charge for admin reporting. Not included in the product price shown to applicants.</div>
               </div>
             )}
+            {(form.category || "oc") === "keys" && (
+              <div className="form-row">
+                <label className="f-label">External Application URL <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>(optional)</span></label>
+                <input className="f-input" type="url" placeholder="https://supplier.com/apply" value={form.externalUrl||""} onChange={e => upd("externalUrl",e.target.value)}/>
+                <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>If set, applicants will see an "Apply Now" button that redirects to this URL instead of adding to cart. Their order will be closed on redirect.</div>
+              </div>
+            )}
             {/* Shipping cost overrides — shown when plan has shipping options */}
             {(() => {
               const activePlan = data.strataPlans.find(p => p.id === planId);
@@ -3088,9 +3167,32 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               </select>
             </div>
             <div className="form-row">
-              <label className="f-label">Owner Corp IDs (comma-separated)</label>
-              <input className="f-input" placeholder="OC-A, OC-B" value={form.ocIds||""} onChange={e => upd("ocIds",e.target.value)}/>
-              {plan && <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Available: {Object.keys(plan.ownerCorps).join(", ")}</div>}
+              <label className="f-label">Owner Corporations</label>
+              {plan && Object.keys(plan.ownerCorps).length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                  {Object.entries(plan.ownerCorps).map(([ocId, oc]) => {
+                    const selected = (form.ocIds || "").split(",").map(s => s.trim()).filter(Boolean).includes(ocId);
+                    return (
+                      <label key={ocId} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 12px", border: `1.5px solid ${selected ? "var(--sage)" : "var(--border)"}`, borderRadius: "6px", cursor: "pointer", background: selected ? "var(--sage-tint)" : "white" }}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => {
+                            const cur = (form.ocIds || "").split(",").map(s => s.trim()).filter(Boolean);
+                            const next = selected ? cur.filter(id => id !== ocId) : [...cur, ocId];
+                            upd("ocIds", next.join(", "));
+                          }}
+                          style={{ width: "14px", height: "14px", accentColor: "var(--forest)", flexShrink: 0 }}
+                        />
+                        <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--forest)", fontFamily: "monospace" }}>{ocId}</span>
+                        <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{oc.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "4px" }}>No Owner Corporations defined for this plan. Add OCs first.</div>
+              )}
             </div>
             <div style={{ display: "flex", gap: "8px", marginTop: "0.5rem" }}>
               <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); }}>Cancel</button>

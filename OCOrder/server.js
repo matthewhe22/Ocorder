@@ -39,13 +39,14 @@ const DEFAULT_DATA = {
         "OC-B": { name: "Owner Corporation B — Commercial",  levy: 2400 },
       },
       products: [
-        { id:"P1", name:"OC Certificate — Standard",           description:"s151 SMA Owner Corporation Certificate",            price:220, secondaryPrice:150, turnaround:"5 business days",   perOC:true  },
-        { id:"P2", name:"OC Certificate — Urgent",             description:"Priority processing, 24–48 hour turnaround",        price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true  },
-        { id:"P3", name:"Register of Owners Search",           description:"Current register of lot owners and addresses",      price: 55,                    turnaround:"3 business days",   perOC:false },
-        { id:"P4", name:"Insurance Certificate of Currency",   description:"Current building insurance details and certificate",price: 75,                    turnaround:"2 business days",   perOC:false },
-        { id:"P5", name:"Meeting Minutes — Last 2 Years",      description:"Minutes of AGM and general meetings",              price:110,                    turnaround:"5 business days",   perOC:false },
-        { id:"P6", name:"Financial Statements",                description:"Latest audited financial statements",               price: 95,                    turnaround:"5 business days",   perOC:false },
+        { id:"P1", name:"OC Certificate — Standard",           description:"s151 SMA Owner Corporation Certificate",            price:220, secondaryPrice:150, turnaround:"5 business days",   perOC:true,  category:"oc"   },
+        { id:"P2", name:"OC Certificate — Urgent",             description:"Priority processing, 24–48 hour turnaround",        price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true,  category:"oc"   },
+        { id:"P3", name:"Register of Owners Search",           description:"Current register of lot owners and addresses",      price: 55,                    turnaround:"3 business days",   perOC:false, category:"oc"   },
+        { id:"P4", name:"Insurance Certificate of Currency",   description:"Current building insurance details and certificate",price: 75,                    turnaround:"2 business days",   perOC:false, category:"oc"   },
+        { id:"P5", name:"Meeting Minutes — Last 2 Years",      description:"Minutes of AGM and general meetings",              price:110,                    turnaround:"5 business days",   perOC:false, category:"oc"   },
+        { id:"P6", name:"Financial Statements",                description:"Latest audited financial statements",               price: 95,                    turnaround:"5 business days",   perOC:false, category:"oc"   },
       ],
+      keysShipping: { deliveryCost: 15, expressCost: 25 },
       active: true,
     },
   ],
@@ -87,16 +88,12 @@ const DEMO_SEED_DATA = {
         "OC-B": { name: "OC B — Commercial",  levy: 2800 },
       },
       products: [
-        { id:"P1", name:"OC Certificate — Standard", description:"s151 SMA Owner Corporation Certificate", price:220, secondaryPrice:150, turnaround:"5 business days", perOC:true  },
-        { id:"P2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true },
-        { id:"P3", name:"Register of Owners Search", description:"Current register of lot owners",           price:55,  turnaround:"3 business days", perOC:false },
-        { id:"P4", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:75, turnaround:"2 business days", perOC:false },
+        { id:"P1", name:"OC Certificate — Standard", description:"s151 SMA Owner Corporation Certificate", price:220, secondaryPrice:150, turnaround:"5 business days", perOC:true,  category:"oc"   },
+        { id:"P2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true, category:"oc"   },
+        { id:"P3", name:"Register of Owners Search", description:"Current register of lot owners",           price:55,  turnaround:"3 business days", perOC:false, category:"oc"   },
+        { id:"P4", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:75, turnaround:"2 business days", perOC:false, category:"oc"   },
       ],
-      shippingOptions: [
-        { id: "pickup", name: "Pickup / Email",    price: 0,  requiresAddress: false },
-        { id: "post",   name: "Standard Post",     price: 12, requiresAddress: true  },
-        { id: "express",name: "Express Post",      price: 25, requiresAddress: true  },
-      ],
+      keysShipping: { deliveryCost: 12, expressCost: 25 },
     },
     {
       id: "SP10002", name: "Parkside Gardens", address: "12 Garden Street, Melbourne VIC 3000", active: true,
@@ -113,6 +110,7 @@ const DEMO_SEED_DATA = {
         { id:"Q2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:360, secondaryPrice:260, turnaround:"1–2 business days", perOC:true },
         { id:"Q3", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:70, turnaround:"2 business days", perOC:false },
       ],
+      keysShipping: { deliveryCost: 12, expressCost: 25 },
     },
   ],
   orders: [
@@ -140,7 +138,7 @@ const DEMO_DEFAULT_CONFIG = {
 };
 
 // ── Valid order statuses ───────────────────────────────────────────────────────
-const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued"];
+const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Awaiting Stripe Payment","Paid"];
 
 // ── In-memory sessions  Map<token, { user, exp }> ─────────────────────────────
 const SESSIONS = new Map();
@@ -453,7 +451,7 @@ function readBody(req, res) {
         req.destroy();
       }
     });
-    req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({}); } });
+    req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({ _parseError: true }); } });
     req.on("error", reject);
   });
 }
@@ -664,8 +662,7 @@ async function handler(req, res) {
       if (idx === -1) return json(res, 404, { error: "Admin not found." });
       admins[idx] = { ...admins[idx], password: newPassword };
       cfg.admins = admins;
-      cfg.user = cfg.admins[0].username;
-      cfg.pass = cfg.admins[0].password;
+      cfg.admin = { user: cfg.admins[0].username, pass: cfg.admins[0].password }; // legacy sync
       writeConfig(cfg);
       SESSIONS.clear(); // invalidate all sessions after any password reset
       return json(res, 200, { ok: true });
@@ -701,19 +698,26 @@ async function handler(req, res) {
   // ── POST /api/orders  (public — customer places order, JSON + optional base64 file) ─
   if (urlPath === "/api/orders" && method === "POST") {
     const body = await readBody(req, res);
+    if (body._parseError) return json(res, 400, { error: "Invalid JSON in request body." });
     const raw = body.order || body; // support both { order, lotAuthority } and flat order
     if (!Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
     // Generate server-side ID — never trust client-supplied IDs
     const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(2).toString("hex").toUpperCase();
-    if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    if (!raw.contactInfo?.name?.trim() || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
     if (!raw.contactInfo?.phone || !String(raw.contactInfo.phone).trim()) return json(res, 400, { error: "Customer phone number is required." });
+    if (String(raw.contactInfo.phone).trim().length < 6) return json(res, 400, { error: "Phone number must be at least 6 characters." });
     if (String(raw.contactInfo.phone).length > 30) return json(res, 400, { error: "Phone number must not exceed 30 characters." });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((raw.contactInfo.email || "").trim())) return json(res, 400, { error: "A valid customer email address is required." });
-    if ((raw.contactInfo.name || "").length > 200) return json(res, 400, { error: "Name must not exceed 200 characters." });
+    if ((raw.contactInfo.name || "").trim().length > 200) return json(res, 400, { error: "Name must not exceed 200 characters." });
     if ((raw.contactInfo.companyName || "").length > 200) return json(res, 400, { error: "Company name must not exceed 200 characters." });
+    if ((raw.contactInfo.ocReference || "").length > 100) return json(res, 400, { error: "OC reference must not exceed 100 characters." });
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
     if (raw.items.length > 50) return json(res, 400, { error: "Order cannot contain more than 50 items." });
-    if (raw.orderCategory === "keys" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for Keys/Fobs/Remotes orders." });
+    // BUG-A1/A2/A3: validate orderCategory is present and a known value (case-sensitive)
+    const orderCategoryNorm = typeof raw.orderCategory === "string" ? raw.orderCategory.toLowerCase() : "";
+    if (!["oc", "keys"].includes(orderCategoryNorm)) return json(res, 400, { error: "orderCategory must be 'oc' or 'keys'." });
+    if (orderCategoryNorm === "keys" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for Keys/Fobs/Remotes orders." });
+    if (orderCategoryNorm === "keys" && !raw.selectedShipping?.type) return json(res, 400, { error: "A shipping method is required for Keys/Fobs/Remotes orders." });
     // Validate payment method against config (prevents bypass of disabled methods)
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
@@ -728,21 +732,23 @@ async function handler(req, res) {
         return json(res, 400, { error: "PayID payments are currently disabled." });
     }
     // Strip control characters from string values that flow into email subjects / headers
-    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
+    // Strip control characters AND HTML angle brackets (prevent XSS in admin UI and emails)
+    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f<>]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
     const order = {
       id: serverId,
       planId: raw.planId,
       lotId: raw.lotId,
-      orderCategory: raw.orderCategory,
+      orderCategory: orderCategoryNorm,
       contactInfo: {
         name:        stripCtrl(raw.contactInfo?.name  || ""),
-        email:       stripCtrl((raw.contactInfo?.email || "").trim()),
+        email:       stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()),
         phone:       stripCtrl(raw.contactInfo?.phone || ""),
         companyName: stripCtrl(raw.contactInfo?.companyName || ""),
         ocReference: stripCtrl(raw.contactInfo?.ocReference || ""),
       },
-      status: (raw.payment === "stripe" || raw.payment === "card") ? "Processing"
+      status: raw.payment === "stripe" ? "Awaiting Stripe Payment"
+            : raw.payment === "card" ? "Processing"
             : raw.payment === "invoice" ? "Invoice to be issued"
             : "Pending Payment",
       payment: raw.payment || "bank",
@@ -750,15 +756,15 @@ async function handler(req, res) {
         productId:   item.productId,
         lotId:       item.lotId,
         lotNumber:   stripCtrl(item.lotNumber   || ""),
-        planName:    stripCtrl(item.planName    || ""),
+        planName:    "", // overridden from catalog below
         ocName:      stripCtrl(item.ocName      || ""),
         productName: stripCtrl(item.productName || ""), // overridden from catalog below
-        ocId:        item.ocId   || null,
+        ocId:        null, // set from catalog for perOC products only; stripped for non-perOC
         qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
       })),
       // Shipping only applies to keys/fob orders; price validated from catalog below
-      selectedShipping: (raw.orderCategory === "keys" && raw.selectedShipping) ? {
+      selectedShipping: (orderCategoryNorm === "keys" && raw.selectedShipping) ? {
         id:    stripCtrl(String(raw.selectedShipping.id   || "")),
         name:  stripCtrl(String(raw.selectedShipping.name || "")),
         type:  stripCtrl(String(raw.selectedShipping.type || "")),
@@ -774,23 +780,58 @@ async function handler(req, res) {
       // Require a known active plan — no plan means no price enforcement
       if (!plan) return json(res, 400, { error: "A valid planId is required." });
       if (!plan.products?.length) return json(res, 400, { error: "The specified plan has no products." });
-      // Count how many times each perOC product appears per lot to apply secondaryPrice
-      const ocCountPerProduct = {}; // key: `${productId}:${lotId}`
+      // GAP-2: validate order.lotId against plan lots (if provided)
+      if (order.lotId) {
+        const knownLot = plan.lots.find(l => l.id === order.lotId);
+        if (!knownLot) return json(res, 400, { error: `Lot "${order.lotId}" does not exist in the selected plan.` });
+      }
+      // Snapshot plan name onto order itself for display in admin/emails
+      order.planName = plan.name;
+      // Count how many times each perOC product appears per OC to apply secondaryPrice;
+      // also detect duplicate (productId, ocId) combinations.
+      const ocCountPerProduct = {}; // key: `${productId}:${ocId}` for perOC
+      const seenItems = new Set(); // detect true duplicates
       for (const item of order.items) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
+        // GAP-10: lotNumber required on every item
+        if (!item.lotNumber?.trim()) return json(res, 400, { error: "Each order item must include a lot number." });
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
-        // M-7: cross-validate product category vs order category
-        if (order.orderCategory === "keys" && product.perOC) {
+        // M-7: cross-validate product category vs order category.
+        // Use the stored product.category field; fall back to managerAdminCharge for legacy products without it.
+        const productCategory = product.category || (product.managerAdminCharge !== undefined ? "keys" : "oc");
+        if (order.orderCategory === "keys" && productCategory !== "keys") {
           return json(res, 400, { error: `Product ${item.productId} is not valid for keys/fobs orders.` });
         }
-        if (order.orderCategory === "oc" && !product.perOC) {
+        if (order.orderCategory === "oc" && productCategory === "keys") {
           return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
         }
-        // Snapshot productName from catalog (M-6)
-        item.productName = product.name || item.productName;
+        const isKeysProduct = productCategory === "keys";
+        // GAP-1: for perOC products, ocId must exist in plan.ownerCorps
         if (product.perOC) {
-          const key = `${item.productId}:${item.lotId || ""}`;
+          if (!item.ocId || !plan.ownerCorps?.[item.ocId]) {
+            return json(res, 400, { error: `A valid Owner Corporation (ocId) is required for product ${item.productId}. Received: "${item.ocId}"` });
+          }
+          // Snapshot OC name from plan catalog (not client-supplied)
+          item.ocName = plan.ownerCorps[item.ocId]?.name || item.ocId;
+        }
+        // Reject duplicate (productId, ocId) for perOC; reject duplicate (productId, lotId) for non-perOC
+        const dupKey = product.perOC
+          ? `${item.productId}:${item.ocId}`
+          : `${item.productId}:${item.lotId || item.lotNumber}`;
+        if (seenItems.has(dupKey)) {
+          return json(res, 400, { error: product.perOC
+            ? `Duplicate item: product ${item.productId} for OC ${item.ocId} appears more than once.`
+            : `Duplicate item: product ${item.productId} for lot ${item.lotNumber} appears more than once.` });
+        }
+        seenItems.add(dupKey);
+        // Snapshot productName and planName from catalog
+        item.productName = product.name || item.productName;
+        item.planName = plan.name;
+        if (product.perOC) {
+          // BUG-5: perOC products are always qty 1 — one certificate per OC
+          item.qty = 1;
+          const key = `${item.productId}:${item.ocId || ""}`;
           ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
           item.price = ocCountPerProduct[key] === 1
             ? Number(product.price)
@@ -808,7 +849,7 @@ async function handler(req, res) {
       if (order.orderCategory === "keys" && order.selectedShipping) {
         const ks = plan.keysShipping || {};
         const shippingType = order.selectedShipping.type;
-        if (shippingType === "express") {
+        if (shippingType.toLowerCase() === "express") {
           order.selectedShipping.price = Math.max(0, Number(ks.expressCost) || 0);
         } else {
           // standard/pickup/delivery — use deliveryCost
@@ -885,7 +926,7 @@ async function handler(req, res) {
 
     // Strip admin-only fields before returning to the customer
     const customerOrder = { ...order, items: order.items.map(({ managerAdminCharge, ...item }) => item) };
-    return json(res, 200, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
+    return json(res, 201, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
 
   // ── DELETE /api/orders/:id/delete  (admin — permanently remove a cancelled order) ─
@@ -1086,7 +1127,25 @@ async function handler(req, res) {
   if (urlPath === "/api/plans" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { plans } = await readBody(req, res);
+    const body = await readBody(req, res);
+    // Support import-lots action (mirrors Vercel api/plans.js sub-route)
+    if (body.action === "import-lots") {
+      const { planId, lots } = body;
+      if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
+      if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
+      const d = readData();
+      const idx = d.strataPlans.findIndex(p => p.id === planId);
+      if (idx === -1) return json(res, 404, { error: "Plan not found." });
+      const prevCount = d.strataPlans[idx].lots?.length || 0;
+      d.strataPlans[idx].lots = lots;
+      d.strataPlans[idx].lotsImportLog = [
+        ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)),
+        { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${lots.length} lots` },
+      ];
+      writeData(d);
+      return json(res, 200, { ok: true, count: lots.length });
+    }
+    const { plans } = body;
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });
     if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
     // Validate each plan is an object with a non-empty id and name
@@ -1111,6 +1170,16 @@ async function handler(req, res) {
           if (prod.managerAdminCharge !== undefined) {
             if (typeof prod.managerAdminCharge !== "number" || !Number.isFinite(prod.managerAdminCharge) || prod.managerAdminCharge < 0)
               return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has an invalid managerAdminCharge (must be a non-negative number).` });
+          }
+          // externalUrl: only allowed on keys-category products, must be http/https, max 2048 chars
+          if (prod.externalUrl !== undefined && prod.externalUrl !== null && prod.externalUrl !== "") {
+            const prodCategory = prod.category || (prod.managerAdminCharge !== undefined ? "keys" : "oc");
+            if (prodCategory !== "keys")
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl is only allowed on Keys/Fobs products.` });
+            if (typeof prod.externalUrl !== "string" || prod.externalUrl.length > 2048)
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl must be a string of max 2048 characters.` });
+            if (!/^https?:\/\/.+/i.test(prod.externalUrl))
+              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl must start with http:// or https://.` });
           }
         }
       }
