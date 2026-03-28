@@ -200,6 +200,7 @@ export default async function handler(req, res) {
     }
     if (newPass) {
       if (newPass.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters." });
+      if (newPass === admins[idx].password) return res.status(400).json({ error: "New password must differ from the current password." });
       admins[idx].password = newPass;
     }
     if (newUser?.trim()) admins[idx].username = newUser.trim();
