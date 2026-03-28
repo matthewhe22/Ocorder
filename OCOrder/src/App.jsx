@@ -784,7 +784,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const emailValid = EMAIL_RE.test(contact.email);
   const phoneValid  = !contact.phone || PHONE_RE.test(contact.phone.replace(/\s/g, ""));
   const gst = gstOf(total);
-  const exGstTotal = exGst(total);
 
   return (
     <div>
