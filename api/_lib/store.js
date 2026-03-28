@@ -279,7 +279,8 @@ export { kvGet, kvSet, kvDel };
 // ── Authority document helpers ────────────────────────────────────────────────
 export async function writeAuthority(orderId, doc) {
   // Expire authority documents after 90 days to avoid unbounded Redis growth.
-  await kvSet(`tocs:authority:${orderId}`, JSON.stringify(doc), 90 * 86400);
+  // Pass doc directly — kvSet already calls JSON.stringify internally.
+  await kvSet(`tocs:authority:${orderId}`, doc, 90 * 86400);
 }
 
 export async function readAuthority(orderId) {
