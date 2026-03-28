@@ -2676,8 +2676,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         <td>{oc.name}</td>
                         <td>{lotsCount}</td>
                         <td style={{ display: "flex", gap: "6px" }}>
-                          <button className="tbl-act-btn" onClick={() => openEditOC(ocId, oc)}><Ic n="edit" s={13}/></button>
-                          <button className="tbl-act-btn danger" onClick={() => deleteOC(ocId)}><Ic n="trash" s={13}/></button>
+                          <button className="tbl-act-btn" aria-label="Edit owner corporation" onClick={() => openEditOC(ocId, oc)}><Ic n="edit" s={13}/></button>
+                          <button className="tbl-act-btn danger" aria-label="Delete owner corporation" onClick={() => deleteOC(ocId)}><Ic n="trash" s={13}/></button>
                         </td>
                       </tr>
                     );
