@@ -2407,7 +2407,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
-  const markPaid      = (oid) => updateOrderStatus(oid, "Paid");
+  const markPaid      = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
