@@ -2061,7 +2061,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── Plan CRUD ───────────────────────────────────────────────────────────────
   const addPlan = async () => {
     if (!form.id || !form.name) return;
-    const plans = [...data.strataPlans, { id: form.id, name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
+    if (data.strataPlans.some(p => p.id === form.id.trim())) {
+      alert(`A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.`);
+      return;
+    }
+    const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
     await savePlans(plans);
     setModal(null); setForm({});
   };
