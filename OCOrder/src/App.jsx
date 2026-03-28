@@ -344,6 +344,8 @@ const CSS = `
   .bg-teal { background: #e0f5f2; color: #0d6e62; }
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
+  .bg-warn { background: var(--warn-light); color: var(--warn); }
+  .search-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
   .cat-card:hover { border-color: var(--sage); box-shadow: 0 4px 16px rgba(28,51,38,0.1); transform: translateY(-1px); }
