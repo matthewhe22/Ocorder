@@ -90,7 +90,8 @@ export default async function handler(req, res) {
 
     const { status, note } = req.body || {};
     if (!status) return res.status(400).json({ error: "status is required." });
-    const VALID_STATUSES = ["Pending","Processing","Awaiting Payment","Awaiting Stripe Payment","Paid","Issued","Cancelled","Invoice to be issued","Invoice sent, awaiting payment"];
+    // Must match production server.js status enum exactly
+    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid","Awaiting Stripe Payment"];
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status: "${status}".` });
 
     const data = await readData();
