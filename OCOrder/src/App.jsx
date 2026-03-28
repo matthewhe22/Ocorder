@@ -1682,7 +1682,13 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         </div>
       )}
 
-      {/* ── STEP 5: PAYMENT ── */}
+      {/* ── STEP 5: PAYMENT ── (keys orders submit at step 4 — redirect back if reached here) */}
+      {step === 5 && orderCategory === "keys" && (
+        <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
+          <p style={{ color: "var(--muted)", marginBottom: "1rem" }}>Keys / Fobs orders are submitted directly from the contact step.</p>
+          <button className="btn btn-out" onClick={() => setStep(4)}><Ic n="arrowL" s={14}/> Back to Contact Details</button>
+        </div>
+      )}
       {step === 5 && orderCategory !== "keys" && (
         <PaymentStep
           cart={cart} total={total} contact={contact}
