@@ -714,7 +714,13 @@ export default function App() {
         </header>
 
         <main className="main">
-          {currentPath === "/privacy-policy" ? (
+          {appLoading ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+              <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          ) : currentPath === "/privacy-policy" ? (
             <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
           ) : currentView === "portal" ? (
             <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
