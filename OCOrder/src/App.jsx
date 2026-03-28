@@ -3563,6 +3563,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
 // ─── SEND INVOICE MODAL ───────────────────────────────────────────────────────
 function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
+  const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
   const [invoiceFile, setInvoiceFile] = useState(null);
   const [sending, setSending] = useState(false);
