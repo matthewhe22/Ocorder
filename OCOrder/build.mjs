@@ -53,7 +53,8 @@ const ctx = await esbuild.context({
   sourcemap: isWatch,
   target: ["es2017", "chrome87", "firefox78", "safari13"],
   define: {
-    "process.env.NODE_ENV": isWatch ? '"development"' : '"production"'
+    "process.env.NODE_ENV": isWatch ? '"development"' : '"production"',
+    "__BUILD_DATE__": JSON.stringify(new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric", timeZone: "Australia/Melbourne" })),
   },
   logLevel: "info",
 });

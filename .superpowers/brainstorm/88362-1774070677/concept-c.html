@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept C — Auto-Cycling Story Cards</title>
+<style>
+  :root {
+    --forest: #1c3326;
+    --sage: #4a7255;
+    --cream: #f7f3ec;
+    --muted: #8a9488;
+    --border: #d8d2c8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage);
+    background: rgba(74,114,85,0.12);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+
+  h2 {
+    font-family: Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 400;
+    color: var(--forest);
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 40px;
+    text-align: center;
+  }
+
+  /* ── stage container ── */
+  .stage-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 620px;
+    height: 320px;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 6px 32px rgba(28,51,38,0.12);
+    overflow: hidden;
+  }
+
+  /* ── progress bar at top ── */
+  .progress-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--border);
+    z-index: 10;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--sage);
+    width: 0%;
+    animation: progressCycle 16s linear infinite;
+    transform-origin: left;
+  }
+  @keyframes progressCycle {
+    0%   { width: 0%; }
+    24%  { width: 25%; }
+    25%  { width: 25%; }
+    49%  { width: 50%; }
+    50%  { width: 50%; }
+    74%  { width: 75%; }
+    75%  { width: 75%; }
+    99%  { width: 100%; }
+    100% { width: 0%; }
+  }
+
+  /* ── individual stages ── */
+  .stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 40px 48px 60px;
+    opacity: 0;
+    animation: stageFade 16s infinite;
+  }
+  .stage:nth-child(2) { animation-delay: 4s; }
+  .stage:nth-child(3) { animation-delay: 8s; }
+  .stage:nth-child(4) { animation-delay: 12s; }
+
+  @keyframes stageFade {
+    0%    { opacity: 0; transform: scale(0.96) translateY(10px); }
+    3%    { opacity: 1; transform: scale(1) translateY(0); }
+    22%   { opacity: 1; transform: scale(1) translateY(0); }
+    25%   { opacity: 0; transform: scale(1.02) translateY(-6px); }
+    100%  { opacity: 0; }
+  }
+
+  /* stage background colours — subtle tint per step */
+  .stage-1 { background: linear-gradient(160deg, #f0f5f1 0%, white 60%); }
+  .stage-2 { background: linear-gradient(160deg, #f5f2ec 0%, white 60%); }
+  .stage-3 { background: linear-gradient(160deg, #f0f4f5 0%, white 60%); }
+  .stage-4 { background: linear-gradient(160deg, #f1f5f0 0%, white 60%); }
+
+  .stage-step {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--sage);
+  }
+
+  .big-icon {
+    font-size: 56px;
+    line-height: 1;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.12));
+  }
+
+  .stage-title {
+    font-family: Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 400;
+    color: var(--forest);
+    text-align: center;
+  }
+
+  .stage-desc {
+    font-size: 0.82rem;
+    color: #666;
+    text-align: center;
+    line-height: 1.65;
+    max-width: 360px;
+  }
+
+  /* ── dot indicators ── */
+  .dots {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 7px;
+    z-index: 10;
+  }
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s;
+    animation: dotOn 16s infinite;
+  }
+  .dot:nth-child(1) { animation-delay: 0s; }
+  .dot:nth-child(2) { animation-delay: 4s; }
+  .dot:nth-child(3) { animation-delay: 8s; }
+  .dot:nth-child(4) { animation-delay: 12s; }
+  @keyframes dotOn {
+    0%, 2%   { background: var(--forest); transform: scale(1.4); }
+    25%, 100% { background: var(--border); transform: scale(1); }
+  }
+
+  /* ── step counter label ── */
+  .step-counter {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    z-index: 10;
+    animation: counterCycle 16s infinite;
+  }
+  .step-counter::before { content: attr(data-step); }
+
+  .concept-tag {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* manual nav arrows */
+  .arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: white;
+    border: 1.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 20;
+    font-size: 14px;
+    color: var(--forest);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    user-select: none;
+  }
+  .arrow-left { left: -18px; }
+  .arrow-right { right: -18px; }
+</style>
+</head>
+<body>
+
+<div class="badge">Concept C</div>
+<h2>Ordering a Certificate</h2>
+<p class="sub">Four steps — takes less than 5 minutes</p>
+
+<div style="position:relative; max-width:620px; width:100%;">
+  <div class="stage-wrap">
+
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+
+    <!-- Stage 1 -->
+    <div class="stage stage-1">
+      <div class="stage-step">Step 1 of 4</div>
+      <div class="big-icon">🏢</div>
+      <div class="stage-title">Search Your Building</div>
+      <div class="stage-desc">Enter your building address or strata plan number to find your Owner Corporation and available documents.</div>
+    </div>
+
+    <!-- Stage 2 -->
+    <div class="stage stage-2">
+      <div class="stage-step">Step 2 of 4</div>
+      <div class="big-icon">📋</div>
+      <div class="stage-title">Choose Your Products</div>
+      <div class="stage-desc">Select OC certificates by lot, insurance certificates, registers, meeting minutes or keys and fobs — fully itemised pricing.</div>
+    </div>
+
+    <!-- Stage 3 -->
+    <div class="stage stage-3">
+      <div class="stage-step">Step 3 of 4</div>
+      <div class="big-icon">💳</div>
+      <div class="stage-title">Pay Securely</div>
+      <div class="stage-desc">Pay by bank transfer, PayID or instant Stripe checkout. Your order is confirmed the moment payment is received.</div>
+    </div>
+
+    <!-- Stage 4 -->
+    <div class="stage stage-4">
+      <div class="stage-step">Step 4 of 4</div>
+      <div class="big-icon">🎉</div>
+      <div class="stage-title">Certificate Issued</div>
+      <div class="stage-desc">Your documents are emailed within 2–3 business days. Keys and fobs are dispatched or ready for pickup as arranged.</div>
+    </div>
+
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+
+  </div>
+
+  <div class="arrow arrow-left">‹</div>
+  <div class="arrow arrow-right">›</div>
+</div>
+
+<div class="concept-tag">Concept C · Auto-Cycling Story Cards</div>
+
+</body>
+</html>

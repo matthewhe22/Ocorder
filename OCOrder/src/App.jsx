@@ -64,19 +64,6 @@ const getApplicantType = (ci) => ci?.applicantType || (ci?.companyName ? "agent"
 
 // Fixed shipping options for Keys/Fob orders.
 // Costs for "keys-std" and "keys-express" come from plan.keysShipping.
-const KEYS_SHIPPING_OPTIONS = [
-  { id: "keys-pickup",  name: "Pick up from BM",      requiresAddress: false },
-  { id: "keys-std",     name: "Standard Delivery",     requiresAddress: true  },
-  { id: "keys-express", name: "Express Delivery",      requiresAddress: true  },
-  { id: "keys-none",    name: "No Shipment Required",  requiresAddress: false },
-];
-
-const getKeysShippingCost = (optId, keysShipping) => {
-  if (optId === "keys-std")     return keysShipping?.deliveryCost ?? 0;
-  if (optId === "keys-express") return keysShipping?.expressCost  ?? 0;
-  return 0; // pickup and none are always $0
-};
-
 // Compute the effective shipping cost for an option, considering per-product overrides
 const calcShippingCost = (opt, cartItems, products) => {
   const prodMap = new Map((products || []).map(p => [p.id, p]));
@@ -322,6 +309,7 @@ const CSS = `
   .alert-info { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
   .alert-ok { background: var(--ok-light); color: var(--ok); border-color: var(--ok); }
   .alert-warn { background: var(--warn-light); color: var(--warn); border-color: var(--warn); }
+  .alert-err { background: var(--red-light); color: var(--red); border-color: var(--red); }
   @keyframes warnPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,90,0,0); } 40% { box-shadow: 0 0 0 5px rgba(180,90,0,0.22); } }
   .pulse-warn { animation: warnPulse 0.7s ease; }
 
@@ -343,6 +331,8 @@ const CSS = `
   .bg-teal { background: #e0f5f2; color: #0d6e62; }
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
+  .bg-warn { background: var(--warn-light); color: var(--warn); }
+  .search-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
   .cat-card:hover { border-color: var(--sage); box-shadow: 0 4px 16px rgba(28,51,38,0.1); transform: translateY(-1px); }
@@ -483,6 +473,7 @@ export default function App() {
     try { return sessionStorage.getItem("admin_token") || null; } catch { return null; }
   });
   const [pubConfig, setPubConfig] = useState(null);
+  const [appLoading, setAppLoading] = useState(true);
   const [stripeConfirming, setStripeConfirming] = useState(false);
   const [stripeConfirmErr, setStripeConfirmErr] = useState("");
   const [stripeOrderId, setStripeOrderId] = useState(null);
@@ -495,8 +486,10 @@ export default function App() {
     // orders only to authenticated callers; unauthenticated callers get strataPlans only.
     const savedTok = (() => { try { return sessionStorage.getItem("admin_token"); } catch { return null; } })();
     const dataHeaders = savedTok ? { "Authorization": "Bearer " + savedTok } : {};
-    fetch("/api/data", { headers: dataHeaders }).then(r => r.json()).then(d => setData(d)).catch(() => {});
-    fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {});
+    Promise.all([
+      fetch("/api/data", { headers: dataHeaders }).then(r => r.json()).then(d => setData(d)).catch(() => {}),
+      fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {}),
+    ]).finally(() => setAppLoading(false));
     // Detect Stripe payment redirect: /complete?orderId=xxx&stripeOk=1
     const params = new URLSearchParams(window.location.search);
     if (params.get("stripeOk") === "1" && params.get("orderId")) {
@@ -524,9 +517,12 @@ export default function App() {
   // Call stripe-confirm endpoint after Stripe redirects back with ?stripeOk=1
   useEffect(() => {
     if (!stripeConfirming || !stripeOrderId) return;
-    fetch(`/api/orders/${stripeOrderId}/stripe-confirm`, { method: "POST" })
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000);
+    fetch(`/api/orders/${stripeOrderId}/stripe-confirm`, { method: "POST", signal: ctrl.signal })
       .then(r => r.json())
       .then(d => {
+        clearTimeout(timeout);
         if (d.success && d.order) {
           setOrder(d.order);
           setStripeConfirming(false);
@@ -537,20 +533,42 @@ export default function App() {
           setStripeConfirming(false);
         }
       })
-      .catch(() => {
-        setStripeConfirmErr("Network error. Please contact support at info@tocs.co.");
+      .catch((err) => {
+        clearTimeout(timeout);
+        const msg = err?.name === "AbortError"
+          ? "Payment confirmation timed out. Please contact support at info@tocs.co."
+          : "Network error. Please contact support at info@tocs.co.";
+        setStripeConfirmErr(msg);
         setStripeConfirming(false);
       });
   }, [stripeConfirming, stripeOrderId]);
+
+  // Browser back button: push a history entry on step advance so back returns to previous step
+  useEffect(() => {
+    if (step > 1 && step < 6) window.history.pushState({ step }, "");
+  }, [step]);
+  useEffect(() => {
+    const onPop = (e) => {
+      const prev = e.state?.step;
+      if (prev && prev > 1 && prev < 6) setStep(prev - 1);
+      else if (step > 1 && step < 6) setStep(s => Math.max(1, s - 1));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [step]);
 
   const plan = data.strataPlans.find(p => p.id === selPlan);
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
-  // When plan changes, initialise selectedOCs to all OCs in the plan
+  // When plan changes, initialise selectedOCs — if plan has lots, OCs are driven by lot selection; otherwise show all
   useEffect(() => {
-    if (plan) setSelectedOCs(Object.keys(plan.ownerCorps || {}));
-    else setSelectedOCs([]);
+    if (plan) {
+      if (plan.lots && plan.lots.length > 0) setSelectedOCs([]);
+      else setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    } else {
+      setSelectedOCs([]);
+    }
   }, [selPlan]);
 
   // When lot number changes on an OC order, auto-assign that lot's OCs
@@ -666,8 +684,8 @@ export default function App() {
     if (s < step) setStep(s);
   };
 
-  // 6 steps: 1=Plan, 2=Products, 3=Review, 4=Contact, 5=Payment, 6=Complete
-  const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment", "Complete"];
+  // 5 wizard steps; step 6 = confirmation page, outside the wizard track
+  const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment"];
 
   const handleDemoReset = async () => {
     if (!window.confirm("Reset all demo data to the initial seed state? This will log you out and clear all orders.")) return;
@@ -717,7 +735,13 @@ export default function App() {
         </header>
 
         <main className="main">
-          {currentPath === "/privacy-policy" ? (
+          {appLoading ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+              <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          ) : currentPath === "/privacy-policy" ? (
             <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
           ) : currentView === "portal" ? (
             <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
@@ -737,6 +761,9 @@ export default function App() {
               adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
           )}
         </main>
+        <footer style={{ textAlign: "center", padding: "18px 16px 14px", fontSize: "0.7rem", color: "var(--muted)", borderTop: "1px solid var(--border)", letterSpacing: "0.02em" }}>
+          Last updated {__BUILD_DATE__}
+        </footer>
       </div>
     </>
   );
@@ -750,6 +777,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
+  const [lotInputText, setLotInputText] = useState("");
+  const [lotDropdownOpen, setLotDropdownOpen] = useState(false);
+  // Sync text input when lotNumber is cleared externally (plan change, reset, cancel)
+  useEffect(() => { if (!lotNumber) setLotInputText(""); }, [lotNumber]);
   const [keysPlacing, setKeysPlacing] = useState(false);
   const [keysPlaceErr, setKeysPlaceErr] = useState("");
   const [step2Attempted, setStep2Attempted] = useState(false);
@@ -987,7 +1018,14 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div className="search-label" style={{ marginBottom: "12px" }}>What are you ordering?</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                 <button className={`cat-card ${orderCategory === "oc" ? "cat-selected" : ""}`}
-                  onClick={() => { setOrderCategory("oc"); setCart([]); setSelectedShipping(null); }}>
+                  onClick={() => {
+                    setOrderCategory("oc"); setCart([]); setSelectedShipping(null);
+                    // Re-populate OCs from the currently selected lot (if any)
+                    if (lotNumber && plan?.lots?.length) {
+                      const lotObj = plan.lots.find(l => l.number === lotNumber);
+                      if (lotObj) setSelectedOCs(lotObj.ownerCorps || []);
+                    }
+                  }}>
                   {orderCategory === "oc" && <span style={{ position:"absolute", top:10, right:10, color:"var(--forest)" }}><Ic n="check" s={16}/></span>}
                   <div className="cat-card-icon">📄</div>
                   <div className="cat-card-title">OC Certificates</div>
@@ -1019,33 +1057,127 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <p className="pg-sub">{plan.address} &nbsp;·&nbsp; {plan.id}</p>
 
           <div className="panel" style={{ marginBottom: "1px" }}>
-            <div className="form-row" style={{ marginBottom: orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 ? "1rem" : 0 }}>
+            <div className="form-row" style={{ marginBottom: 0 }}>
               <label className="f-label">Lot Number</label>
-              <input
-                className="f-input"
-                placeholder="e.g. Lot 5"
-                value={lotNumber}
-                onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
-              />
-              {lotNumber.trim() && (plan.lots || []).length > 0 && !(plan.lots || []).find(l => l.number.toLowerCase() === lotNumber.trim().toLowerCase()) && (
-                <div style={{ fontSize: "0.75rem", color: "#b45309", marginTop: "5px" }}>
-                  Lot number not found in this building's records. Please check and try again.
-                </div>
+<<<<<<< HEAD
+              {plan.lots && plan.lots.length > 0 ? (() => {
+                const selectLot = (lotNum) => {
+                  setLotNumber(lotNum);
+                  setLotInputText(lotNum);
+                  setLotDropdownOpen(false);
+                  setCart([]);
+                  setLotAuthFile(null);
+                  const lotObj = plan.lots.find(l => l.number === lotNum);
+                  if (lotObj && orderCategory === "oc") setSelectedOCs(lotObj.ownerCorps || []);
+                  else if (!lotNum) setSelectedOCs([]);
+                };
+                const filtered = lotInputText.trim()
+                  ? plan.lots.filter(l => l.number.toLowerCase().includes(lotInputText.trim().toLowerCase()))
+                  : plan.lots;
+                return (
+                  <div style={{ position: "relative" }}>
+                    <input
+                      className="f-input"
+                      placeholder="Type to search lots…"
+                      value={lotInputText}
+                      autoComplete="off"
+                      onFocus={() => setLotDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setLotDropdownOpen(false), 150)}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setLotInputText(val);
+                        setLotDropdownOpen(true);
+                        // If text no longer matches the committed lot, clear it
+                        if (lotNumber && val !== lotNumber) {
+                          setLotNumber("");
+                          setSelectedOCs([]);
+                          setCart([]);
+                          setLotAuthFile(null);
+                        }
+                      }}
+                    />
+                    {lotDropdownOpen && filtered.length > 0 && (
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid var(--border)", borderRadius: "4px", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 50, maxHeight: "220px", overflowY: "auto", marginTop: "2px" }}>
+                        {filtered.map(l => (
+                          <div
+                            key={l.id}
+                            onMouseDown={() => selectLot(l.number)}
+                            style={{ padding: "9px 14px", cursor: "pointer", fontSize: "0.86rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: lotNumber === l.number ? "var(--sage-tint)" : "white" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--sage-tint)"}
+                            onMouseLeave={e => e.currentTarget.style.background = lotNumber === l.number ? "var(--sage-tint)" : "white"}
+                          >
+                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                              {[l.level, l.type].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {lotInputText && !lotNumber && filtered.length === 0 && (
+                      <div style={{ fontSize: "0.74rem", color: "var(--red)", marginTop: "4px" }}>
+                        No matching lot found — please check the lot number.
+                      </div>
+                    )}
+                    {lotInputText && !lotNumber && filtered.length > 0 && !lotDropdownOpen && (
+                      <div style={{ fontSize: "0.74rem", color: "var(--muted)", marginTop: "4px" }}>
+                        Please select a lot from the list.
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
+                <input
+                  className="f-input"
+                  placeholder="e.g. Lot 5"
+                  value={lotNumber}
+                  onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
+                />
+>>>>>>> origin/master
               )}
             </div>
 
-            {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
-              <div>
-                {(() => {
-                  const trimmed = lotNumber.trim();
-                  const lot = trimmed ? plan.lots.find(l => l.number.toLowerCase() === trimmed.toLowerCase()) : null;
+            {orderCategory === "oc" && lotNumber && selectedOCs.length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
+                  Owner Corporations for this lot
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {selectedOCs.map((ocId, idx) => {
+                    const oc = plan.ownerCorps?.[ocId];
+                    const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                    return (
+                      <div key={ocId} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1.5px solid var(--sage)", borderRadius: "6px", background: "var(--sage-tint)" }}>
+                        <Ic n="check" s={14} style={{ color: "var(--sage)", flexShrink: 0 }}/>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.86rem", color: "var(--forest)" }}>{oc?.name || ocId}</div>
+                          {ocProd && (
+                            <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>
+                              {idx === 0 ? `1st OC rate: ${fmt(ocProd.price)}` : `Additional OC rate: ${fmt(ocProd.secondaryPrice ?? ocProd.price)}`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {selectedOCs.length > 1 && (() => {
+                  const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
+                  if (!ocProd || !ocProd.secondaryPrice) return null;
                   return (
-                    <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
-                      Owner Corporations — select all that apply
-                      {lot && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "var(--forest)", background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "4px", padding: "1px 7px", fontSize: "0.68rem" }}>Auto-assigned from {lot.number}</span>}
+                    <div style={{ fontSize: "0.76rem", color: "var(--muted)", marginTop: "8px" }}>
+                      <Ic n="info" s={12}/> {selectedOCs.length} OCs — 1st at {fmt(ocProd.price)}, additional at {fmt(ocProd.secondaryPrice)} each.
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {orderCategory === "oc" && !plan.lots?.length && Object.keys(plan.ownerCorps || {}).length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
+                  Owner Corporations — select all that apply
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   {Object.entries(plan.ownerCorps).map(([ocId, oc], idx) => {
                     const checked = selectedOCs.includes(ocId);
@@ -1429,7 +1561,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 </div>
               )}
               <div className="cart-gst-row">
-                <span>GST (10%) included in total</span>
+                <span>Subtotal (ex. GST)</span>
+                <span>{fmt(exGst(total))}</span>
+              </div>
+              <div className="cart-gst-row">
+                <span>GST (10%)</span>
                 <span>{fmt(gstOf(total))}</span>
               </div>
               <div className="cart-grand-row">
@@ -1527,7 +1663,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           </div>
 
           <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
-            <button className="btn btn-out" onClick={() => setStep(3)}><Ic n="arrowL" s={14}/> Back</button>
+            <button className="btn btn-out" onClick={() => { setNameTouched(false); setEmailTouched(false); setPhoneTouched(false); setStep(3); }}><Ic n="arrowL" s={14}/> Back</button>
             {orderCategory === "keys" ? (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}
                 onClick={() => {
@@ -1569,7 +1705,13 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         </div>
       )}
 
-      {/* ── STEP 5: PAYMENT ── */}
+      {/* ── STEP 5: PAYMENT ── (keys orders submit at step 4 — redirect back if reached here) */}
+      {step === 5 && orderCategory === "keys" && (
+        <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
+          <p style={{ color: "var(--muted)", marginBottom: "1rem" }}>Keys / Fobs orders are submitted directly from the contact step.</p>
+          <button className="btn btn-out" onClick={() => setStep(4)}><Ic n="arrowL" s={14}/> Back to Contact Details</button>
+        </div>
+      )}
       {step === 5 && orderCategory !== "keys" && (
         <PaymentStep
           cart={cart} total={total} contact={contact}
@@ -1773,13 +1915,21 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
         ))}
         {selectedShipping && selectedShipping.cost > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: "8px" }}>
-            <span style={{ color: "var(--muted)" }}>{selectedShipping.label}</span>
+            <span style={{ color: "var(--muted)" }}>{selectedShipping.name}</span>
             <span style={{ color: "var(--forest)", fontWeight: 600 }}>{fmt(selectedShipping.cost)}</span>
           </div>
         )}
-        <div style={{ borderTop: "1px solid var(--border2)", marginTop: "10px", paddingTop: "10px", display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "0.88rem" }}>
-          <span style={{ color: "var(--forest)" }}>Total (incl. GST)</span>
-          <span style={{ color: "var(--forest)" }}>{fmt(total)}</span>
+        <div style={{ borderTop: "1px solid var(--border2)", marginTop: "10px", paddingTop: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "4px" }}>
+            <span>Subtotal (ex. GST)</span><span>{fmt(exGst(total))}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "8px" }}>
+            <span>GST (10%)</span><span>{fmt(gstOf(total))}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "0.88rem" }}>
+            <span style={{ color: "var(--forest)" }}>Total (incl. GST)</span>
+            <span style={{ color: "var(--forest)" }}>{fmt(total)}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1982,7 +2132,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
         Privacy Policy
       </h1>
       <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: "2.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1.5rem" }}>
-        Top Owners Corporation Solution · Last updated: March 2026
+        Top Owners Corporation Solution · Last updated: {__BUILD_DATE__}
       </p>
 
       {sections.map(({ heading, body }) => (
@@ -2170,28 +2320,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setModal("manageShipping");
   };
 
-  const openKeysShipping = (p) => {
-    setEditTarget({ type: "plan", id: p.id });
-    setForm({
-      keysDeliveryCost: p.keysShipping?.deliveryCost ?? 0,
-      keysExpressCost:  p.keysShipping?.expressCost  ?? 0,
-    });
-    setModal("keysShipping");
-  };
-
-  const saveKeysShipping = async () => {
-    const deliveryCost = Math.max(0, parseFloat(form.keysDeliveryCost) || 0);
-    const expressCost  = Math.max(0, parseFloat(form.keysExpressCost)  || 0);
-    const plans = data.strataPlans.map(p =>
-      p.id !== editTarget.id ? p
-        : { ...p, keysShipping: { deliveryCost, expressCost } }
-    );
-    await savePlans(plans);
-    setModal(null);
-    setEditTarget(null);
-    setForm({});
-  };
-
   const addShippingOption = async () => {
     if (!form.shippingName || form.shippingCost === "" || form.shippingCost === undefined) return;
     const newOpt = { id: "ship-" + Date.now(), name: form.shippingName, cost: Math.max(0, parseFloat(form.shippingCost)), requiresAddress: form.shippingRequiresAddress !== false };
@@ -2270,9 +2398,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   // ── Order actions ───────────────────────────────────────────────────────────
+  const adminToastTimer = useRef(null);
   const showAdminToast = (type, msg) => {
+    if (adminToastTimer.current) clearTimeout(adminToastTimer.current);
     setAdminToast({ type, msg });
-    setTimeout(() => setAdminToast(null), 4000);
+    adminToastTimer.current = setTimeout(() => setAdminToast(null), 4000);
   };
 
   const updateOrderStatus = async (oid, status) => {
@@ -2298,7 +2428,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
+<<<<<<< HEAD
   const markPaid      = (oid) => updateOrderStatus(oid, "Paid");
+=======
+  const markPaid      = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
+>>>>>>> origin/master
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
@@ -2461,8 +2595,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${p.perOC ? "bg-b" : "bg-gray"}`}>{p.perOC ? "Yes" : "No"}</span></td>
                       <td>{(p.category || "oc") === "keys" && p.managerAdminCharge !== undefined ? <span style={{fontWeight:600}}>{fmt(p.managerAdminCharge)}</span> : <span style={{color:"var(--muted)"}}>—</span>}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
-                        <button className="tbl-act-btn" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
-                        <button className="tbl-act-btn danger" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
+                        <button className="tbl-act-btn" aria-label="Edit product" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
+                        <button className="tbl-act-btn danger" aria-label="Delete product" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
                       </td>
                     </tr>
                   ))}
@@ -2507,8 +2641,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${l.type==="Residential"?"bg-b":l.type==="Commercial"?"bg-gold":"bg-gray"}`}>{l.type}</span></td>
                       <td style={{ fontSize: "0.78rem" }}>{l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
-                        <button className="tbl-act-btn" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
-                        <button className="tbl-act-btn danger" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
+                        <button className="tbl-act-btn" aria-label="Edit lot" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
+                        <button className="tbl-act-btn danger" aria-label="Delete lot" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
                       </td>
                     </tr>
                   ))}
@@ -2548,8 +2682,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         <td>{oc.name}</td>
                         <td>{lotsCount}</td>
                         <td style={{ display: "flex", gap: "6px" }}>
-                          <button className="tbl-act-btn" onClick={() => openEditOC(ocId, oc)}><Ic n="edit" s={13}/></button>
-                          <button className="tbl-act-btn danger" onClick={() => deleteOC(ocId)}><Ic n="trash" s={13}/></button>
+                          <button className="tbl-act-btn" aria-label="Edit owner corporation" onClick={() => openEditOC(ocId, oc)}><Ic n="edit" s={13}/></button>
+                          <button className="tbl-act-btn danger" aria-label="Delete owner corporation" onClick={() => deleteOC(ocId)}><Ic n="trash" s={13}/></button>
                         </td>
                       </tr>
                     );
@@ -2619,10 +2753,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>Pending Payment</option>
               <option>Processing</option>
               <option>Issued</option>
+              <option>Paid</option>
               <option>Cancelled</option>
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
+              <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
               <button className="btn btn-out" style={{ padding: "6px 10px", fontSize: "0.78rem" }}
@@ -2661,13 +2797,15 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><strong>{fmt(o.total)}</strong></td>
                       <td><span className={`badge ${
                         o.status==="Issued"?"bg-b":
+                        o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
-                        o.status==="Processing"?"bg-g":
+                        o.status==="Processing"?"bg-teal":
                         o.status==="Pending Payment"?"bg-gold":
                         o.status==="On Hold"?"bg-warn":
                         o.status==="Awaiting Documents"?"bg-purple":
                         o.status==="Invoice to be issued"?"bg-teal":
-                        "bg-slate"
+                        o.status==="Awaiting Stripe Payment"?"bg-slate":
+                        "bg-gray"
                       }`}>{o.status}</span></td>
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
@@ -2676,7 +2814,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {o.status === "Pending Payment" && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
-                        {o.status !== "Issued" && o.status !== "Cancelled" && o.orderCategory !== "keys" && (
+                        {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
                           <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && (
@@ -3195,7 +3333,7 @@ function AdminLogin({ onAuth, pubConfig }) {
           }
         </button>
         <div style={{ textAlign: "center", marginTop: "1.25rem" }}>
-          <a href="mailto:info@tocs.co" style={{ fontSize: "0.75rem", color: "var(--muted)", textDecoration: "none" }}>Forgot password? Contact admin</a>
+          <a href="mailto:info@tocs.co?subject=Admin%20Password%20Reset%20Request&body=Please%20reset%20my%20admin%20password." style={{ fontSize: "0.75rem", color: "var(--muted)", textDecoration: "none" }}>Forgot password? Contact admin</a>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -3205,8 +3343,38 @@ function AdminLogin({ onAuth, pubConfig }) {
 
 
 
+// ─── FOCUS TRAP HOOK ──────────────────────────────────────────────────────────
+// Auto-focuses the first interactive element in a modal and traps Tab within it.
+// Returns a ref to attach to the modal container div.
+function useFocusTrap(onEscape) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const FOCUSABLE = 'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const first = el.querySelector(FOCUSABLE);
+    if (first) first.focus();
+    const trap = (e) => {
+      if (e.key === "Escape") { onEscape?.(); return; }
+      if (e.key !== "Tab") return;
+      const els = [...el.querySelectorAll(FOCUSABLE)];
+      if (!els.length) return;
+      const idx = els.indexOf(document.activeElement);
+      if (e.shiftKey) {
+        if (idx <= 0) { e.preventDefault(); els[els.length - 1].focus(); }
+      } else {
+        if (idx === els.length - 1) { e.preventDefault(); els[0].focus(); }
+      }
+    };
+    el.addEventListener("keydown", trap);
+    return () => el.removeEventListener("keydown", trap);
+  }, [onEscape]);
+  return ref;
+}
+
 // ─── CANCEL ORDER MODAL ───────────────────────────────────────────────────────
 function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
+  const trapRef = useFocusTrap(onClose);
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3237,10 +3405,10 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: "480px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Cancel Order" style={{ maxWidth: "480px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0, color: "var(--red)" }}>Cancel Order</h2>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
 
         <div className="alert alert-warn" style={{ marginBottom: "1.2rem" }}>
@@ -3294,6 +3462,7 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
 
 // ─── SEND CERTIFICATE MODAL ───────────────────────────────────────────────────
 function SendCertificateModal({ order, adminToken, onClose, onSent }) {
+  const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
   const [certFile, setCertFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -3350,10 +3519,10 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Send Certificate" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0 }}>Send Certificate</h2>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
         <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "1rem" }}>
           To: <strong style={{ color: "var(--ink)" }}>{contact.name}</strong> &lt;{contact.email}&gt; · Order {order.id}
@@ -3400,6 +3569,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
 // ─── SEND INVOICE MODAL ───────────────────────────────────────────────────────
 function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
+  const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
   const [invoiceFile, setInvoiceFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -3451,10 +3621,10 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Send Invoice" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0 }}>Send Invoice</h2>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
         <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "1rem" }}>
           To: <strong style={{ color: "var(--ink)" }}>{contact.name}</strong> &lt;{contact.email}&gt; · Order {order.id}
