@@ -2732,10 +2732,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>Pending Payment</option>
               <option>Processing</option>
               <option>Issued</option>
+              <option>Paid</option>
               <option>Cancelled</option>
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
+              <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
               <button className="btn btn-out" style={{ padding: "6px 10px", fontSize: "0.78rem" }}
