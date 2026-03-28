@@ -138,7 +138,7 @@ const DEMO_DEFAULT_CONFIG = {
 };
 
 // ── Valid order statuses ───────────────────────────────────────────────────────
-const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued"];
+const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Awaiting Stripe Payment","Paid"];
 
 // ── In-memory sessions  Map<token, { user, exp }> ─────────────────────────────
 const SESSIONS = new Map();
