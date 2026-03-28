@@ -1529,7 +1529,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
             <button className="btn btn-out" onClick={() => setStep(3)}><Ic n="arrowL" s={14}/> Back</button>
             {orderCategory === "keys" ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}
+                onClick={() => {
+                  if (!contact.name || !contact.email || !emailValid || !contact.phone || !phoneValid) {
+                    setNameTouched(true); setPhoneTouched(true); setEmailTouched(true);
+                  }
+                }}>
                 {keysPlaceErr && <div className="alert alert-warn" style={{ margin: 0 }}>{keysPlaceErr}</div>}
                 <button
                   className="btn btn-blk btn-lg"
