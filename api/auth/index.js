@@ -179,6 +179,7 @@ export default async function handler(req, res) {
     cfg.pass = cfg.admins[0].password;
 
     await writeConfig(cfg);
+    await invalidateAllSessions();
     return res.status(200).json({ ok: true });
   }
 
