@@ -2752,6 +2752,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
+              <option>Paid</option>
               <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
@@ -2805,7 +2806,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {o.status === "Invoice to be issued" && (
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
-                        {o.status === "Pending Payment" && (
+                        {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
                         {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
