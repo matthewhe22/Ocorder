@@ -1,7 +1,7 @@
 {
   "buildCommand": "cd OCOrder && npm install && node build.mjs",
   "outputDirectory": "OCOrder/dist",
-  "installCommand": "cd OCOrder && npm install",
+  "installCommand": "npm install && cd OCOrder && npm install",
   "framework": null,
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
