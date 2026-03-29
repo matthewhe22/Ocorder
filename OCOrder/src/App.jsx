@@ -322,6 +322,7 @@ const CSS = `
   .alert-info { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
   .alert-ok { background: var(--ok-light); color: var(--ok); border-color: var(--ok); }
   .alert-warn { background: var(--warn-light); color: var(--warn); border-color: var(--warn); }
+  .alert-err { background: var(--red-light); color: var(--red); border-color: var(--red); }
   @keyframes warnPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,90,0,0); } 40% { box-shadow: 0 0 0 5px rgba(180,90,0,0.22); } }
   .pulse-warn { animation: warnPulse 0.7s ease; }
 
