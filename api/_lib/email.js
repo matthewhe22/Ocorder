@@ -37,8 +37,8 @@ function formatPayment(method) {
 function itemRowsHtml(items) {
   return items.map(item =>
     `<tr>
-      <td style="${CELL}">${item.productName || "—"}</td>
-      <td style="${CELL}">${item.ocName || "—"}</td>
+      <td style="${CELL}">${esc(item.productName) || "—"}</td>
+      <td style="${CELL}">${esc(item.ocName) || "—"}</td>
       <td style="${CELL}text-align:right;">$${(item.price||0).toFixed(2)}</td>
     </tr>`).join("");
 }
@@ -47,10 +47,10 @@ function deliveryAddressHtml(sa) {
   if (!sa || !sa.street) return "";
   return `<h3 style="${HEADING}">Delivery Address</h3>
     <table style="${TBL}">
-      <tr><td style="${LABEL_W}">Street</td><td style="${VAL}">${sa.street}</td></tr>
-      <tr><td style="${LABEL}">Suburb</td><td style="${VAL}">${sa.suburb}</td></tr>
-      <tr><td style="${LABEL}">State</td><td style="${VAL}">${sa.state}</td></tr>
-      <tr><td style="${LABEL}">Postcode</td><td style="${VAL}">${sa.postcode}</td></tr>
+      <tr><td style="${LABEL_W}">Street</td><td style="${VAL}">${esc(sa.street)}</td></tr>
+      <tr><td style="${LABEL}">Suburb</td><td style="${VAL}">${esc(sa.suburb)}</td></tr>
+      <tr><td style="${LABEL}">State</td><td style="${VAL}">${esc(sa.state)}</td></tr>
+      <tr><td style="${LABEL}">Postcode</td><td style="${VAL}">${esc(sa.postcode)}</td></tr>
     </table>`;
 }
 
