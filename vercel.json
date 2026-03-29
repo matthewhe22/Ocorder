@@ -3,9 +3,6 @@
   "outputDirectory": "OCOrder/dist",
   "installCommand": "cd OCOrder && npm install",
   "framework": null,
-  "env": {
-    "DEMO_MODE": "true"
-  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
