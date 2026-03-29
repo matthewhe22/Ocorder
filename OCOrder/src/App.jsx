@@ -343,6 +343,7 @@ const CSS = `
   .bg-teal { background: #e0f5f2; color: #0d6e62; }
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
+  .bg-warn { background: var(--warn-light); color: var(--warn); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
   .cat-card:hover { border-color: var(--sage); box-shadow: 0 4px 16px rgba(28,51,38,0.1); transform: translateY(-1px); }
@@ -2623,6 +2624,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
+              <option>Paid</option>
+              <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
               <button className="btn btn-out" style={{ padding: "6px 10px", fontSize: "0.78rem" }}
@@ -2667,16 +2670,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="On Hold"?"bg-warn":
                         o.status==="Awaiting Documents"?"bg-purple":
                         o.status==="Invoice to be issued"?"bg-teal":
+                        o.status==="Paid"?"bg-g":
+                        o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-slate"
                       }`}>{o.status}</span></td>
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
-                        {o.status === "Pending Payment" && (
+                        {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
-                        {o.status !== "Issued" && o.status !== "Cancelled" && o.orderCategory !== "keys" && (
+                        {o.status !== "Issued" && o.status !== "Cancelled" && o.status !== "Awaiting Stripe Payment" && o.orderCategory !== "keys" && (
                           <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && (

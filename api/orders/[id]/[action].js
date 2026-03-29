@@ -252,7 +252,7 @@ export default async function handler(req, res) {
         } catch (e) { console.error("Invoice SharePoint upload failed:", e.message); }
       }
 
-      data.orders[idx].status = "Invoice sent, awaiting payment";
+      data.orders[idx].status = "Pending Payment";
       data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${order.contactInfo.email}` }];
       await writeData(data);
       return res.status(200).json({ ok: true });
