@@ -2,6 +2,15 @@
 // Shared email helpers — imported by orders/index.js and orders/[id]/[action].js
 import nodemailer from "nodemailer";
 
+function esc(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 // Shared inline-style fragments for HTML emails (email clients require inline styles)
 const CELL      = "padding:7px 12px;border-bottom:1px solid #e8edf0;";
 const LABEL     = "padding:6px 0;color:#666;";
