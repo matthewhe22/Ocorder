@@ -88,6 +88,7 @@ export default async function handler(req, res) {
       order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
     }
 
+    order.date = new Date().toISOString();
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
 
     // ── STRIPE PRE-VALIDATION (before Redis save — prevents ghost orders) ────────
