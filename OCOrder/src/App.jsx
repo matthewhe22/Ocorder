@@ -1608,6 +1608,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         <div style={{ textAlign:"center", padding:"2rem 0 0.5rem", marginTop:"3rem", borderTop:"1px solid var(--border)", fontSize:"0.75rem", color:"var(--muted)" }}>
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
           {" · "}Top Owners Corporation Solution
+          {" · "}Last updated {typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : ""}
         </div>
       )}
 
