@@ -11,6 +11,16 @@ import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js
 import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 
+// ── HTML escape helper ────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 // ── Email builder ─────────────────────────────────────────────────────────────
 function buildCertEmailHtml(order, message, cfg) {
   const tpl = cfg.emailTemplate || {};
@@ -20,12 +30,11 @@ function buildCertEmailHtml(order, message, cfg) {
   const keysDefault = "Dear {name},\n\nPlease find attached your Keys/Fobs/Remotes order documents for {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team";
   const ocDefault = "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team";
   const raw = (tpl.certificateGreeting || (isKeys ? keysDefault : ocDefault))
-    .replace(/{name}/g, contact.name || "Applicant")
-    .replace(/{lotNumber}/g, lot?.lotNumber || "")
-    .replace(/{address}/g, lot?.planName || "");
-  const bodyText = message || raw;
-  const htmlBody = bodyText.replace(/\n/g, "<br>");
-  const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+    .replace(/{name}/g, esc(contact.name || "Applicant"))
+    .replace(/{lotNumber}/g, esc(lot?.lotNumber || ""))
+    .replace(/{address}/g, esc(lot?.planName || ""));
+  const bodyText = message ? esc(message).replace(/\n/g, "<br>") : raw.replace(/\n/g, "<br>");
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -33,9 +42,9 @@ function buildCertEmailHtml(order, message, cfg) {
       <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
     </div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">${htmlBody}</p>
+      <p style="margin-top:0;">${bodyText}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
@@ -197,10 +206,9 @@ export default async function handler(req, res) {
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
       const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
-      const bodyText = message || defaultMsg;
-      const htmlBody = bodyText.replace(/\n/g, "<br>");
+      const htmlBody = message ? esc(message).replace(/\n/g, "<br>") : esc(defaultMsg).replace(/\n/g, "<br>");
       const tpl = cfg.emailTemplate || {};
-      const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+      const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -210,7 +218,7 @@ export default async function handler(req, res) {
     <div style="padding:32px;">
       <p style="margin-top:0;">${htmlBody}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
