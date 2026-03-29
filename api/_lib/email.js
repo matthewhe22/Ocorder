@@ -128,12 +128,12 @@ export function buildCustomerEmailHtml(order, cfg) {
   const pd = cfg.paymentDetails || {};
   const isPending = order.payment === "bank" || order.payment === "payid";
   const shippingRow = order.selectedShipping?.name
-    ? `<tr><td colspan="2" style="padding:8px 12px;font-size:0.78rem;color:#666;">Shipping — ${order.selectedShipping.name}</td><td style="padding:8px 12px;text-align:right;font-size:0.78rem;color:#666;">$${(order.selectedShipping.cost||0).toFixed(2)}</td></tr>`
+    ? `<tr><td colspan="2" style="padding:8px 12px;font-size:0.78rem;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;font-size:0.78rem;color:#666;">$${(order.selectedShipping.cost||0).toFixed(2)}</td></tr>`
     : "";
   const deliveryAddrBlock = (() => {
     const sa = contact.shippingAddress;
     if (!sa || !sa.street) return "";
-    return `<h3 style="${HEADING}">Delivery Address</h3><table style="${TBL}"><tr><td style="${LABEL_W}">Address</td><td style="${VAL}">${sa.street}, ${sa.suburb} ${sa.state} ${sa.postcode}</td></tr></table>`;
+    return `<h3 style="${HEADING}">Delivery Address</h3><table style="${TBL}"><tr><td style="${LABEL_W}">Address</td><td style="${VAL}">${esc(sa.street)}, ${esc(sa.suburb)} ${esc(sa.state)} ${esc(sa.postcode)}</td></tr></table>`;
   })();
   return `<!DOCTYPE html>
 <html>
@@ -145,14 +145,14 @@ export function buildCustomerEmailHtml(order, cfg) {
       <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Confirmation</p>
     </div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">Dear ${contact.name||"Applicant"},</p>
+      <p style="margin-top:0;">Dear ${esc(contact.name)||"Applicant"},</p>
       <p>${isPending
         ? "Your order has been received and is <strong>awaiting payment</strong>. Certificate processing will begin once payment is confirmed."
         : "Your payment has been received and your certificate(s) will be processed within the stated turnaround time."
       }</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;">
         <div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div>
-        <div style="font-family:monospace;font-size:1.2rem;font-weight:700;color:#1c3326;">${order.id}</div>
+        <div style="font-family:monospace;font-size:1.2rem;font-weight:700;color:#1c3326;">${esc(order.id)}</div>
         <div style="font-size:0.75rem;color:#666;margin-top:4px;">Please keep this for your records and use it as your payment reference for bank transfers.</div>
       </div>
       ${paymentDetailsHtml(order, pd)}
@@ -176,7 +176,7 @@ export function buildCustomerEmailHtml(order, cfg) {
         </tr>
       </table>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 16px;">
-      <p style="font-size:0.8rem;color:#555;margin:0;">Questions? Contact us at <a href="mailto:${cfg.orderEmail||'info@tocs.co'}" style="color:#2e6b42;">${cfg.orderEmail||'info@tocs.co'}</a> quoting your order reference.</p>
+      <p style="font-size:0.8rem;color:#555;margin:0;">Questions? Contact us at <a href="mailto:${esc(cfg.orderEmail||'info@tocs.co')}" style="color:#2e6b42;">${esc(cfg.orderEmail||'info@tocs.co')}</a> quoting your order reference.</p>
     </div>
   </div>
 </body>
