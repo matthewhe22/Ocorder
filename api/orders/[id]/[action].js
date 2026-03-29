@@ -206,10 +206,9 @@ export default async function handler(req, res) {
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
       const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
-      const bodyText = message || defaultMsg;
-      const htmlBody = bodyText.replace(/\n/g, "<br>");
+      const htmlBody = message ? esc(message).replace(/\n/g, "<br>") : esc(defaultMsg).replace(/\n/g, "<br>");
       const tpl = cfg.emailTemplate || {};
-      const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+      const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -219,7 +218,7 @@ export default async function handler(req, res) {
     <div style="padding:32px;">
       <p style="margin-top:0;">${htmlBody}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
