@@ -105,18 +105,18 @@ function paymentDetailsHtml(order, pd) {
   const PD_TBL = "width:100%;border-collapse:collapse;font-size:0.88rem;";
   const PD_LBL = "padding:4px 0;color:#666;width:38%;";
   const PD_VAL = "padding:4px 0;font-weight:600;";
-  const refRow = `<tr><td style="${PD_LBL}">Reference</td><td style="padding:4px 0;font-weight:700;color:#1c3326;">${order.id}</td></tr>`;
+  const refRow = `<tr><td style="${PD_LBL}">Reference</td><td style="padding:4px 0;font-weight:700;color:#1c3326;">${esc(order.id)}</td></tr>`;
 
   if (order.payment === "bank") {
     return `<div style="${BOX}"><div style="${TITLE}">Bank Transfer Details</div><table style="${PD_TBL}">
-      <tr><td style="${PD_LBL}">Account Name</td><td style="${PD_VAL}">${pd.accountName||""}</td></tr>
-      <tr><td style="${PD_LBL}">BSB</td><td style="${PD_VAL}">${pd.bsb||""}</td></tr>
-      <tr><td style="${PD_LBL}">Account Number</td><td style="${PD_VAL}">${pd.accountNumber||""}</td></tr>
+      <tr><td style="${PD_LBL}">Account Name</td><td style="${PD_VAL}">${esc(pd.accountName||"")}</td></tr>
+      <tr><td style="${PD_LBL}">BSB</td><td style="${PD_VAL}">${esc(pd.bsb||"")}</td></tr>
+      <tr><td style="${PD_LBL}">Account Number</td><td style="${PD_VAL}">${esc(pd.accountNumber||"")}</td></tr>
       ${refRow}</table></div>`;
   }
   if (order.payment === "payid") {
     return `<div style="${BOX}"><div style="${TITLE}">PayID Details</div><table style="${PD_TBL}">
-      <tr><td style="${PD_LBL}">PayID</td><td style="${PD_VAL}">${pd.payid||""}</td></tr>
+      <tr><td style="${PD_LBL}">PayID</td><td style="${PD_VAL}">${esc(pd.payid||"")}</td></tr>
       ${refRow}</table></div>`;
   }
   return "";
