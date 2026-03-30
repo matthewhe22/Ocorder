@@ -610,7 +610,7 @@ export default function App() {
       }
       const finalOrder = returned.order || o;
       setOrder(finalOrder);
-      setData(p => ({ ...p, orders: [finalOrder, ...p.orders] }));
+      setData(p => ({ ...p, orders: [finalOrder, ...(p.orders || [])] }));
       setCart([]);
       setStep(6);
       setPlacing(false);

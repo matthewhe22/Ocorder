@@ -607,9 +607,11 @@ async function handler(req, res) {
     // Strip control characters from string values that flow into email subjects / headers
     const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
+    // planId may live at the top level or on each item (frontend sends it on items only)
+    const resolvedPlanId = raw.planId || raw.items?.[0]?.planId;
     const order = {
       id: raw.id,
-      planId: raw.planId,
+      planId: resolvedPlanId,
       lotId: raw.lotId,
       orderCategory: raw.orderCategory,
       contactInfo: {
@@ -729,7 +731,7 @@ async function handler(req, res) {
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { status, note } = await readBody(req, res);
     if (!status || typeof status !== "string" || !status.trim()) return json(res, 400, { error: "A non-empty status string is required." });
-    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued"];
+    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid"];
     if (!VALID_STATUSES.includes(status)) return json(res, 400, { error: `Invalid status. Allowed: ${VALID_STATUSES.join(", ")}.` });
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === statusMatch[1]);
