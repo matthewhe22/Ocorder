@@ -1,0 +1,7 @@
+node_modules/
+OCOrder/node_modules/
+OCOrder/dist/
+.worktrees/
+.claude/worktrees/
+.claude/settings.local.json
+.DS_Store
