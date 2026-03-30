@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:integration": "TEST_REDIS_URL=redis://localhost:6399 vitest run --reporter=verbose --sequence.concurrent=false",
+    "redis:test:start": "redis-server --daemonize yes --port 6399 --logfile /tmp/redis-test.log --save \"\"",
+    "redis:test:stop": "redis-cli -p 6399 shutdown nosave"
   },
   "dependencies": {
     "@azure/identity": "^4.13.0",

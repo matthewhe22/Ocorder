@@ -51,23 +51,13 @@ vi.mock("stripe", () => ({
 }));
 
 import { makeReq, makeRes } from "../../test/request-factory.js";
-
-async function importHandler() {
-  vi.resetModules();
-  const mod = await import("./index.js");
-  return mod.default;
-}
-
-async function importStore() {
-  vi.resetModules();
-  return await import("../_lib/store.js");
-}
+import handler from "./index.js";
+import { readData, readAuthority, writeConfig } from "../_lib/store.js";
 
 describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => {
   beforeEach(async () => {
     await flushTestDb();
     // Seed a minimal config with SMTP disabled so emails don't interfere
-    const { writeConfig } = await importStore();
     await writeConfig({
       orderEmail: "orders@test.com",
       smtp: { host: "", port: 2525, user: "", pass: "" },
@@ -84,7 +74,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
   // ── Full non-Stripe order placement flow ─────────────────────────────────────
 
   maybeIt("POST a valid bank order — order appears in readData().orders[0]", async () => {
-    const handler = await importHandler();
     const req = makeReq({
       method: "POST",
       body: {
@@ -102,7 +91,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
     expect(res._status).toBe(200);
     expect(res._body).toHaveProperty("ok", true);
 
-    const { readData } = await importStore();
     const data = await readData();
     expect(data.orders).toHaveLength(1);
     expect(data.orders[0].payment).toBe("bank");
@@ -110,7 +98,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
   });
 
   maybeIt("order.auditLog contains the 'Order created' entry", async () => {
-    const handler = await importHandler();
     const req = makeReq({
       method: "POST",
       body: {
@@ -125,7 +112,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
     });
     const res = makeRes();
     await handler(req, res);
-    const { readData } = await importStore();
     const data = await readData();
     const order = data.orders[0];
     expect(order.auditLog[0].action).toBe("Order created");
@@ -133,7 +119,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
   });
 
   maybeIt("authority doc saved to Redis when lotAuthority.data is present", async () => {
-    const handler = await importHandler();
     const req = makeReq({
       method: "POST",
       body: {
@@ -155,7 +140,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
     await handler(req, res);
     expect(res._status).toBe(200);
 
-    const { readData, readAuthority } = await importStore();
     const data = await readData();
     const orderId = data.orders[0].id;
     const stored = await readAuthority(orderId);
@@ -167,7 +151,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
 
   maybeIt("Stripe order — saved with stripeSessionId and returns { id, redirect }", async () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_integration";
-    const handler = await importHandler();
     const req = makeReq({
       method: "POST",
       body: {
@@ -186,7 +169,6 @@ describe("POST /api/orders integration tests", { skip: !redisAvailable }, () => 
     expect(res._body).toHaveProperty("id");
     expect(res._body).toHaveProperty("redirect");
 
-    const { readData } = await importStore();
     const data = await readData();
     expect(data.orders[0].stripeSessionId).toBe("cs_test_integration");
   });

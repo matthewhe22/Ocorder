@@ -2,7 +2,7 @@
 // Requires a real Redis instance. If unavailable, all tests are skipped.
 
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
-import { flushTestDb, seedData, getStored, closeTestDb } from "../../../test/redis-helpers.js";
+import { flushTestDb, seedData, getStored, closeTestDb, createTestToken } from "../../../test/redis-helpers.js";
 
 // ── Check Redis availability ────────────────────────────────────────────────────
 let redisAvailable = false;
@@ -49,17 +49,8 @@ vi.mock("stripe", () => ({
 }));
 
 import { makeReq, makeRes } from "../../../test/request-factory.js";
-
-async function importHandler() {
-  vi.resetModules();
-  const mod = await import("./[action].js");
-  return mod.default;
-}
-
-async function importStore() {
-  vi.resetModules();
-  return await import("../../_lib/store.js");
-}
+import handler from "./[action].js";
+import { readData, writeConfig } from "../../_lib/store.js";
 
 function makeOrder(overrides = {}) {
   return {
@@ -84,7 +75,6 @@ function makeOrder(overrides = {}) {
 
 // Seed a minimal config with SMTP disabled
 async function seedConfig() {
-  const { writeConfig } = await importStore();
   await writeConfig({
     orderEmail: "orders@test.com",
     smtp: { host: "", port: 2525, user: "", pass: "" },
@@ -102,10 +92,14 @@ async function seedConfig() {
 }
 
 describe("Order action handler integration tests", { skip: !redisAvailable }, () => {
+  let authHeader;
+
   beforeEach(async () => {
     await flushTestDb();
     await seedConfig();
     await seedData({ strataPlans: [], orders: [makeOrder()] });
+    const token = await createTestToken();
+    authHeader = { authorization: `Bearer ${token}` };
   });
 
   afterAll(async () => {
@@ -115,25 +109,21 @@ describe("Order action handler integration tests", { skip: !redisAvailable }, ()
   // ── Status update round-trip ──────────────────────────────────────────────────
 
   maybeIt("PUT status: Paid — updates status in Redis", async () => {
-    const handler = await importHandler();
-    const req = makeReq({ method: "PUT", query: { id: "TOCS-INTG-001", action: "status" }, body: { status: "Paid" } });
+    const req = makeReq({ method: "PUT", query: { id: "TOCS-INTG-001", action: "status" }, body: { status: "Paid" }, headers: authHeader });
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
     expect(res._body).toHaveProperty("ok", true);
 
-    const { readData } = await importStore();
     const data = await readData();
     expect(data.orders[0].status).toBe("Paid");
   });
 
   maybeIt("PUT status — audit log entry is appended correctly", async () => {
-    const handler = await importHandler();
-    const req = makeReq({ method: "PUT", query: { id: "TOCS-INTG-001", action: "status" }, body: { status: "Processing" } });
+    const req = makeReq({ method: "PUT", query: { id: "TOCS-INTG-001", action: "status" }, body: { status: "Processing" }, headers: authHeader });
     const res = makeRes();
     await handler(req, res);
 
-    const { readData } = await importStore();
     const data = await readData();
     const order = data.orders[0];
     const lastEntry = order.auditLog.at(-1);
@@ -143,16 +133,15 @@ describe("Order action handler integration tests", { skip: !redisAvailable }, ()
   // ── Order cancellation with reason ────────────────────────────────────────────
 
   maybeIt("PUT status: Cancelled with note — cancelReason is set", async () => {
-    const handler = await importHandler();
     const req = makeReq({
       method: "PUT",
       query: { id: "TOCS-INTG-001", action: "status" },
       body: { status: "Cancelled", note: "Customer requested cancellation" },
+      headers: authHeader,
     });
     const res = makeRes();
     await handler(req, res);
 
-    const { readData } = await importStore();
     const data = await readData();
     expect(data.orders[0].cancelReason).toBe("Customer requested cancellation");
   });
@@ -169,13 +158,11 @@ describe("Order action handler integration tests", { skip: !redisAvailable }, ()
       ],
     });
 
-    const handler = await importHandler();
-    const req = makeReq({ method: "DELETE", query: { id: "TOCS-INTG-001", action: "delete" } });
+    const req = makeReq({ method: "DELETE", query: { id: "TOCS-INTG-001", action: "delete" }, headers: authHeader });
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
 
-    const { readData } = await importStore();
     const data = await readData();
     expect(data.orders).toHaveLength(1);
     expect(data.orders[0].id).toBe("TOCS-INTG-002");
@@ -191,10 +178,6 @@ describe("Order action handler integration tests", { skip: !redisAvailable }, ()
     });
     process.env.STRIPE_SECRET_KEY = "sk_test_integration";
 
-    const { default: Stripe } = await import("stripe");
-    Stripe.mockClear();
-
-    const handler = await importHandler();
     const req = makeReq({ method: "POST", query: { id: "TOCS-INTG-001", action: "stripe-confirm" } });
     const res = makeRes();
     await handler(req, res);

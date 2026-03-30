@@ -42,6 +42,14 @@ export default defineConfig({
       },
     },
 
+    // Run each test file in its own process so vi.resetModules() in integration
+    // tests doesn't pollute the module cache of other files running sequentially.
+    pool: "forks",
+
+    // Prevent concurrent test-file execution — integration tests share a Redis DB
+    // and concurrent flushTestDb() calls across files cause race conditions.
+    fileParallelism: false,
+
     // Allow top-level await in test files (required by ESM handlers)
     globals: false,
 
