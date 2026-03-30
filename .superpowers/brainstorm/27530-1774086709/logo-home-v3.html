@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logo Top Left — v3 Building Card</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@500;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #cececd;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 0 60px;
+  }
+
+  /* ── Top nav ── */
+  .topbar {
+    width: 100%; background: white; padding: 0 40px; height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e4e4e0;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05); margin-bottom: 28px;
+  }
+  .tocs-nav-logo { display: flex; align-items: center; gap: 14px; }
+  .topbar-divider { width: 1px; height: 26px; background: #e0e0dc; margin: 0 4px; }
+  .topbar-sub { font-size: 10px; font-weight: 500; color: #9a9a90; letter-spacing: 0.08em; text-transform: uppercase; }
+  .topbar-right { font-size: 11px; color: #9a9a90; display: flex; gap: 20px; align-items: center; }
+  .topbar-link { color: #1c3326; font-weight: 600; font-size: 12px; cursor: pointer; }
+
+  .container { width: 100%; max-width: 760px; padding: 0 24px; }
+
+  /* ── Page title block ── */
+  .page-title-block {
+    background: white; border-radius: 16px; padding: 36px 36px 32px;
+    margin-bottom: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border: 1px solid #e4e4e0;
+  }
+  .page-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: #4a7255; margin-bottom: 10px; }
+  .page-h1 { font-family: 'DM Serif Display', serif; font-size: 38px; font-weight: 400; color: #1a1f1a; line-height: 1.08; letter-spacing: -0.01em; margin-bottom: 10px; }
+  .page-sub { font-size: 13px; color: #8a8a80; font-weight: 300; line-height: 1.6; margin-bottom: 24px; }
+  .search-bar {
+    background: #f6f6f3; border: 1.5px solid #deded8; border-radius: 100px;
+    padding: 12px 14px 12px 20px; display: flex; align-items: center; gap: 10px;
+  }
+  .search-bar:hover { border-color: #4a7255; background: white; box-shadow: 0 4px 18px rgba(28,51,38,0.08); }
+  .search-icon { font-size: 14px; color: #9a9a8e; }
+  .search-text { font-size: 14px; color: #aaaa9e; flex: 1; font-weight: 300; }
+  .search-btn { background: #1c3326; color: white; border-radius: 100px; padding: 7px 18px; font-size: 12px; font-weight: 600; }
+
+  /* ── How it works ── */
+  .hiw-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 2px; border-radius: 14px; overflow: hidden;
+    background: #c8c8c5; margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  }
+  .hiw-cell { background: white; padding: 20px 16px 18px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .hiw-cell.active { background: #1c3326; }
+  .hiw-ghost { font-family: 'Space Grotesk', sans-serif; font-size: 44px; font-weight: 700; color: #f0f0ed; position: absolute; top: 10px; right: 12px; line-height: 1; }
+  .hiw-cell.active .hiw-ghost { color: rgba(255,255,255,0.07); }
+  .hiw-icon { font-size: 22px; position: relative; z-index: 1; }
+  .hiw-name { font-size: 12px; font-weight: 600; color: #1a1f1a; line-height: 1.3; position: relative; z-index: 1; }
+  .hiw-cell.active .hiw-name { color: white; }
+  .hiw-desc { font-size: 10px; color: #8a8a80; line-height: 1.5; font-weight: 300; position: relative; z-index: 1; }
+  .hiw-cell.active .hiw-desc { color: rgba(255,255,255,0.5); }
+
+  /* ── Two column ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  .card { background: white; border: 1px solid #e4e4e0; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .card-head {
+    padding: 12px 18px; background: #f6f6f3; border-bottom: 1px solid #eaeae6;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+    text-transform: uppercase; color: #6a6a60;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-head-left { display: flex; align-items: center; gap: 8px; }
+  .card-head-dot { width: 7px; height: 7px; border-radius: 50%; background: #1c3326; }
+  .card-head-action { font-size: 10px; font-weight: 500; color: #4a7255; cursor: pointer; letter-spacing: 0; text-transform: none; }
+  .card-body { padding: 16px; }
+
+  /* ── SELECTED BUILDING CARD — the main focus ── */
+  .building-selected {
+    background: white; border: 2px solid #1c3326; border-radius: 14px;
+    overflow: hidden; box-shadow: 0 4px 20px rgba(28,51,38,0.12);
+    margin-bottom: 16px;
+  }
+  .bsel-header {
+    background: #1c3326; padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .bsel-header-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.18em;
+    text-transform: uppercase; color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .bsel-header-check {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: white;
+  }
+  .bsel-change {
+    font-size: 11px; color: rgba(255,255,255,0.55); cursor: pointer;
+    font-weight: 500; letter-spacing: 0.04em;
+    background: rgba(255,255,255,0.1); border-radius: 20px; padding: 3px 10px;
+  }
+  .bsel-body { padding: 20px 22px 22px; }
+  .bsel-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px; font-weight: 400; color: #1a1f1a;
+    margin-bottom: 6px; line-height: 1.2;
+  }
+  .bsel-address {
+    font-size: 13px; color: #6a6a60; font-weight: 400;
+    margin-bottom: 18px; display: flex; align-items: center; gap: 6px;
+  }
+  .bsel-address-icon { font-size: 12px; }
+  .bsel-stats {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .bsel-stat {
+    background: #f6f6f3; border: 1px solid #e8e8e3;
+    border-radius: 10px; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .bsel-stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 24px; font-weight: 700; color: #1c3326; line-height: 1;
+  }
+  .bsel-stat-label {
+    font-size: 10px; font-weight: 500; color: #9a9a8e;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .bsel-sp {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid #eaeae6;
+    font-size: 11px; color: #9a9a8e; display: flex; align-items: center; gap: 6px;
+  }
+  .bsel-sp-badge {
+    background: #f0f6f2; border: 1px solid #c8dece; border-radius: 6px;
+    padding: 2px 8px; font-size: 10px; font-weight: 600; color: #3a6a4a;
+    letter-spacing: 0.04em;
+  }
+
+  /* Category card -->  */
+  .cat-tile {
+    border: 1.5px solid #e4e4e0; border-radius: 10px; padding: 14px;
+    display: flex; align-items: center; gap: 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .cat-tile:last-child { margin-bottom: 0; }
+  .cat-tile.active { border-color: #1c3326; background: #f0f6f2; }
+  .cat-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c0c0b8; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .cat-tile.active .cat-radio { border-color: #1c3326; }
+  .cat-tile.active .cat-radio::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #1c3326; display: block; }
+  .cat-icon-sm { font-size: 20px; }
+  .cat-name-sm { font-size: 13px; font-weight: 600; color: #1a1f1a; }
+  .cat-desc-sm { font-size: 10px; color: #8a8a80; }
+
+  /* CTA */
+  .cta-row { display: flex; align-items: center; gap: 14px; }
+  .cta-btn { background: #1c3326; color: white; border: none; border-radius: 100px; padding: 14px 36px; font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; box-shadow: 0 4px 16px rgba(28,51,38,0.22); }
+  .cta-note { font-size: 12px; color: #8a8a80; font-weight: 300; }
+
+  /* Footer */
+  .footer { width: 100%; background: white; border-top: 1px solid #deded8; margin-top: 36px; padding: 14px 40px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #9a9a90; }
+  .footer a { color: #4a7255; }
+  .footer-left { display: flex; align-items: center; gap: 10px; }
+
+  .page-label { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: #8a8a80; margin: 0 0 16px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- Top nav -->
+<div class="topbar">
+  <div class="tocs-nav-logo">
+    <svg height="28" viewBox="0 0 320 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="68" height="16" rx="1" fill="#1c3326"/>
+      <path d="M6 16 Q6 6 16 6 Q26 6 26 16 Z" fill="white"/>
+      <path d="M42 16 Q42 6 52 6 Q62 6 62 16 Z" fill="white"/>
+      <rect x="27" y="13" width="14" height="47" fill="#1c3326"/>
+      <circle cx="117" cy="30" r="28" fill="#1c3326"/>
+      <circle cx="117" cy="30" r="17" fill="white"/>
+      <path d="M 198 4 A26 26 0 1 0 198 56 L198 45 A15 15 0 1 1 198 15 Z" fill="#1c3326"/>
+      <path d="M254 10 Q254 4 262 4 L290 4 Q300 4 300 14 Q300 24 288 28 L268 34 Q254 38 254 50 Q254 58 264 58 L290 58 Q300 58 300 50" stroke="#1c3326" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="topbar-divider"></div>
+    <div class="topbar-sub">Order Portal</div>
+  </div>
+  <div class="topbar-right">
+    <span>NSW Strata</span>
+    <span class="topbar-link">Admin Login</span>
+  </div>
+</div>
+
+<div class="page-label">v3 — Selected building card with full details</div>
+
+<div class="container">
+
+  <!-- Page title + search -->
+  <div class="page-title-block">
+    <div class="page-eyebrow">Top Owners Corporation Solutions</div>
+    <h1 class="page-h1">TOCS Order Portal</h1>
+    <p class="page-sub">Order certificates, keys, fobs, swipes and more for your NSW strata property</p>
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <span class="search-text">The Horizon, Parramatta…</span>
+      <span class="search-btn">Change</span>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="hiw-grid">
+    <div class="hiw-cell active">
+      <div class="hiw-ghost">1</div>
+      <div class="hiw-icon">🏢</div>
+      <div class="hiw-name">Find your building</div>
+      <div class="hiw-desc">Search strata plan or address</div>
+    </div>
+    <div class="hiw-cell">
+      <div class="hiw-ghost">2</div>
+      <div class="hiw-icon">🛒</div>
+      <div class="hiw-name">Choose your items</div>
+      <div class="hiw-desc">Certs, keys, fobs, swipes</div>
+    </div>
+    <div class="hiw-cell">
+      <div class="hiw-ghost">3</div>
+      <div class="hiw-icon">📋</div>
+      <div class="hiw-name">Enter your details</div>
+      <div class="hiw-desc">Applicant & contact info</div>
+    </div>
+    <div class="hiw-cell">
+      <div class="hiw-ghost">4</div>
+      <div class="hiw-icon">💳</div>
+      <div class="hiw-name">Pay your way</div>
+      <div class="hiw-desc">Bank · PayID · Card</div>
+    </div>
+  </div>
+
+  <!-- ── SELECTED BUILDING CARD — full details ── -->
+  <div class="building-selected">
+    <div class="bsel-header">
+      <div class="bsel-header-label">
+        <div class="bsel-header-check">✓</div>
+        Building Selected
+      </div>
+      <div class="bsel-change">Change ↗</div>
+    </div>
+    <div class="bsel-body">
+      <div class="bsel-name">The Horizon Residences</div>
+      <div class="bsel-address">
+        <span class="bsel-address-icon">📍</span>
+        12–18 Darling Street, Parramatta NSW 2150
+      </div>
+      <div class="bsel-stats">
+        <div class="bsel-stat">
+          <div class="bsel-stat-value">148</div>
+          <div class="bsel-stat-label">Total Lots</div>
+        </div>
+        <div class="bsel-stat">
+          <div class="bsel-stat-value">3</div>
+          <div class="bsel-stat-label">Owner Corporations</div>
+        </div>
+      </div>
+      <div class="bsel-sp">
+        <span>Strata Plan</span>
+        <span class="bsel-sp-badge">SP 87432</span>
+        <span style="margin-left:auto; color:#c8c8c0; font-size:10px;">Registered · NSW Land Registry</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category card -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-head">
+      <div class="card-head-left"><div class="card-head-dot"></div>What Do You Need?</div>
+    </div>
+    <div class="card-body">
+      <div class="cat-tile active">
+        <div class="cat-radio"></div>
+        <span class="cat-icon-sm">📄</span>
+        <div>
+          <div class="cat-name-sm">OC Certificates</div>
+          <div class="cat-desc-sm">Owner Corporation strata title documents</div>
+        </div>
+      </div>
+      <div class="cat-tile">
+        <div class="cat-radio"></div>
+        <span class="cat-icon-sm">🔑</span>
+        <div>
+          <div class="cat-name-sm">Keys & Access</div>
+          <div class="cat-desc-sm">Keys, fobs, swipes and access devices</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-row">
+    <button class="cta-btn">Continue →</button>
+    <span class="cta-note">The Horizon Residences · OC Certificates</span>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="footer-left">
+    <svg width="36" height="14" viewBox="0 0 320 60" fill="none">
+      <rect x="0" y="0" width="68" height="16" rx="1" fill="#9a9a90"/>
+      <path d="M6 16 Q6 6 16 6 Q26 6 26 16 Z" fill="white"/>
+      <path d="M42 16 Q42 6 52 6 Q62 6 62 16 Z" fill="white"/>
+      <rect x="27" y="13" width="14" height="47" fill="#9a9a90"/>
+      <circle cx="117" cy="30" r="28" fill="#9a9a90"/>
+      <circle cx="117" cy="30" r="17" fill="white"/>
+      <path d="M 198 4 A26 26 0 1 0 198 56 L198 45 A15 15 0 1 1 198 15 Z" fill="#9a9a90"/>
+      <path d="M254 10 Q254 4 262 4 L290 4 Q300 4 300 14 Q300 24 288 28 L268 34 Q254 38 254 50 Q254 58 264 58 L290 58 Q300 58 300 50" stroke="#9a9a90" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Top Owners Corporation Solutions</span>
+  </div>
+  <span><a href="#">Privacy Policy</a></span>
+</div>
+
+</body>
+</html>

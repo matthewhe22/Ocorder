@@ -18,7 +18,7 @@ export function generateOrderPdf(order) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, info: {
       Title: `Order ${order.id} — TOCS`,
-      Author: "TOCS Owner Corporation Services",
+      Author: "Top Owners Corporation Solution",
     }});
 
     const chunks = [];
@@ -42,8 +42,11 @@ export function generateOrderPdf(order) {
     doc.fillColor("white").font("Helvetica-Bold").fontSize(9)
        .text("ORDER CONFIRMATION", 0, 60, { align: "right", width: W + 50 })
        .font("Helvetica").fontSize(8).fillColor("rgba(255,255,255,0.7)")
-       .text(new Date(order.date).toLocaleDateString("en-AU", { day: "2-digit", month: "long", year: "numeric" }),
-             0, 74, { align: "right", width: W + 50 });
+       .text((() => {
+         const d = order.date ? new Date(order.date) : new Date();
+         const isValidDate = !isNaN(d.getTime());
+         return isValidDate ? d.toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "long", timeStyle: "short" }) : "Date unavailable";
+       })(), 0, 74, { align: "right", width: W + 50 });
 
     let y = 120;
 
@@ -191,7 +194,7 @@ export function generateOrderPdf(order) {
     doc.moveTo(50, y).lineTo(50 + W, y).stroke(BORDER);
     y += 10;
     doc.fillColor(MID).font("Helvetica").fontSize(7.5)
-       .text("TOCS Owner Corporation Services  |  info@tocs.co  |  This document was generated automatically.", 50, y, {
+       .text("Top Owners Corporation Solution  |  info@tocs.co  |  This document was generated automatically.", 50, y, {
          align: "center", width: W,
        });
 
@@ -209,7 +212,7 @@ export function generateReceiptPdf(order, sessionId) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, info: {
       Title: `Payment Receipt — Order ${order.id} — TOCS`,
-      Author: "TOCS Owner Corporation Services",
+      Author: "Top Owners Corporation Solution",
     }});
 
     const chunks = [];
@@ -289,11 +292,50 @@ export function generateReceiptPdf(order, sessionId) {
 
     y += 20;
 
+    // ── LINE ITEMS ────────────────────────────────────────────────────────────
+    doc.moveTo(50, y).lineTo(50 + W, y).stroke(BORDER);
+    y += 10;
+    doc.fillColor(SAGE).font("Helvetica-Bold").fontSize(8)
+       .text("ORDER ITEMS", 50, y, { characterSpacing: 0.8 });
+    y += 14;
+
+    // Table header
+    const COL = { desc: 50, lot: 290, oc: 370, price: 470 };
+    doc.fillColor(MID).font("Helvetica-Bold").fontSize(8);
+    doc.text("Description", COL.desc, y);
+    doc.text("Lot", COL.lot, y);
+    doc.text("OC", COL.oc, y);
+    doc.text("Price", COL.price, y, { align: "right", width: 80 });
+    y += 4;
+    doc.moveTo(50, y + 6).lineTo(50 + W, y + 6).stroke(BORDER);
+    y += 14;
+
+    const items = order.items || [];
+    doc.font("Helvetica").fontSize(8.5).fillColor("#1a1f1c");
+    items.forEach(item => {
+      const nameHeight = doc.heightOfString(item.productName, { width: 230, fontSize: 8.5 });
+      doc.text(item.productName, COL.desc, y, { width: 230 });
+      doc.text(item.lotNumber || "—", COL.lot, y, { width: 72 });
+      doc.text(item.ocName ? item.ocName.replace(/Owner Corporation\s*/i, "OC ").slice(0, 20) : "—", COL.oc, y, { width: 90 });
+      doc.text(fmt(item.price), COL.price, y, { align: "right", width: 80 });
+      if (item.qty && item.qty > 1) {
+        doc.fillColor(SAGE).fontSize(7.5)
+           .text(`Qty: ${item.qty}`, COL.desc, y + nameHeight, { width: 230 });
+        doc.fillColor("#1a1f1c").fontSize(8.5);
+        y += 5;
+      }
+      y += Math.max(nameHeight, 13) + 6;
+      doc.moveTo(50, y - 2).lineTo(50 + W, y - 2).stroke(BORDER).opacity(0.3);
+      doc.opacity(1);
+    });
+
+    y += 16;
+
     // ── FOOTER ───────────────────────────────────────────────────────────────
     doc.moveTo(50, y).lineTo(50 + W, y).stroke(BORDER);
     y += 10;
     doc.fillColor(MID).font("Helvetica").fontSize(7.5)
-       .text("TOCS Owner Corporation Services  |  info@tocs.co  |  This receipt was generated automatically.", 50, y, {
+       .text("Top Owners Corporation Solution  |  info@tocs.co  |  This receipt was generated automatically.", 50, y, {
          align: "center", width: W,
        });
 

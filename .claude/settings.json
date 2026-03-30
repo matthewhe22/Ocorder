@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy && git add -A && git diff --cached --quiet && echo 'No changes to commit' || (git commit -m \"chore: auto-sync $(date '+%Y-%m-%d %H:%M')\" && git push git@github.com:matthewhe22/Ocorder.git main 2>&1 | tail -5)",
+            "timeout": 60,
+            "statusMessage": "Syncing changes to GitHub..."
+          }
+        ]
+      }
+    ]
+  }
+}

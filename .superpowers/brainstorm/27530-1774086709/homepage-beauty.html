@@ -1,0 +1,206 @@
+<h2>Home Page Beautification — 3 Concepts</h2>
+<p class="subtitle">All three apply your 3 fixes (remove subtitle, fix footer, match bg). Which direction do you prefer for the overall look?</p>
+
+<style>
+  .preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; }
+  .preview-card { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.13); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+  .preview-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.18); }
+  .preview-card.selected-card { outline: 3px solid #4a7255; transform: translateY(-3px); }
+  .pc-label { background: #1c3326; color: white; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+  .pc-label span { background: rgba(255,255,255,0.15); border-radius: 4px; padding: 2px 7px; font-size: 10px; }
+  .pc-body { background: #cececd; padding: 18px 14px 14px; font-family: 'Inter', sans-serif; }
+
+  /* CONCEPT A — Refined Minimal */
+  .ca-header { text-align: center; padding: 12px 8px 10px; }
+  .ca-wordmark { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px; }
+  .ca-icon { width: 28px; height: 28px; background: #1c3326; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; }
+  .ca-title { font-size: 17px; font-weight: 700; color: #1c3326; letter-spacing: -0.01em; font-family: 'Georgia', serif; }
+  .ca-tagline { font-size: 9px; color: #4a7255; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600; }
+  .ca-panels { display: grid; grid-template-columns: 1fr 1px 1fr; background: white; border-radius: 8px; border: 1.5px solid #ddd; overflow: hidden; margin: 8px 0; height: 80px; }
+  .ca-left { background: #cececd; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; }
+  .ca-right { background: white; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; }
+  .ca-div { background: #d0dbd3; }
+  .ca-lbl { font-size: 7px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #4a7255; margin-bottom: 4px; }
+  .ca-bar { height: 8px; background: #e8e3dc; border-radius: 4px; margin-bottom: 3px; }
+  .ca-bar.short { width: 60%; }
+  .ca-bar.xs { width: 40%; height: 5px; background: #f0ece5; }
+  .ca-cats { display: flex; gap: 4px; margin: 6px 0; }
+  .ca-cat { flex: 1; height: 22px; border-radius: 5px; border: 1.5px solid #d0dbd3; background: white; }
+  .ca-cat.active { background: #1c3326; border-color: #1c3326; }
+  .ca-btn { background: #1c3326; color: white; border-radius: 5px; height: 18px; width: 100%; font-size: 7px; display: flex; align-items: center; justify-content: center; font-weight: 600; letter-spacing: 0.06em; }
+  .ca-footer { text-align: center; font-size: 7px; color: #999; margin-top: 4px; }
+
+  /* CONCEPT B — Hero Banner */
+  .cb-hero { background: linear-gradient(135deg, #1c3326 0%, #2d5040 100%); padding: 14px 10px 12px; text-align: center; margin: -18px -14px 10px; }
+  .cb-badge { display: inline-block; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; font-size: 7px; color: rgba(255,255,255,0.8); padding: 2px 8px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .cb-title { font-size: 16px; font-family: 'Georgia', serif; color: white; font-weight: 400; margin-bottom: 3px; letter-spacing: -0.01em; }
+  .cb-sub { font-size: 8px; color: rgba(255,255,255,0.6); }
+  .cb-search { background: rgba(255,255,255,0.15); border-radius: 6px; height: 20px; margin-top: 8px; display: flex; align-items: center; padding: 0 8px; }
+  .cb-search-icon { font-size: 8px; margin-right: 4px; }
+  .cb-search-text { font-size: 8px; color: rgba(255,255,255,0.5); }
+  .cb-panels { background: white; border-radius: 8px; border: 1.5px solid #ddd; overflow: hidden; margin-bottom: 6px; height: 60px; display: grid; grid-template-columns: 1fr 1px 1fr; }
+  .cb-lbl { font-size: 6.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #8a9488; margin-bottom: 3px; }
+  .cb-left { padding: 7px 9px; display: flex; flex-direction: column; justify-content: flex-start; background: #cececd; }
+  .cb-right { padding: 7px 9px; display: flex; flex-direction: column; justify-content: flex-start; }
+  .cb-dots { display: flex; gap: 3px; margin-top: auto; justify-content: center; }
+  .cb-dot { width: 4px; height: 4px; border-radius: 50%; background: #1c3326; }
+  .cb-dot.dim { background: #d0dbd3; }
+  .cb-cats { display: flex; gap: 4px; margin: 4px 0 6px; }
+  .cb-cat { flex: 1; height: 20px; border-radius: 5px; border: 1.5px solid #d0dbd3; background: white; }
+  .cb-cat.active { background: #1c3326; border-color: #1c3326; }
+  .cb-btn { background: linear-gradient(135deg, #1c3326, #2d5040); color: white; border-radius: 5px; height: 18px; width: 100%; font-size: 7px; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+
+  /* CONCEPT C — Glass Card */
+  .cc-wrap { background: white; border-radius: 12px; border: 1.5px solid rgba(255,255,255,0.8); box-shadow: 0 8px 32px rgba(28,51,38,0.12); padding: 14px 12px 10px; margin: -6px -2px; }
+  .cc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .cc-logo { width: 32px; height: 32px; background: linear-gradient(135deg, #1c3326, #4a7255); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .cc-title { font-size: 14px; font-family: 'Georgia', serif; color: #1c3326; font-weight: 400; line-height: 1.1; }
+  .cc-tagline { font-size: 7px; color: #8a9488; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 1px; }
+  .cc-divider { height: 1px; background: linear-gradient(90deg, transparent, #d0dbd3, transparent); margin: 8px 0; }
+  .cc-panels { display: grid; grid-template-columns: 1fr 1px 1fr; background: #f7f3ec; border-radius: 8px; border: 1px solid #e8e3dc; overflow: hidden; height: 72px; margin-bottom: 8px; }
+  .cc-left { background: #cececd; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; }
+  .cc-right { background: white; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; }
+  .cc-div { background: #d8d2c8; }
+  .cc-lbl { font-size: 7px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #4a7255; margin-bottom: 4px; }
+  .cc-slides { display: flex; gap: 3px; align-items: center; margin-top: auto; }
+  .cc-slide-dot { width: 14px; height: 3px; border-radius: 2px; background: #1c3326; }
+  .cc-slide-dot.dim { background: #d8d2c8; width: 6px; }
+  .cc-cats { display: flex; gap: 5px; margin-bottom: 7px; }
+  .cc-cat { flex: 1; height: 24px; border-radius: 6px; border: 1.5px solid #d0dbd3; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #8a9488; }
+  .cc-cat.active { background: #1c3326; border-color: #1c3326; color: white; font-weight: 600; }
+  .cc-btn { background: #1c3326; color: white; border-radius: 6px; height: 20px; width: 100%; font-size: 7px; display: flex; align-items: center; justify-content: center; font-weight: 600; letter-spacing: 0.05em; box-shadow: 0 2px 8px rgba(28,51,38,0.25); }
+</style>
+
+<div class="preview-grid">
+
+  <!-- CONCEPT A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#cececd;">
+      <div class="pc-label">A — Refined Minimal <span>Clean</span></div>
+      <div class="pc-body">
+        <div class="ca-header">
+          <div class="ca-wordmark">
+            <div class="ca-icon">🌿</div>
+            <div class="ca-title">TOCS Order Portal</div>
+          </div>
+          <div class="ca-tagline">Owners Corporation Services</div>
+          <div style="width:32px;height:1.5px;background:#4a7255;margin:5px auto 0;border-radius:1px;"></div>
+        </div>
+        <div class="ca-panels">
+          <div class="ca-left">
+            <div class="ca-lbl">How It Works</div>
+            <div class="ca-bar"></div>
+            <div class="ca-bar short"></div>
+            <div class="ca-bar xs"></div>
+          </div>
+          <div class="ca-div"></div>
+          <div class="ca-right">
+            <div class="ca-lbl">Find Your Building</div>
+            <div class="ca-bar"></div>
+            <div class="ca-bar short"></div>
+          </div>
+        </div>
+        <div class="ca-cats">
+          <div class="ca-cat active"></div>
+          <div class="ca-cat"></div>
+        </div>
+        <div class="ca-btn">Continue →</div>
+        <div class="ca-footer">TOCS Owner Corporation Solutions · Privacy Policy</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Refined Minimal</h3>
+      <p>Green icon mark beside the title, elegant uppercase tagline. Panels blend into the page — "How It Works" uses page background. Subtle, professional.</p>
+    </div>
+  </div>
+
+  <!-- CONCEPT B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#cececd;">
+      <div class="pc-label">B — Hero Banner <span>Striking</span></div>
+      <div class="pc-body">
+        <div class="cb-hero">
+          <div class="cb-badge">Owners Corporation Portal</div>
+          <div class="cb-title">TOCS Order Portal</div>
+          <div class="cb-sub">Certificates · Keys · Fobs · Swipes</div>
+          <div class="cb-search">
+            <span class="cb-search-icon">🔍</span>
+            <span class="cb-search-text">Search for your building...</span>
+          </div>
+        </div>
+        <div class="cb-panels">
+          <div class="cb-left">
+            <div class="cb-lbl">How It Works</div>
+            <div style="height:8px;background:#b8c4bc;border-radius:3px;margin-bottom:3px;"></div>
+            <div style="height:5px;background:#c8d4cc;border-radius:3px;width:70%;"></div>
+            <div class="cb-dots">
+              <div class="cb-dot"></div><div class="cb-dot dim"></div><div class="cb-dot dim"></div><div class="cb-dot dim"></div>
+            </div>
+          </div>
+          <div style="background:#ccc;"></div>
+          <div class="cb-right">
+            <div class="cb-lbl">Find Your Building</div>
+            <div style="height:8px;background:#eae5de;border-radius:3px;margin-bottom:3px;"></div>
+            <div style="height:5px;background:#f0ece5;border-radius:3px;width:60%;"></div>
+          </div>
+        </div>
+        <div class="cb-cats">
+          <div class="cb-cat active"></div>
+          <div class="cb-cat"></div>
+        </div>
+        <div class="cb-btn">Continue →</div>
+        <div class="ca-footer" style="margin-top:4px;">TOCS Owner Corporation Solutions · Privacy Policy</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Hero Banner</h3>
+      <p>Dark forest-green hero header with the title, category tags, and a prominent search field. Bold first impression, high visual contrast.</p>
+    </div>
+  </div>
+
+  <!-- CONCEPT C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0; background:#cececd;">
+      <div class="pc-label">C — Elevated Card <span>Premium</span></div>
+      <div class="pc-body" style="padding: 12px 10px 10px;">
+        <div class="cc-wrap">
+          <div class="cc-header">
+            <div class="cc-logo">🌿</div>
+            <div>
+              <div class="cc-title">TOCS Order Portal</div>
+              <div class="cc-tagline">Owners Corporation Solutions</div>
+            </div>
+          </div>
+          <div class="cc-divider"></div>
+          <div class="cc-panels">
+            <div class="cc-left">
+              <div class="cc-lbl">How It Works</div>
+              <div style="height:7px;background:#b8c4bc;border-radius:3px;margin-bottom:3px;"></div>
+              <div style="height:5px;background:#c4d0c8;border-radius:3px;width:65%;"></div>
+              <div class="cc-slides"><div class="cc-slide-dot"></div><div class="cc-slide-dot dim"></div><div class="cc-slide-dot dim"></div><div class="cc-slide-dot dim"></div></div>
+            </div>
+            <div class="cc-div"></div>
+            <div class="cc-right">
+              <div class="cc-lbl">Find Your Building</div>
+              <div style="height:7px;background:#eae5de;border-radius:3px;margin-bottom:3px;"></div>
+              <div style="height:5px;background:#f0ece5;border-radius:3px;width:60%;"></div>
+            </div>
+          </div>
+          <div class="cc-cats">
+            <div class="cc-cat active">🏢 OC Certificates</div>
+            <div class="cc-cat">🔑 Keys & Fobs</div>
+          </div>
+          <div class="cc-btn">Continue →</div>
+        </div>
+        <div class="ca-footer" style="margin-top:6px;">TOCS Owner Corporation Solutions · Privacy Policy</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Elevated Card</h3>
+      <p>The entire portal sits in a floating white card on the grey background. Logo mark + wordmark in the header. Cleaner internal hierarchy, premium feel.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px; text-align:center;">Click a concept to select it, or describe what you'd like to combine.</p>

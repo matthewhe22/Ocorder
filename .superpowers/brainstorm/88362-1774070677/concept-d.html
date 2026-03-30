@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept D — Animated Mini-Portal</title>
+<style>
+  :root {
+    --forest: #1c3326;
+    --sage: #4a7255;
+    --cream: #f7f3ec;
+    --sand: #ede8df;
+    --muted: #8a9488;
+    --border: #d8d2c8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    gap: 0;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage);
+    background: rgba(74,114,85,0.12);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+  h2 {
+    font-family: Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 400;
+    color: var(--forest);
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 36px;
+    text-align: center;
+  }
+
+  /* ── layout: label column + portal ── */
+  .layout {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    max-width: 860px;
+    width: 100%;
+  }
+
+  /* ── step labels on the left ── */
+  .steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex-shrink: 0;
+    width: 180px;
+  }
+  .sl-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    opacity: 0.3;
+    transition: opacity 0.4s, transform 0.4s;
+    position: relative;
+  }
+  .sl-item.active {
+    opacity: 1;
+  }
+  .sl-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e0dbd4;
+    color: #999;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.4s, color 0.4s;
+  }
+  .sl-item.active .sl-num {
+    background: var(--forest);
+    color: white;
+  }
+  .sl-item.done .sl-num {
+    background: var(--sage);
+    color: white;
+  }
+  .sl-item.done { opacity: 0.6; }
+  .sl-text strong {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--forest);
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+  .sl-text span {
+    font-size: 0.65rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .sl-vline {
+    position: absolute;
+    left: 13px;
+    top: 38px;
+    width: 2px;
+    height: calc(100% - 10px);
+    background: var(--border);
+  }
+
+  /* ── portal window ── */
+  .portal-wrap {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .portal {
+    width: 380px;
+    background: white;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(28,51,38,0.18);
+    border: 1px solid rgba(28,51,38,0.08);
+  }
+
+  /* header */
+  .p-header {
+    background: var(--forest);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .p-logo {
+    width: 22px;
+    height: 22px;
+    background: var(--sage);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .p-title {
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .p-title span {
+    font-weight: 400;
+    opacity: 0.6;
+    margin-left: 6px;
+    font-size: 0.65rem;
+  }
+
+  /* step bar */
+  .p-stepbar {
+    background: #f5f3ef;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .p-sdot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #ddd;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.4s;
+  }
+  .p-sdot.done { background: var(--sage); color: white; }
+  .p-sdot.curr { background: var(--forest); color: white; box-shadow: 0 0 0 4px rgba(28,51,38,0.15); }
+  .p-sline { flex: 1; height: 1.5px; background: #ddd; transition: background 0.4s; }
+  .p-sline.done { background: rgba(74,114,85,0.4); }
+
+  /* step label */
+  .p-steplabel {
+    padding: 10px 18px 0;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* body */
+  .p-body {
+    padding: 14px 18px 20px;
+    min-height: 230px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* screens */
+  .screen {
+    position: absolute;
+    inset: 14px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    opacity: 0;
+    animation: screenSlide 20s infinite;
+  }
+  .screen:nth-child(1) { animation-delay: 0s; }
+  .screen:nth-child(2) { animation-delay: 5s; }
+  .screen:nth-child(3) { animation-delay: 10s; }
+  .screen:nth-child(4) { animation-delay: 15s; }
+
+  @keyframes screenSlide {
+    0%    { opacity: 0; transform: translateX(24px); }
+    3%    { opacity: 1; transform: translateX(0); }
+    22%   { opacity: 1; transform: translateX(0); }
+    25%   { opacity: 0; transform: translateX(-24px); }
+    100%  { opacity: 0; }
+  }
+
+  .s-heading {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--forest);
+    margin-bottom: 4px;
+  }
+  .s-sub {
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-top: -6px;
+    margin-bottom: 4px;
+  }
+
+  /* search bar */
+  .s-search {
+    height: 36px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: #888;
+  }
+  .s-search .typing {
+    color: var(--ink, #1a1f1c);
+    border-right: 1.5px solid var(--forest);
+    animation: blink 0.8s step-end infinite;
+  }
+  @keyframes blink { 0%, 100% { border-color: var(--forest); } 50% { border-color: transparent; } }
+
+  /* result card */
+  .s-result {
+    border: 1.5px solid var(--border);
+    border-left: 4px solid var(--sage);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px;
+    animation: popIn 0.3s ease 1.2s both;
+  }
+  @keyframes popIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .s-result strong { font-size: 0.82rem; color: var(--forest); display: block; margin-bottom: 3px; }
+  .s-result span { font-size: 0.68rem; color: var(--muted); }
+
+  /* product rows */
+  .s-product {
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+  }
+  .s-product .p-name { font-size: 0.78rem; color: var(--forest); font-weight: 500; }
+  .s-product .p-price { font-size: 0.72rem; color: var(--muted); }
+  .s-product .p-add {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1.5px solid var(--forest);
+    color: var(--forest);
+    background: white;
+    cursor: pointer;
+  }
+  .s-product .p-add.added {
+    background: var(--forest);
+    color: white;
+    border-color: var(--forest);
+  }
+  .s-product.selected { border-color: var(--sage); background: rgba(74,114,85,0.04); }
+
+  /* review table */
+  .s-review-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0ece6;
+    font-size: 0.78rem;
+  }
+  .s-review-row:last-child { border-bottom: none; }
+  .s-review-row .rname { color: #555; }
+  .s-review-row .rprice { color: var(--forest); font-weight: 600; }
+  .s-total {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 2px solid var(--border);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--forest);
+  }
+
+  /* payment */
+  .s-pay-method {
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .s-pay-method.selected { border-color: var(--forest); background: rgba(28,51,38,0.03); }
+  .s-pay-method .pm-icon { font-size: 18px; }
+  .s-pay-method .pm-label { font-size: 0.78rem; font-weight: 600; color: var(--forest); }
+  .s-pay-method .pm-sub { font-size: 0.64rem; color: var(--muted); }
+  .s-pay-method .pm-radio {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+  }
+  .s-pay-method.selected .pm-radio {
+    border-color: var(--forest);
+    background: var(--forest);
+    box-shadow: inset 0 0 0 3px white;
+  }
+
+  /* success */
+  .s-success {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 0;
+  }
+  .tick-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--forest);
+    color: white;
+    font-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: tickPop 0.5s cubic-bezier(.34,1.56,.64,1) 15.3s both;
+  }
+  @keyframes tickPop {
+    0%  { transform: scale(0); opacity: 0; }
+    100%{ transform: scale(1); opacity: 1; }
+  }
+  .s-ok-title { font-size: 1rem; font-weight: 700; color: var(--forest); }
+  .s-ok-ref { font-size: 0.7rem; color: var(--muted); }
+  .s-ok-email { font-size: 0.72rem; color: #555; text-align: center; line-height: 1.5; }
+  .s-ok-tag {
+    background: rgba(74,114,85,0.1);
+    color: var(--sage);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  /* step bar animation state per screen */
+  .stepbar-state { display: none; }
+
+  .concept-tag {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="badge">Concept D</div>
+<h2>See It Before You Start</h2>
+<p class="sub">A live preview of the ordering experience</p>
+
+<div class="layout">
+
+  <!-- Left: step labels -->
+  <div class="steps-list" id="stepsList">
+    <div class="sl-item active" id="sl1">
+      <div class="sl-vline"></div>
+      <div class="sl-num">1</div>
+      <div class="sl-text">
+        <strong>Find Building</strong>
+        <span>Search by address or strata plan</span>
+      </div>
+    </div>
+    <div class="sl-item" id="sl2">
+      <div class="sl-vline"></div>
+      <div class="sl-num">2</div>
+      <div class="sl-text">
+        <strong>Select Products</strong>
+        <span>Certs, registers, keys & fobs</span>
+      </div>
+    </div>
+    <div class="sl-item" id="sl3">
+      <div class="sl-vline"></div>
+      <div class="sl-num">3</div>
+      <div class="sl-text">
+        <strong>Pay Securely</strong>
+        <span>Bank, PayID or Stripe</span>
+      </div>
+    </div>
+    <div class="sl-item" id="sl4">
+      <div class="sl-num">4</div>
+      <div class="sl-text">
+        <strong>Order Confirmed</strong>
+        <span>Certificate issued in 2–3 days</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: portal mockup -->
+  <div class="portal-wrap">
+    <div class="portal">
+
+      <!-- Header -->
+      <div class="p-header">
+        <div class="p-logo"></div>
+        <div class="p-title">TOCS Portal <span id="stepLabel">— Find Your Building</span></div>
+      </div>
+
+      <!-- Step bar -->
+      <div class="p-stepbar" id="stepbar">
+        <div class="p-sdot curr" id="sd1">1</div>
+        <div class="p-sline" id="sl1l"></div>
+        <div class="p-sdot" id="sd2">2</div>
+        <div class="p-sline" id="sl2l"></div>
+        <div class="p-sdot" id="sd3">3</div>
+        <div class="p-sline" id="sl3l"></div>
+        <div class="p-sdot" id="sd4">4</div>
+        <div class="p-sline" id="sl4l"></div>
+        <div class="p-sdot" id="sd5">5</div>
+      </div>
+
+      <div class="p-body">
+
+        <!-- Screen 1: Building search -->
+        <div class="screen">
+          <div class="s-heading">Find Your Building</div>
+          <div class="s-sub">Enter an address or strata plan number</div>
+          <div class="s-search">
+            🔍 <span class="typing">45 Marina Drive, Docklands</span>
+          </div>
+          <div class="s-result">
+            <strong>SP 12345 — Harbourside Residences</strong>
+            <span>45 Marina Drive · 48 lots · 2 Owner Corporations</span>
+          </div>
+        </div>
+
+        <!-- Screen 2: Products -->
+        <div class="screen">
+          <div class="s-heading">Select Products</div>
+          <div class="s-product selected">
+            <div>
+              <div class="p-name">OC Certificate (Full) — Lot 12</div>
+              <div class="p-price">$45.00</div>
+            </div>
+            <div class="p-add added">Added ✓</div>
+          </div>
+          <div class="s-product">
+            <div>
+              <div class="p-name">Insurance Certificate</div>
+              <div class="p-price">$30.00</div>
+            </div>
+            <div class="p-add">+ Add</div>
+          </div>
+          <div class="s-product">
+            <div>
+              <div class="p-name">Owners Register</div>
+              <div class="p-price">$55.00</div>
+            </div>
+            <div class="p-add">+ Add</div>
+          </div>
+        </div>
+
+        <!-- Screen 3: Payment -->
+        <div class="screen">
+          <div class="s-heading">Choose Payment</div>
+          <div style="margin-bottom:2px;">
+            <div class="s-review-row"><span class="rname">OC Certificate (Full) — Lot 12</span><span class="rprice">$45.00</span></div>
+            <div class="s-total"><span>Total</span><span>$45.00</span></div>
+          </div>
+          <div class="s-pay-method selected">
+            <span class="pm-icon">🏦</span>
+            <div><div class="pm-label">Bank Transfer</div><div class="pm-sub">Pay to BSB / account provided</div></div>
+            <div class="pm-radio"></div>
+          </div>
+          <div class="s-pay-method">
+            <span class="pm-icon">💳</span>
+            <div><div class="pm-label">Stripe — Pay Now</div><div class="pm-sub">Visa, Mastercard, Apple Pay</div></div>
+            <div class="pm-radio"></div>
+          </div>
+        </div>
+
+        <!-- Screen 4: Confirmation -->
+        <div class="screen">
+          <div class="s-success">
+            <div class="tick-circle">✓</div>
+            <div class="s-ok-title">Order Confirmed!</div>
+            <div class="s-ok-ref">Order #TOC-2026-00147</div>
+            <div class="s-ok-email">A confirmation has been sent to<br><strong>owner@example.com.au</strong></div>
+            <div class="s-ok-tag">Certificate issued within 2–3 business days</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="concept-tag">Concept D · Animated Mini-Portal Mockup</div>
+
+<script>
+  // Sync the step bar and left label list to match the 20s animation cycle
+  const stepStates = [
+    // [sd1, sd2, sd3, sd4, sd5, sl1l, sl2l, sl3l, sl4l, label, sl-active]
+    { curr: 1, done: [],       label: '— Find Your Building',  active: 'sl1' },
+    { curr: 2, done: [1],      label: '— Select Products',     active: 'sl2' },
+    { curr: 4, done: [1,2,3],  label: '— Payment',             active: 'sl3' },
+    { curr: 5, done: [1,2,3,4],label: '— Confirmed',           active: 'sl4' },
+  ];
+
+  function applyState(idx) {
+    const s = stepStates[idx];
+    for (let i = 1; i <= 5; i++) {
+      const dot = document.getElementById('sd' + i);
+      dot.className = 'p-sdot';
+      if (s.done.includes(i)) dot.classList.add('done');
+      else if (i === s.curr) dot.classList.add('curr');
+    }
+    for (let i = 1; i <= 4; i++) {
+      const line = document.getElementById('sl' + i + 'l');
+      line.className = 'p-sline' + (s.done.includes(i) ? ' done' : '');
+    }
+    document.getElementById('stepLabel').textContent = s.label;
+    document.querySelectorAll('.sl-item').forEach(el => el.classList.remove('active', 'done'));
+    const ids = ['sl1','sl2','sl3','sl4'];
+    ids.forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (id === s.active) el.classList.add('active');
+      else if (stepStates[idx].done.some(d => d === i + 1 || (id === 'sl1' && d >= 1) || (id === 'sl2' && d >= 2) || (id === 'sl3' && d >= 3))) {
+        if (i < stepStates[idx].done.length) el.classList.add('done');
+      }
+    });
+  }
+
+  applyState(0);
+  setTimeout(() => applyState(1), 5000);
+  setTimeout(() => applyState(2), 10000);
+  setTimeout(() => applyState(3), 15000);
+  setInterval(() => {
+    applyState(0);
+    setTimeout(() => applyState(1), 5000);
+    setTimeout(() => applyState(2), 10000);
+    setTimeout(() => applyState(3), 15000);
+  }, 20000);
+</script>
+
+</body>
+</html>

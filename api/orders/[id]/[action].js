@@ -5,35 +5,46 @@
 //                 POST /api/orders/:id/stripe-confirm  (public — no admin auth)
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
-import nodemailer from "nodemailer";
 import Stripe from "stripe";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 
+// ── HTML escape helper ────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 // ── Email builder ─────────────────────────────────────────────────────────────
 function buildCertEmailHtml(order, message, cfg) {
   const tpl = cfg.emailTemplate || {};
   const contact = order.contactInfo || {};
   const lot = order.items?.[0];
-  const raw = (tpl.certificateGreeting || "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team")
-    .replace(/{name}/g, contact.name || "Applicant")
-    .replace(/{lotNumber}/g, lot?.lotNumber || "")
-    .replace(/{address}/g, lot?.planName || "");
-  const bodyText = message || raw;
-  const htmlBody = bodyText.replace(/\n/g, "<br>");
-  const footer = (tpl.footer || "TOCS Owner Corporation Services  |  info@tocs.co").replace(/\n/g, "<br>");
+  const isKeys = order.orderCategory === "keys";
+  const keysDefault = "Dear {name},\n\nPlease find attached your Keys/Fobs/Remotes order documents for {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team";
+  const ocDefault = "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team";
+  const raw = (tpl.certificateGreeting || (isKeys ? keysDefault : ocDefault))
+    .replace(/{name}/g, esc(contact.name || "Applicant"))
+    .replace(/{lotNumber}/g, esc(lot?.lotNumber || ""))
+    .replace(/{address}/g, esc(lot?.planName || ""));
+  const bodyText = message ? esc(message).replace(/\n/g, "<br>") : raw.replace(/\n/g, "<br>");
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1c3326;padding:24px 32px;">
-      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Owner Corporation Services</h1>
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
     </div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">${htmlBody}</p>
+      <p style="margin-top:0;">${bodyText}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
@@ -44,7 +55,7 @@ function buildCertEmailHtml(order, message, cfg) {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const { id, action } = req.query;
@@ -74,7 +85,8 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${order.lotAuthorityFile}"`);
+    const safeFilename = String(order.lotAuthorityFile || "authority").replace(/[^\w.\-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
     return res.send(buf);
   }
@@ -86,7 +98,8 @@ export default async function handler(req, res) {
 
     const { status, note } = req.body || {};
     if (!status) return res.status(400).json({ error: "status is required." });
-    const VALID_STATUSES = ["Pending","Processing","Awaiting Payment","Awaiting Stripe Payment","Paid","Issued","Cancelled","Invoice to be issued","Invoice sent, awaiting payment"];
+    // Must match production server.js status enum exactly
+    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid","Awaiting Stripe Payment"];
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status: "${status}".` });
 
     const data = await readData();
@@ -117,19 +130,18 @@ export default async function handler(req, res) {
     const cfg = await readConfig();
     const smtp = cfg.smtp || {};
     const fromEmail = cfg.orderEmail || "Orders@tocs.co";
+    if (!order.contactInfo?.email) return res.status(400).json({ error: "No email address on this order." });
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 2525,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createTransporter(smtp);
       const tpl = cfg.emailTemplate || {};
-      const subj = (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
+      const isKeys = order.orderCategory === "keys";
+      const subj = isKeys
+        ? `Your Keys/Fobs Order — ${order.id}`
+        : (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
       const mailOpts = {
-        from: `"TOCS Owner Corporation Services" <${fromEmail}>`,
+        from: `"Top Owners Corporation Solution" <${fromEmail}>`,
         to: order.contactInfo.email,
         subject: subj,
         html: buildCertEmailHtml(order, message, cfg),
@@ -145,12 +157,15 @@ export default async function handler(req, res) {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
           if (spEnabled) {
+            const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+            const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+            const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
             const certUrl = await uploadToSharePoint(
               attachment.filename || "certificate.pdf",
               attachment.contentType || "application/pdf",
               attachment.data,
               spConfig,
-              id   // ← per-order subfolder (order ID)
+              spSubFolder
             );
             if (certUrl) {
               data.orders[idx].certificateUrl = certUrl;
@@ -183,32 +198,27 @@ export default async function handler(req, res) {
     const cfg = await readConfig();
     const smtp = cfg.smtp || {};
     const fromEmail = cfg.orderEmail || "Orders@tocs.co";
+    if (!order.contactInfo?.email) return res.status(400).json({ error: "No email address on this order." });
     if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host, port: Number(smtp.port) || 2525,
-        secure: Number(smtp.port) === 465,
-        auth: { user: smtp.user, pass: smtp.pass },
-        tls: { rejectUnauthorized: false },
-      });
+      const transporter = createTransporter(smtp);
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
       const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
-      const bodyText = message || defaultMsg;
-      const htmlBody = bodyText.replace(/\n/g, "<br>");
+      const htmlBody = message ? esc(message).replace(/\n/g, "<br>") : esc(defaultMsg).replace(/\n/g, "<br>");
       const tpl = cfg.emailTemplate || {};
-      const footer = (tpl.footer || "TOCS Owner Corporation Services  |  info@tocs.co").replace(/\n/g, "<br>");
+      const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1c3326;padding:24px 32px;">
-      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Owner Corporation Services</h1>
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
     </div>
     <div style="padding:32px;">
       <p style="margin-top:0;">${htmlBody}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
@@ -216,7 +226,7 @@ export default async function handler(req, res) {
   </div>
 </body></html>`;
       const mailOpts = {
-        from: `"TOCS Owner Corporation Services" <${fromEmail}>`,
+        from: `"Top Owners Corporation Solution" <${fromEmail}>`,
         to: order.contactInfo.email,
         subject: `Invoice for your Keys/Fobs/Remotes Order #${order.id}`,
         html,
@@ -232,12 +242,15 @@ export default async function handler(req, res) {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
           if (spEnabled) {
+            const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+            const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+            const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
             const invoiceUrl = await uploadToSharePoint(
               attachment.filename || "invoice.pdf",
               attachment.contentType || "application/pdf",
               attachment.data,
               spConfig,
-              id   // ← per-order subfolder (order ID)
+              spSubFolder
             );
             if (invoiceUrl) {
               data.orders[idx].invoiceUrl = invoiceUrl;
@@ -247,7 +260,7 @@ export default async function handler(req, res) {
         } catch (e) { console.error("Invoice SharePoint upload failed:", e.message); }
       }
 
-      data.orders[idx].status = "Invoice sent, awaiting payment";
+      data.orders[idx].status = "Pending Payment";
       data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${order.contactInfo.email}` }];
       await writeData(data);
       return res.status(200).json({ ok: true });
@@ -261,7 +274,9 @@ export default async function handler(req, res) {
   // Security: session.metadata.orderId is compared to the URL id to prevent
   // cross-order confirmation attacks. stripeSessionId is read from Redis, never from request body.
   if (action === "stripe-confirm" && req.method === "POST") {
-    if (!process.env.STRIPE_SECRET_KEY) {
+    const cfgForStripe = await readConfig();
+    const stripeKey = cfgForStripe.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
       return res.status(503).json({ error: "Stripe is not configured on this server." });
     }
 
@@ -281,7 +296,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No Stripe session associated with this order." });
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const stripe = new Stripe(stripeKey);
     let session;
     try {
       session = await stripe.checkout.sessions.retrieve(stripeSessionId);
@@ -312,7 +327,7 @@ export default async function handler(req, res) {
     // Send admin + customer emails using shared helpers from _lib/email.js
     // Timeout config: connectionTimeout:8000, socketTimeout:10000, NO greetingTimeout
     // (matches orders/index.js pattern — greetingTimeout causes silent failures with SMTP2GO)
-    const cfg     = await readConfig();
+    const cfg     = cfgForStripe;   // reuse — already fetched above for Stripe key resolution
     const smtp    = cfg.smtp || {};
     const toEmail = cfg.orderEmail || "Orders@tocs.co";
     const confirmedOrder = data.orders[idx];
@@ -387,28 +402,52 @@ export default async function handler(req, res) {
       const authAttachment = (authDoc?.data && authDoc.filename)
         ? [{ filename: authDoc.filename, content: authDoc.data, encoding: "base64", contentType: authDoc.contentType || "application/octet-stream" }]
         : [];
+      const transporter = createTransporter(smtp);
+      const from = `"TOCS Order Portal" <${toEmail}>`;
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[confirmedOrder.orderCategory] || "Order";
+      const lotNumber = confirmedOrder.items?.[0]?.lotNumber || "";
+      const buildingName = confirmedOrder.items?.[0]?.planName || "";
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
+        .replace("{orderType}", orderType)
+        .replace("{orderId}", confirmedOrder.id || "")
+        .replace("{total}", confirmedOrder.total != null ? `$${confirmedOrder.total.toFixed(2)}` : "")
+        .replace("{lotNumber}", lotNumber)
+        .replace("{buildingName}", buildingName)
+        .replace("{address}", buildingName);
       const emailJobs = [
-        createTransporter(smtp).sendMail({
-          from: `"TOCS Order Platform" <${toEmail}>`,
-          to: toEmail,
-          subject: `Payment Confirmed — Order #${id} — $${(confirmedOrder.total||0).toFixed(2)} AUD`,
-          html: buildOrderEmailHtml(confirmedOrder),
+        transporter.sendMail({
+          from, to: toEmail,
+          subject: adminSubject,
+          html: buildOrderEmailHtml(confirmedOrder, cfgForStripe),
           attachments: authAttachment,
         }).catch(e => console.error("Admin stripe email failed:", e.message)),
       ];
       if (confirmedOrder.contactInfo?.email) {
         emailJobs.push(
-          createTransporter(smtp).sendMail({
-            from: `"TOCS Order Platform" <${toEmail}>`,
-            to: confirmedOrder.contactInfo.email,
+          transporter.sendMail({
+            from, to: confirmedOrder.contactInfo.email,
             subject: `Payment Confirmed — Order ${id}`,
             html: buildCustomerEmailHtml(confirmedOrder, cfg),
           }).catch(e => console.error("Customer stripe email failed:", e.message))
         );
       }
-      await Promise.allSettled(emailJobs).then(results => {
+      await Promise.allSettled(emailJobs).then(async results => {
         const sent = results.filter(r => r.status === "fulfilled").length;
         console.log(`Stripe-confirm emails: ${sent}/${results.length} sent for order ${id}`);
+        const labels = ["Admin notification", "Customer confirmation"];
+        const failures = results
+          .map((r, i) => r.status === "rejected" ? `${labels[i] || "Email"} failed: ${r.reason?.message || "unknown"}` : null)
+          .filter(Boolean);
+        if (failures.length > 0) {
+          try {
+            const fresh = await readData();
+            const oi = fresh.orders.find(o => o.id === id);
+            if (oi) {
+              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed: " + msg, note: "" }));
+              await writeData(fresh);
+            }
+          } catch (e) { console.error("Failed to persist email failure to audit log:", e.message); }
+        }
       });
     }
 
@@ -426,6 +465,45 @@ export default async function handler(req, res) {
   }
   // ── END stripe-confirm ─────────────────────────────────────────────────────
 
+  // ── POST /api/orders/:id/stripe-cancel ──────────────────────────────────────
+  // PUBLIC — called by the browser when the customer cancels or abandons Stripe checkout.
+  // Verifies the Stripe session is NOT paid before removing the phantom order from Redis.
+  if (action === "stripe-cancel" && req.method === "POST") {
+    const data = await readData();
+    const idx  = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(200).json({ ok: true }); // already gone — idempotent
+
+    const order = data.orders[idx];
+
+    // Only allow cancellation of Stripe-pending orders
+    if (order.payment !== "stripe" || order.status === "Paid") {
+      return res.status(409).json({ error: "Order cannot be cancelled via this endpoint." });
+    }
+
+    // Double-check with Stripe that payment was not actually completed
+    const cfg = await readConfig();
+    const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
+    if (stripeKey && order.stripeSessionId) {
+      try {
+        const stripe = new Stripe(stripeKey);
+        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+        if (session.payment_status === "paid") {
+          // Race condition: payment completed just as user hit cancel — honour the payment
+          return res.status(409).json({ error: "Payment was already completed. Refresh to see your confirmation." });
+        }
+      } catch (e) {
+        // Stripe API unavailable — proceed with cancellation conservatively
+        console.warn(`stripe-cancel: could not verify session for order ${id}:`, e.message);
+      }
+    }
+
+    data.orders.splice(idx, 1);
+    await writeData(data);
+    console.log(`stripe-cancel: removed pending order ${id}`);
+    return res.status(200).json({ ok: true });
+  }
+  // ── END stripe-cancel ──────────────────────────────────────────────────────
+
   // ── DELETE /api/orders/:id/delete ───────────────────────────────────────────
   // Admin only. Permanently removes an order from Redis. No undo.
   if (action === "delete" && req.method === "DELETE") {
@@ -435,6 +513,11 @@ export default async function handler(req, res) {
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
+
+    const orderToDelete = data.orders[idx];
+    if (orderToDelete.status !== "Cancelled") {
+      return res.status(409).json({ error: "Only cancelled orders can be deleted. Cancel the order first." });
+    }
 
     data.orders.splice(idx, 1);
     await writeData(data);

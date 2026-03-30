@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B + C Combined Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #b8b8b7;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 20px 40px;
+  }
+
+  .page-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  /* ── Portal shell ── */
+  .portal {
+    width: 100%;
+    max-width: 700px;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  }
+
+  /* ── HERO (from B) ── */
+  .hero {
+    background: linear-gradient(140deg, #1c3326 0%, #2a4d38 55%, #1e3a2c 100%);
+    padding: 32px 36px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(74,114,85,0.25) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -20px; left: 20%;
+    width: 150px; height: 150px;
+    background: radial-gradient(circle, rgba(74,114,85,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .hero-icon {
+    width: 44px; height: 44px;
+    background: rgba(255,255,255,0.1);
+    border: 1.5px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .hero-wordmark h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px;
+    font-weight: 400;
+    color: white;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+  .hero-wordmark p {
+    font-size: 10px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-top: 3px;
+  }
+
+  /* Search bar in hero (from B) */
+  .hero-search {
+    background: rgba(255,255,255,0.1);
+    border: 1.5px solid rgba(255,255,255,0.18);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    backdrop-filter: blur(4px);
+  }
+  .hero-search-icon {
+    font-size: 14px;
+    opacity: 0.6;
+  }
+  .hero-search-text {
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    flex: 1;
+  }
+  .hero-search-kbd {
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    padding: 2px 6px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── ELEVATED CARD (from C) ── */
+  .card-body-main {
+    background: white;
+    padding: 24px 28px 28px;
+  }
+
+  /* Two panels */
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1.5px solid #e4ede7;
+    box-shadow: 0 2px 14px rgba(28,51,38,0.07);
+    margin-bottom: 20px;
+  }
+  .panel-left {
+    background: #cececd;
+    padding: 18px 20px 20px;
+  }
+  .panel-divider {
+    background: #d4e2d8;
+  }
+  .panel-right {
+    background: white;
+    padding: 18px 20px 20px;
+  }
+  .panel-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #4a7255;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .panel-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #d4e2d8;
+  }
+
+  /* Slide preview inside left panel */
+  .slide-preview {
+    background: white;
+    border-radius: 8px;
+    border: 1.5px solid #e8e3dc;
+    padding: 16px 14px 14px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(28,51,38,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .slide-preview::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #4a7255, #6a9c7a);
+    width: 25%;
+    border-radius: 0 2px 2px 0;
+  }
+  .slide-step { font-size: 8px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #4a7255; margin-bottom: 6px; }
+  .slide-icon { font-size: 32px; margin-bottom: 6px; }
+  .slide-title { font-size: 13px; font-weight: 700; color: #1c3326; margin-bottom: 4px; }
+  .slide-desc { font-size: 10px; color: #8a9488; line-height: 1.5; }
+  .slide-dots {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 12px;
+  }
+  .slide-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #d8d2c8;
+  }
+  .slide-dot.active {
+    background: #1c3326;
+    transform: scale(1.3);
+  }
+
+  /* Right panel — building search */
+  .building-search {
+    background: #f7f3ec;
+    border: 1.5px solid #e8e3dc;
+    border-radius: 7px;
+    padding: 9px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .bsearch-icon { font-size: 13px; color: #8a9488; }
+  .bsearch-text { font-size: 12px; color: #b0a898; flex: 1; }
+  .building-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .building-chip {
+    background: #f7f3ec;
+    border: 1.5px solid #e8e3dc;
+    border-radius: 6px;
+    padding: 7px 9px;
+    font-size: 10px;
+    color: #4a6654;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .building-chip-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #4a7255;
+    flex-shrink: 0;
+  }
+
+  /* Category selector */
+  .cat-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #8a9488;
+    margin-bottom: 10px;
+  }
+  .cat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .cat-option {
+    border: 1.5px solid #e4ede7;
+    border-radius: 9px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cat-option.selected {
+    border-color: #1c3326;
+    background: #f0f5f1;
+  }
+  .cat-icon { font-size: 22px; }
+  .cat-name { font-size: 13px; font-weight: 600; color: #1c3326; }
+  .cat-desc { font-size: 10px; color: #8a9488; margin-top: 1px; }
+
+  /* Continue button */
+  .continue-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #1c3326 0%, #2a4d38 100%);
+    color: white;
+    border: none;
+    border-radius: 9px;
+    padding: 14px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(28,51,38,0.28);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .continue-btn .arrow { font-size: 16px; }
+
+  /* Footer */
+  .portal-footer {
+    background: #cececd;
+    text-align: center;
+    padding: 12px 20px;
+    font-size: 11px;
+    color: #8a8a88;
+    border-top: 1px solid #d0d0ce;
+  }
+  .portal-footer a { color: #8a8a88; }
+
+  /* Note strip */
+  .note-strip {
+    width: 100%;
+    max-width: 700px;
+    margin-top: 20px;
+    background: rgba(28,51,38,0.08);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.6;
+  }
+  .note-strip strong { color: white; }
+</style>
+</head>
+<body>
+
+<div class="page-label">B + C Combined — Full Preview</div>
+
+<div class="portal">
+
+  <!-- HERO from B -->
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-icon">🌿</div>
+      <div class="hero-wordmark">
+        <h1>TOCS Order Portal</h1>
+        <p>Owners Corporation Solutions</p>
+      </div>
+    </div>
+    <div class="hero-search">
+      <span class="hero-search-icon">🔍</span>
+      <span class="hero-search-text">Search for your building or strata plan…</span>
+      <span class="hero-search-kbd">Type to search</span>
+    </div>
+  </div>
+
+  <!-- ELEVATED CARD from C -->
+  <div class="card-body-main">
+
+    <!-- Two panels: How It Works + results -->
+    <div class="panels">
+      <div class="panel-left">
+        <div class="panel-label">How It Works</div>
+        <div class="slide-preview">
+          <div class="slide-step">Step 1 of 4</div>
+          <div class="slide-icon">🏢</div>
+          <div class="slide-title">Find Your Building</div>
+          <div class="slide-desc">Search by strata plan or address</div>
+          <div class="slide-dots">
+            <div class="slide-dot active"></div>
+            <div class="slide-dot"></div>
+            <div class="slide-dot"></div>
+            <div class="slide-dot"></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-divider"></div>
+      <div class="panel-right">
+        <div class="panel-label">Your Building</div>
+        <div class="building-search">
+          <span class="bsearch-icon">🔍</span>
+          <span class="bsearch-text">Showing results…</span>
+        </div>
+        <div class="building-grid">
+          <div class="building-chip"><div class="building-chip-dot"></div>The Horizon</div>
+          <div class="building-chip"><div class="building-chip-dot"></div>Park Central</div>
+          <div class="building-chip"><div class="building-chip-dot"></div>Riverside Apt</div>
+          <div class="building-chip"><div class="building-chip-dot"></div>City Gardens</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category selector with icons (from C) -->
+    <div class="cat-label">What do you need?</div>
+    <div class="cat-grid">
+      <div class="cat-option selected">
+        <div class="cat-icon">📄</div>
+        <div>
+          <div class="cat-name">OC Certificates</div>
+          <div class="cat-desc">Strata title documents</div>
+        </div>
+      </div>
+      <div class="cat-option">
+        <div class="cat-icon">🔑</div>
+        <div>
+          <div class="cat-name">Keys & Fobs</div>
+          <div class="cat-desc">Access devices & swipes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Continue -->
+    <button class="continue-btn">
+      Continue <span class="arrow">→</span>
+    </button>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="portal-footer">
+    <a href="#">Privacy Policy</a> · TOCS Owner Corporation Solutions
+  </div>
+
+</div>
+
+<div class="note-strip">
+  <strong>What's combined:</strong> The dark green hero header + search bar from B · The white elevated card layout, logo mark, icon category selector, and gradient continue button from C · "How It Works" left panel background now matches the page · Subtitle "Owners Corporation Certificate" removed · Footer updated to "Solutions"
+</div>
+
+</body>
+</html>

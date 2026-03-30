@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept C v2 — Order Something</title>
+<style>
+  :root {
+    --forest: #1c3326;
+    --sage: #4a7255;
+    --cream: #f7f3ec;
+    --muted: #8a9488;
+    --border: #d8d2c8;
+    --border2: #eae5de;
+    --sage-tint: #f0f5f1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+  }
+
+  /* ── simulated portal context ── */
+  .portal-context {
+    width: 100%;
+    max-width: 560px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(28,51,38,0.12);
+    overflow: hidden;
+  }
+
+  .portal-header {
+    background: var(--forest);
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--sage); flex-shrink: 0; }
+  .portal-title { color: white; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .portal-body {
+    padding: 24px 28px 28px;
+  }
+
+  /* ── small label ── */
+  .section-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* ── STORY WIDGET ── */
+  .story-wrap {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+    border: 1.5px solid var(--border2);
+    box-shadow: 0 2px 10px rgba(28,51,38,0.07);
+    margin-bottom: 20px;
+    height: 220px;
+  }
+
+  /* progress bar */
+  .story-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--border2);
+    z-index: 5;
+  }
+  .story-bar-fill {
+    height: 100%;
+    background: var(--sage);
+    width: 0%;
+    animation: storyProgress 16s linear infinite;
+  }
+  @keyframes storyProgress {
+    0%   { width: 0%; }
+    99%  { width: 100%; }
+    100% { width: 0%; }
+  }
+
+  /* slides */
+  .story-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px 32px 44px;
+    opacity: 0;
+    animation: storyFade 16s infinite;
+  }
+  .story-slide:nth-child(2) { animation-delay: 4s; }
+  .story-slide:nth-child(3) { animation-delay: 8s; }
+  .story-slide:nth-child(4) { animation-delay: 12s; }
+
+  @keyframes storyFade {
+    0%    { opacity: 0; transform: scale(0.96) translateY(8px); }
+    4%    { opacity: 1; transform: scale(1) translateY(0); }
+    22%   { opacity: 1; transform: scale(1); }
+    26%   { opacity: 0; transform: scale(1.01) translateY(-4px); }
+    100%  { opacity: 0; }
+  }
+
+  /* subtle tint per slide */
+  .slide-1 { background: linear-gradient(160deg, #f0f5f2 0%, white 55%); }
+  .slide-2 { background: linear-gradient(160deg, #f4f2ed 0%, white 55%); }
+  .slide-3 { background: linear-gradient(160deg, #eef3f5 0%, white 55%); }
+  .slide-4 { background: linear-gradient(160deg, #f0f5f0 0%, white 55%); }
+
+  .story-step {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--sage);
+  }
+  .story-icon {
+    font-size: 54px;
+    line-height: 1;
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,0.1));
+  }
+  .story-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--forest);
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+  .story-desc {
+    font-size: 0.77rem;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.55;
+    max-width: 260px;
+  }
+
+  /* dots */
+  .story-dots {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 5;
+  }
+  .sdot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border2);
+    animation: dotActive 16s infinite;
+  }
+  .sdot:nth-child(2) { animation-delay: 4s; }
+  .sdot:nth-child(3) { animation-delay: 8s; }
+  .sdot:nth-child(4) { animation-delay: 12s; }
+  @keyframes dotActive {
+    0%, 4%   { background: var(--forest); transform: scale(1.4); }
+    26%, 100% { background: var(--border2); transform: scale(1); }
+  }
+
+  /* arrows */
+  .story-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--forest);
+    cursor: pointer;
+    z-index: 10;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    user-select: none;
+  }
+  .arrow-l { left: -15px; }
+  .arrow-r { right: -15px; }
+
+  /* ── search field below (context) ── */
+  .find-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .search-box {
+    height: 44px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 10px;
+    color: #aaa;
+    font-size: 0.85rem;
+  }
+
+  /* ── corner label ── */
+  .concept-tag {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="portal-context">
+  <div class="portal-header">
+    <div class="logo-dot"></div>
+    <div class="portal-title">TOCS Order Platform</div>
+  </div>
+
+  <div class="portal-body">
+
+    <!-- label -->
+    <div class="section-label">How it works</div>
+
+    <!-- story widget -->
+    <div style="position:relative; margin-bottom: 20px;">
+      <div class="story-wrap">
+        <div class="story-bar"><div class="story-bar-fill"></div></div>
+
+        <!-- Slide 1 -->
+        <div class="story-slide slide-1">
+          <div class="story-step">Step 1 of 4</div>
+          <div class="story-icon">🏢</div>
+          <div class="story-title">Find Your Property</div>
+          <div class="story-desc">Search by address or strata plan number</div>
+        </div>
+
+        <!-- Slide 2 -->
+        <div class="story-slide slide-2">
+          <div class="story-step">Step 2 of 4</div>
+          <div class="story-icon">🛒</div>
+          <div class="story-title">Pick What You Need</div>
+          <div class="story-desc">Certificates · Keys · Fobs · Swipes & more</div>
+        </div>
+
+        <!-- Slide 3 -->
+        <div class="story-slide slide-3">
+          <div class="story-step">Step 3 of 4</div>
+          <div class="story-icon">💳</div>
+          <div class="story-title">Pay Your Way</div>
+          <div class="story-desc">Bank transfer · PayID · Stripe</div>
+        </div>
+
+        <!-- Slide 4 -->
+        <div class="story-slide slide-4">
+          <div class="story-step">Step 4 of 4</div>
+          <div class="story-icon">📬</div>
+          <div class="story-title">We Handle the Rest</div>
+          <div class="story-desc">Issued & delivered within 2–3 business days</div>
+        </div>
+
+        <div class="story-dots">
+          <div class="sdot"></div>
+          <div class="sdot"></div>
+          <div class="sdot"></div>
+          <div class="sdot"></div>
+        </div>
+      </div>
+
+      <div class="story-arrow arrow-l">‹</div>
+      <div class="story-arrow arrow-r">›</div>
+    </div>
+
+    <!-- search context below -->
+    <div class="find-label">Find Your Building</div>
+    <div class="search-box">
+      🔍 &nbsp;Search by address or strata plan…
+    </div>
+
+  </div>
+</div>
+
+<div class="concept-tag">Concept C v2 · Updated Design</div>
+
+</body>
+</html>

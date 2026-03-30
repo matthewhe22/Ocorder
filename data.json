@@ -1,0 +1,505 @@
+{
+  "strataPlans": [
+    {
+      "id": "SP12345",
+      "name": "Avant",
+      "address": "Avant",
+      "lots": [
+        {
+          "id": "L1",
+          "number": "Lot 1",
+          "level": "Ground",
+          "type": "Residential",
+          "ownerCorps": [
+            "OC-A",
+            "OC-B"
+          ]
+        },
+        {
+          "id": "L2",
+          "number": "Lot 2",
+          "level": "Level 1",
+          "type": "Residential",
+          "ownerCorps": [
+            "OC-A"
+          ]
+        },
+        {
+          "id": "L3",
+          "number": "Lot 3",
+          "level": "Level 2",
+          "type": "Residential",
+          "ownerCorps": [
+            "OC-A"
+          ]
+        },
+        {
+          "id": "L4",
+          "number": "Lot 4",
+          "level": "Level 3",
+          "type": "Residential",
+          "ownerCorps": [
+            "OC-A",
+            "OC-B"
+          ]
+        },
+        {
+          "id": "L5",
+          "number": "Lot 5",
+          "level": "Level 4",
+          "type": "Commercial",
+          "ownerCorps": [
+            "OC-B"
+          ]
+        },
+        {
+          "id": "L6",
+          "number": "Lot 6",
+          "level": "Level 5",
+          "type": "Commercial",
+          "ownerCorps": [
+            "OC-B"
+          ]
+        },
+        {
+          "id": "L7",
+          "number": "Lot 7 (Parking)",
+          "level": "Basement",
+          "type": "Parking",
+          "ownerCorps": [
+            "OC-A",
+            "OC-B"
+          ]
+        }
+      ],
+      "ownerCorps": {
+        "OC-A": {
+          "name": "Owner Corporation 1",
+          "levy": 1200
+        },
+        "OC-B": {
+          "name": "Owner Corporation 2",
+          "levy": 2400
+        }
+      },
+      "products": [
+        {
+          "id": "P1",
+          "name": "OC Certificate — Standard",
+          "description": "s151 SMA Owner Corporation Certificate",
+          "price": 220,
+          "secondaryPrice": 150,
+          "turnaround": "5 business days",
+          "perOC": true
+        },
+        {
+          "id": "P2",
+          "name": "OC Certificate — Urgent",
+          "description": "Priority processing, 24–48 hour turnaround",
+          "price": 385,
+          "secondaryPrice": 280,
+          "turnaround": "1–2 business days",
+          "perOC": true
+        },
+        {
+          "id": "P4",
+          "name": "Insurance Certificate of Currency",
+          "description": "Current building insurance details and certificate",
+          "price": 0,
+          "turnaround": "2 business days",
+          "perOC": false
+        }
+      ],
+      "active": true
+    }
+  ],
+  "orders": [
+    {
+      "id": "TOCS-MN1GGYU8-LNX",
+      "date": "2026-03-22T07:48:55.520Z",
+      "contactInfo": {
+        "name": "dsaf",
+        "email": "matthew.he22@gmail.com",
+        "phone": "0411213333",
+        "companyName": "hfj",
+        "applicantType": "agent",
+        "ownerName": ""
+      },
+      "items": [
+        {
+          "key": "P1-OC-A-L4",
+          "productId": "P1",
+          "productName": "OC Certificate — Standard",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L4",
+          "lotNumber": "Lot 4",
+          "ocId": "OC-A",
+          "ocName": "Owner Corporation A — Residential",
+          "price": 220,
+          "turnaround": "5 business days",
+          "isSecondaryOC": false
+        },
+        {
+          "key": "P1-OC-B-L4",
+          "productId": "P1",
+          "productName": "OC Certificate — Standard",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L4",
+          "lotNumber": "Lot 4",
+          "ocId": "OC-B",
+          "ocName": "Owner Corporation B — Commercial",
+          "price": 150,
+          "turnaround": "5 business days",
+          "isSecondaryOC": true
+        },
+        {
+          "key": "P2-OC-A-L4",
+          "productId": "P2",
+          "productName": "OC Certificate — Urgent",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L4",
+          "lotNumber": "Lot 4",
+          "ocId": "OC-A",
+          "ocName": "Owner Corporation A — Residential",
+          "price": 385,
+          "turnaround": "1–2 business days",
+          "isSecondaryOC": false
+        },
+        {
+          "key": "P2-OC-B-L4",
+          "productId": "P2",
+          "productName": "OC Certificate — Urgent",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L4",
+          "lotNumber": "Lot 4",
+          "ocId": "OC-B",
+          "ocName": "Owner Corporation B — Commercial",
+          "price": 280,
+          "turnaround": "1–2 business days",
+          "isSecondaryOC": true
+        }
+      ],
+      "total": 1035,
+      "selectedShipping": {
+        "id": "ship-1774165640522",
+        "name": "pickup",
+        "cost": 0,
+        "requiresAddress": true
+      },
+      "payment": "bank",
+      "status": "Awaiting Payment",
+      "lotAuthFileName": "order test_sample.pdf",
+      "orderCategory": "oc",
+      "lotAuthorityFile": "TOCS-MN1GGYU8-LNX-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-22T07:48:55.641Z",
+          "action": "Order created",
+          "note": "Customer: dsaf"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MN1B05SD-0U1",
+      "date": "2026-03-22T05:15:53.293Z",
+      "contactInfo": {
+        "name": "xa",
+        "email": "matthew.he22@gmail.com",
+        "phone": "0122121111",
+        "companyName": "",
+        "applicantType": "owner",
+        "ownerName": "xa"
+      },
+      "items": [
+        {
+          "key": "P1-OC-A-L4",
+          "productId": "P1",
+          "productName": "OC Certificate — Standard",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L4",
+          "lotNumber": "Lot 4",
+          "ocId": "OC-A",
+          "ocName": "Owner Corporation A — Residential",
+          "price": 220,
+          "turnaround": "5 business days",
+          "isSecondaryOC": false
+        },
+        {
+          "key": "P1-OC-B-L4",
+          "productId": "P1",
+          "productName": "OC Certificate — Standard",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L4",
+          "lotNumber": "Lot 4",
+          "ocId": "OC-B",
+          "ocName": "Owner Corporation B — Commercial",
+          "price": 150,
+          "turnaround": "5 business days",
+          "isSecondaryOC": true
+        }
+      ],
+      "total": 390,
+      "selectedShipping": {
+        "id": "ship-exp",
+        "name": "Express Post",
+        "cost": 20
+      },
+      "payment": "stripe",
+      "status": "Awaiting Stripe Payment",
+      "lotAuthFileName": "order test_sample.pdf",
+      "orderCategory": "oc",
+      "lotAuthorityFile": "TOCS-MN1B05SD-0U1-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-22T05:15:53.395Z",
+          "action": "Order created",
+          "note": "Customer: xa"
+        }
+      ]
+    },
+    {
+      "id": "GHOST-TEST-LOCAL",
+      "payment": "stripe",
+      "total": 55,
+      "status": "Awaiting Stripe Payment",
+      "items": [
+        {
+          "productName": "Test",
+          "price": 55
+        }
+      ],
+      "contactInfo": {
+        "name": "Ghost"
+      },
+      "auditLog": [
+        {
+          "ts": "2026-03-19T21:03:58.397Z",
+          "action": "Order created",
+          "note": "Customer: Ghost"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-TEST-SP02",
+      "date": "2026-03-19T12:00:00.000Z",
+      "status": "Pending",
+      "payment": "bank",
+      "orderCategory": "oc-certificates",
+      "total": 220,
+      "contactInfo": {
+        "name": "SP Test",
+        "email": "test@example.com",
+        "phone": "0400000000",
+        "companyName": "Test Co"
+      },
+      "items": [
+        {
+          "productId": "P1",
+          "productName": "OC Certificate - Standard",
+          "ocId": "OC-A",
+          "ocName": "OC-A",
+          "planId": "SP12345",
+          "planName": "Test Plan",
+          "price": 220,
+          "turnaround": "5 business days"
+        }
+      ],
+      "auditLog": [
+        {
+          "ts": "2026-03-19T11:21:14.988Z",
+          "action": "Order created",
+          "note": "Customer: SP Test"
+        }
+      ],
+      "lotAuthorityFile": "TOCS-TEST-SP02-lot-authority.pdf"
+    },
+    {
+      "id": "TOCS-TEST-SP01",
+      "date": "2026-03-19T12:00:00.000Z",
+      "status": "Pending",
+      "payment": "bank",
+      "orderCategory": "oc-certificates",
+      "total": 220,
+      "contactInfo": {
+        "name": "SP Test",
+        "email": "test@example.com",
+        "phone": "0400000000",
+        "companyName": "Test Co"
+      },
+      "items": [
+        {
+          "productId": "P1",
+          "productName": "OC Certificate - Standard",
+          "ocId": "OC-A",
+          "ocName": "OC-A",
+          "planId": "SP12345",
+          "planName": "Test Plan",
+          "price": 220,
+          "turnaround": "5 business days"
+        }
+      ],
+      "auditLog": [
+        {
+          "ts": "2026-03-19T11:20:21.641Z",
+          "action": "Order created",
+          "note": "Customer: SP Test"
+        }
+      ],
+      "lotAuthorityFile": "TOCS-TEST-SP01-lot-authority.pdf"
+    },
+    {
+      "id": "TOCS-MMX9XKMC-VU5",
+      "date": "2026-03-19T09:34:48.228Z",
+      "contactInfo": {
+        "name": "m",
+        "email": "matthew.he22@gmail.com",
+        "phone": "",
+        "companyName": "fff"
+      },
+      "items": [
+        {
+          "key": "K1-null-L2-keys",
+          "productId": "K1",
+          "productName": "Building Entry Key",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L2",
+          "lotNumber": "Lot 2",
+          "ocId": null,
+          "ocName": null,
+          "price": 0,
+          "turnaround": "2–3 business days",
+          "qty": 1
+        }
+      ],
+      "total": 0,
+      "payment": "invoice",
+      "status": "Invoice to be issued",
+      "lotAuthFileName": "order test_sample.pdf",
+      "orderCategory": "keys",
+      "lotAuthorityFile": "TOCS-MMX9XKMC-VU5-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-19T09:34:48.331Z",
+          "action": "Order created",
+          "note": "Customer: m"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MMR51MWK-A54",
+      "date": "2026-03-15T02:31:22.676Z",
+      "contactInfo": {
+        "name": "hello",
+        "email": "matthew.he22@gmail.com",
+        "phone": "",
+        "companyName": "test"
+      },
+      "items": [
+        {
+          "key": "K1-null-L2-keys",
+          "productId": "K1",
+          "productName": "Building Entry Key",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L2",
+          "lotNumber": "Lot 2",
+          "ocId": null,
+          "ocName": null,
+          "price": 0,
+          "turnaround": "2–3 business days",
+          "qty": 1
+        },
+        {
+          "key": "K2-null-L2-keys",
+          "productId": "K2",
+          "productName": "Car Park Fob",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L2",
+          "lotNumber": "Lot 2",
+          "ocId": null,
+          "ocName": null,
+          "price": 0,
+          "turnaround": "2–3 business days",
+          "qty": 1
+        },
+        {
+          "key": "K3-null-L2-keys",
+          "productId": "K3",
+          "productName": "Garage Remote",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L2",
+          "lotNumber": "Lot 2",
+          "ocId": null,
+          "ocName": null,
+          "price": 0,
+          "turnaround": "3–5 business days",
+          "qty": 1
+        }
+      ],
+      "total": 0,
+      "payment": "invoice",
+      "status": "Invoice to be issued",
+      "lotAuthFileName": "order test_sample.pdf",
+      "orderCategory": "keys",
+      "lotAuthorityFile": "TOCS-MMR51MWK-A54-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-15T02:31:23.200Z",
+          "action": "Order created",
+          "note": "Customer: hello"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MMO002PP-6D6",
+      "date": "2026-03-12T21:46:53.245Z",
+      "contactInfo": {
+        "name": "Jonh Smith",
+        "email": "matthew.he@tocs.co",
+        "phone": "0412720989"
+      },
+      "items": [
+        {
+          "key": "P1-OC-A-L2",
+          "productId": "P1",
+          "productName": "OC Certificate — Standard",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L2",
+          "lotNumber": "Lot 2",
+          "ocId": "OC-A",
+          "ocName": "Owner Corporation A — Residential",
+          "price": 220,
+          "turnaround": "5 business days",
+          "isSecondaryOC": false
+        },
+        {
+          "key": "P2-OC-A-L2",
+          "productId": "P2",
+          "productName": "OC Certificate — Urgent",
+          "planId": "SP12345",
+          "planName": "Harbour View Residences",
+          "lotId": "L2",
+          "lotNumber": "Lot 2",
+          "ocId": "OC-A",
+          "ocName": "Owner Corporation A — Residential",
+          "price": 385,
+          "turnaround": "1–2 business days",
+          "isSecondaryOC": false
+        }
+      ],
+      "total": 605,
+      "payment": "bank",
+      "status": "Awaiting Payment"
+    }
+  ]
+}

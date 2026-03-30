@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logo Top Left — v2</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@500;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #cececd;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 0 60px;
+  }
+
+  /* ── Top nav — logo top left ── */
+  .topbar {
+    width: 100%;
+    background: white;
+    padding: 0 40px;
+    height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e4e4e0;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+    margin-bottom: 28px;
+  }
+  /* TOCS logo — top left */
+  .tocs-nav-logo {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .tocs-wordmark {
+    height: 28px;
+  }
+  .topbar-divider {
+    width: 1px; height: 26px; background: #e0e0dc; margin: 0 4px;
+  }
+  .topbar-sub {
+    font-size: 10px; font-weight: 500; color: #9a9a90;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .topbar-right {
+    font-size: 11px; color: #9a9a90;
+    display: flex; gap: 20px; align-items: center;
+  }
+  .topbar-link { color: #1c3326; font-weight: 600; font-size: 12px; cursor: pointer; }
+
+  /* ── Content container ── */
+  .container {
+    width: 100%; max-width: 760px; padding: 0 24px;
+  }
+
+  /* ── Page title block (replaces hero) ── */
+  .page-title-block {
+    background: white;
+    border-radius: 16px;
+    padding: 36px 36px 32px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border: 1px solid #e4e4e0;
+  }
+  .page-eyebrow {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.2em;
+    text-transform: uppercase; color: #4a7255; margin-bottom: 10px;
+  }
+  .page-h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 38px; font-weight: 400; color: #1a1f1a;
+    line-height: 1.08; letter-spacing: -0.01em; margin-bottom: 10px;
+  }
+  .page-sub {
+    font-size: 13px; color: #8a8a80; font-weight: 300;
+    line-height: 1.6; margin-bottom: 24px;
+  }
+  /* Search bar */
+  .search-bar {
+    background: #f6f6f3; border: 1.5px solid #deded8; border-radius: 100px;
+    padding: 12px 14px 12px 20px;
+    display: flex; align-items: center; gap: 10px;
+    transition: all 0.2s;
+  }
+  .search-bar:hover { border-color: #4a7255; background: white; box-shadow: 0 4px 18px rgba(28,51,38,0.08); }
+  .search-icon { font-size: 14px; color: #9a9a8e; }
+  .search-text { font-size: 14px; color: #aaaa9e; flex: 1; font-weight: 300; }
+  .search-btn {
+    background: #1c3326; color: white; border-radius: 100px;
+    padding: 7px 18px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+
+  /* ── How it works ── */
+  .hiw-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 2px; border-radius: 14px; overflow: hidden;
+    background: #c8c8c5; margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  }
+  .hiw-cell {
+    background: white; padding: 20px 16px 18px;
+    display: flex; flex-direction: column; gap: 8px; position: relative;
+  }
+  .hiw-cell.active { background: #1c3326; }
+  .hiw-ghost {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 44px; font-weight: 700; color: #f0f0ed;
+    position: absolute; top: 10px; right: 12px; line-height: 1;
+  }
+  .hiw-cell.active .hiw-ghost { color: rgba(255,255,255,0.07); }
+  .hiw-icon { font-size: 22px; position: relative; z-index: 1; }
+  .hiw-name { font-size: 12px; font-weight: 600; color: #1a1f1a; line-height: 1.3; position: relative; z-index: 1; }
+  .hiw-cell.active .hiw-name { color: white; }
+  .hiw-desc { font-size: 10px; color: #8a8a80; line-height: 1.5; font-weight: 300; position: relative; z-index: 1; }
+  .hiw-cell.active .hiw-desc { color: rgba(255,255,255,0.5); }
+
+  /* ── Two column: search results + category ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  .card {
+    background: white; border: 1px solid #e4e4e0; border-radius: 14px;
+    overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .card-head {
+    padding: 12px 18px; background: #f6f6f3; border-bottom: 1px solid #ebebе6;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+    text-transform: uppercase; color: #6a6a60;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-head-dot { width: 7px; height: 7px; border-radius: 50%; background: #1c3326; }
+  .card-body { padding: 16px; }
+
+  /* Result pills */
+  .result-pill {
+    border: 1.5px solid #e4e4e0; border-radius: 8px; padding: 9px 12px;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 7px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .result-pill:hover { border-color: #4a7255; background: #f5fbf5; }
+  .result-pill.active { border-color: #1c3326; background: #f0f6f2; }
+  .result-dot { width: 6px; height: 6px; border-radius: 50%; background: #c0d8c8; flex-shrink: 0; }
+  .result-pill.active .result-dot { background: #4a7255; }
+  .result-name { font-size: 13px; font-weight: 500; color: #1a1f1a; }
+  .result-meta { font-size: 10px; color: #9a9a90; }
+  .result-chev { margin-left: auto; font-size: 12px; color: #c0c0b8; }
+
+  /* Category tiles */
+  .cat-tile {
+    border: 1.5px solid #e4e4e0; border-radius: 10px; padding: 14px;
+    display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .cat-tile:hover { border-color: #4a7255; }
+  .cat-tile.active { border-color: #1c3326; background: #f0f6f2; }
+  .cat-radio {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c0c0b8;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .cat-tile.active .cat-radio { border-color: #1c3326; }
+  .cat-tile.active .cat-radio::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #1c3326; display: block; }
+  .cat-icon-sm { font-size: 20px; }
+  .cat-name-sm { font-size: 13px; font-weight: 600; color: #1a1f1a; }
+  .cat-desc-sm { font-size: 10px; color: #8a8a80; }
+
+  /* CTA */
+  .cta-row { display: flex; align-items: center; gap: 14px; }
+  .cta-btn {
+    background: #1c3326; color: white; border: none; border-radius: 100px;
+    padding: 14px 36px; font-size: 14px; font-weight: 600;
+    font-family: 'DM Sans', sans-serif; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(28,51,38,0.22);
+  }
+  .cta-note { font-size: 12px; color: #8a8a80; font-weight: 300; }
+
+  /* Footer */
+  .footer {
+    width: 100%; background: white; border-top: 1px solid #deded8;
+    margin-top: 36px; padding: 14px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: #9a9a90;
+  }
+  .footer a { color: #4a7255; }
+  .footer-left { display: flex; align-items: center; gap: 10px; }
+
+  .page-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.16em;
+    text-transform: uppercase; color: #8a8a80; margin: 0 0 16px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- Top nav — TOCS logo top left -->
+<div class="topbar">
+  <div class="tocs-nav-logo">
+    <!-- TOCS geometric wordmark SVG — top left -->
+    <svg class="tocs-wordmark" viewBox="0 0 320 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- T: crossbar + arch cutouts + stem -->
+      <rect x="0" y="0" width="68" height="16" rx="1" fill="#1c3326"/>
+      <path d="M6 16 Q6 6 16 6 Q26 6 26 16 Z" fill="white"/>
+      <path d="M42 16 Q42 6 52 6 Q62 6 62 16 Z" fill="white"/>
+      <rect x="27" y="13" width="14" height="47" fill="#1c3326"/>
+      <!-- O -->
+      <circle cx="117" cy="30" r="28" fill="#1c3326"/>
+      <circle cx="117" cy="30" r="17" fill="white"/>
+      <!-- C -->
+      <path d="M 198 4 A26 26 0 1 0 198 56 L198 45 A15 15 0 1 1 198 15 Z" fill="#1c3326"/>
+      <!-- S -->
+      <path d="M254 10 Q254 4 262 4 L290 4 Q300 4 300 14 Q300 24 288 28 L268 34 Q254 38 254 50 Q254 58 264 58 L290 58 Q300 58 300 50" stroke="#1c3326" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="topbar-divider"></div>
+    <div class="topbar-sub">Order Portal</div>
+  </div>
+  <div class="topbar-right">
+    <span>NSW Strata</span>
+    <span class="topbar-link">Admin Login</span>
+  </div>
+</div>
+
+<div class="page-label">Logo top-left · "TOCS Order Portal" as page title</div>
+
+<div class="container">
+
+  <!-- Page title block (replaces hero logo) -->
+  <div class="page-title-block">
+    <div class="page-eyebrow">Top Owners Corporation Solutions</div>
+    <h1 class="page-h1">TOCS Order Portal</h1>
+    <p class="page-sub">Order certificates, keys, fobs, swipes and more for your NSW strata property</p>
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <span class="search-text">Search by building name or strata plan…</span>
+      <span class="search-btn">Search</span>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="hiw-grid">
+    <div class="hiw-cell active">
+      <div class="hiw-ghost">1</div>
+      <div class="hiw-icon">🏢</div>
+      <div class="hiw-name">Find your building</div>
+      <div class="hiw-desc">Search strata plan or address</div>
+    </div>
+    <div class="hiw-cell">
+      <div class="hiw-ghost">2</div>
+      <div class="hiw-icon">🛒</div>
+      <div class="hiw-name">Choose your items</div>
+      <div class="hiw-desc">Certs, keys, fobs, swipes</div>
+    </div>
+    <div class="hiw-cell">
+      <div class="hiw-ghost">3</div>
+      <div class="hiw-icon">📋</div>
+      <div class="hiw-name">Enter your details</div>
+      <div class="hiw-desc">Applicant & contact info</div>
+    </div>
+    <div class="hiw-cell">
+      <div class="hiw-ghost">4</div>
+      <div class="hiw-icon">💳</div>
+      <div class="hiw-name">Pay your way</div>
+      <div class="hiw-desc">Bank · PayID · Card</div>
+    </div>
+  </div>
+
+  <!-- Two column: results + category -->
+  <div class="two-col">
+
+    <div class="card">
+      <div class="card-head"><div class="card-head-dot"></div>Select Your Building</div>
+      <div class="card-body">
+        <div class="result-pill active">
+          <div class="result-dot"></div>
+          <div>
+            <div class="result-name">The Horizon</div>
+            <div class="result-meta">SP 12345 · Parramatta NSW</div>
+          </div>
+          <div class="result-chev">›</div>
+        </div>
+        <div class="result-pill">
+          <div class="result-dot"></div>
+          <div>
+            <div class="result-name">Park Central</div>
+            <div class="result-meta">SP 67890 · Sydney NSW</div>
+          </div>
+          <div class="result-chev">›</div>
+        </div>
+        <div class="result-pill">
+          <div class="result-dot"></div>
+          <div>
+            <div class="result-name">Riverside Apartments</div>
+            <div class="result-meta">SP 23456 · Penrith NSW</div>
+          </div>
+          <div class="result-chev">›</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="card-head-dot"></div>What Do You Need?</div>
+      <div class="card-body">
+        <div class="cat-tile active">
+          <div class="cat-radio"></div>
+          <span class="cat-icon-sm">📄</span>
+          <div>
+            <div class="cat-name-sm">OC Certificates</div>
+            <div class="cat-desc-sm">Strata title documents</div>
+          </div>
+        </div>
+        <div class="cat-tile">
+          <div class="cat-radio"></div>
+          <span class="cat-icon-sm">🔑</span>
+          <div>
+            <div class="cat-name-sm">Keys & Access</div>
+            <div class="cat-desc-sm">Keys, fobs, swipes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-row">
+    <button class="cta-btn">Continue →</button>
+    <span class="cta-note">The Horizon selected · OC Certificates</span>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="footer-left">
+    <svg width="36" height="14" viewBox="0 0 320 60" fill="none">
+      <rect x="0" y="0" width="68" height="16" rx="1" fill="#9a9a90"/>
+      <path d="M6 16 Q6 6 16 6 Q26 6 26 16 Z" fill="white"/>
+      <path d="M42 16 Q42 6 52 6 Q62 6 62 16 Z" fill="white"/>
+      <rect x="27" y="13" width="14" height="47" fill="#9a9a90"/>
+      <circle cx="117" cy="30" r="28" fill="#9a9a90"/>
+      <circle cx="117" cy="30" r="17" fill="white"/>
+      <path d="M 198 4 A26 26 0 1 0 198 56 L198 45 A15 15 0 1 1 198 15 Z" fill="#9a9a90"/>
+      <path d="M254 10 Q254 4 262 4 L290 4 Q300 4 300 14 Q300 24 288 28 L268 34 Q254 38 254 50 Q254 58 264 58 L290 58 Q300 58 300 50" stroke="#9a9a90" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Top Owners Corporation Solutions</span>
+  </div>
+  <span><a href="#">Privacy Policy</a></span>
+</div>
+
+</body>
+</html>

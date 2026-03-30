@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Vercel Dev (full stack)",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PATH=/Users/matthewhe/.nvm/versions/node/v24.14.0/bin:$PATH vercel dev"],
+      "port": 3000
+    },
+    {
+      "name": "Node Server (server.js)",
+      "runtimeExecutable": "/Users/matthewhe/.nvm/versions/node/v24.14.0/bin/node",
+      "runtimeArgs": ["server.js"],
+      "port": 3000
+    },
+    {
+      "name": "Dev (watch build + server)",
+      "runtimeExecutable": "/Users/matthewhe/.nvm/versions/node/v24.14.0/bin/npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    }
+  ]
+}

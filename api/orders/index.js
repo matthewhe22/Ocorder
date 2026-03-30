@@ -10,34 +10,56 @@ async function sendMail(smtp, mailOpts) {
   await transporter.sendMail(mailOpts);
 }
 
-// Wraps any promise with a hard timeout — returns null (not reject) on expiry so
-// callers can use the result naturally without needing extra try/catch.
-async function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const body = req.body || {};
   const order = body.order || body;
-  if (!order?.id || !Array.isArray(order?.items)) {
-    return res.status(400).json({ error: "Invalid order." });
-  }
+  if (!Array.isArray(order?.items) || order.items.length === 0) return res.status(400).json({ error: "Invalid order: 'items' must be a non-empty array." });
+  if (!order?.payment) return res.status(400).json({ error: "Invalid order: 'payment' method is required (bank, payid, stripe)." });
 
   try {
     const cfg      = await readConfig();
+    const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
     const smtp     = cfg.smtp || {};
     const toEmail  = cfg.orderEmail || "Orders@tocs.co";
     const spConfig = cfg?.sharepoint || {};
     const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
+
+    // CRIT-1: Generate order ID server-side
+    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+    order.id = serverId;
+
+    // CRIT-2: Validate payment method
+    if (!["bank", "payid", "stripe", "invoice"].includes(order.payment)) return res.status(400).json({ error: "Invalid payment method." });
+
+    // CRIT-2: Sanitise total
+    order.total = Math.max(0, Number(order.total) || 0);
+
+    // CRIT-2: Validate contact email
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!order.contactInfo?.email) {
+      return res.status(400).json({ error: "Contact email is required." });
+    }
+    if (!EMAIL_RE.test(order.contactInfo.email)) {
+      return res.status(400).json({ error: "Contact email is invalid." });
+    }
+
+    // CRIT-2: Set status server-side
+    if (order.payment === "stripe") {
+      order.status = "Awaiting Stripe Payment";
+    } else if (order.payment === "invoice") {
+      order.status = "Invoice to be issued";
+    } else {
+      order.status = "Pending Payment";
+    }
+
+    // MED-11: Validate items fields
+    if (!order.items.every(item => item.productName && typeof item.price === "number")) {
+      return res.status(400).json({ error: "Invalid order items: each item must have productName and price." });
+    }
 
     // Derive SharePoint folder structure: {buildingName}/{categoryFolder}/{orderId}
     const categoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
@@ -45,19 +67,35 @@ export default async function handler(req, res) {
       .replace(/[\\/:*?"<>|]/g, "-").trim();
     const spSubFolder    = `${buildingName}/${categoryFolder}/${order.id}`;
 
-
-    // Set filename synchronously (no network) so admin can see the doc reference immediately
+    // CRIT-7: Validate authority document on server
     if (body.lotAuthority?.data) {
-      order.lotAuthorityFile = body.lotAuthority.filename;
+      const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
+      if (!ALLOWED_TYPES.includes(body.lotAuthority.contentType)) {
+        return res.status(400).json({ error: "Authority document must be PDF, JPG, or PNG." });
+      }
+      // base64 byte size = (chars * 3/4)
+      const byteSize = Math.ceil((body.lotAuthority.data.length * 3) / 4);
+      if (byteSize > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: "Authority document must be under 10 MB." });
+      }
     }
 
+    // Set filename synchronously — sanitise client-supplied name to prevent path traversal
+    // and HTTP header injection via Content-Disposition.
+    if (body.lotAuthority?.data) {
+      const rawName = String(body.lotAuthority.filename || "document");
+      const ext = rawName.includes(".") ? rawName.split(".").pop().replace(/[^\w]/g, "").slice(0, 5) : "bin";
+      order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
+    }
+
+    order.date = new Date().toISOString();
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
 
     // ── STRIPE PRE-VALIDATION (before Redis save — prevents ghost orders) ────────
     // Validate Stripe configuration BEFORE saving to Redis so a failed validation
     // does not leave an orphaned order in the database with no Stripe session.
     if (order.payment === "stripe") {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      if (!stripeKey) {
         return res.status(400).json({ error: "Stripe is not configured on this server." });
       }
       if (!order.total || order.total <= 0) {
@@ -67,6 +105,10 @@ export default async function handler(req, res) {
 
     // ── Save order to Redis immediately ──────────────────────────────────────────
     const data = await readData();
+    // CRIT-1: Check for ID collision before saving
+    if (data.orders.find(o => o.id === order.id)) {
+      return res.status(409).json({ error: "Order ID collision. Please try again." });
+    }
     data.orders.unshift(order);
     await writeData(data);
 
@@ -77,7 +119,7 @@ export default async function handler(req, res) {
     // are all skipped for Stripe orders (accepted limitation for initial implementation).
     if (order.payment === "stripe") {
       try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        const stripe = new Stripe(stripeKey);
         const proto = req.headers["x-forwarded-proto"] || "https";
         const host  = req.headers["host"] || "occorder.vercel.app";
         const baseUrl = `${proto}://${host}`;
@@ -92,8 +134,8 @@ export default async function handler(req, res) {
             quantity: 1,
           }],
           mode: "payment",
-          success_url: `${baseUrl}/complete?orderId=${order.id}&stripeOk=1`,
-          cancel_url:  `${baseUrl}/?cancelled=1`,
+          success_url: `${baseUrl}/complete?orderId=${serverId}&stripeOk=1`,
+          cancel_url:  `${baseUrl}/?cancelled=1&orderId=${serverId}`,
           metadata: { orderId: order.id },
         });
         // Persist the session ID so stripe-confirm can verify it server-side
@@ -139,40 +181,35 @@ export default async function handler(req, res) {
       spPromise = (async () => {
         try {
           const spFilename = `authority-${body.lotAuthority?.filename || "doc"}`;
+          // Capture upload errors so audit log entries contain the actual reason
+          let authErr = null, pdfErr = null;
           // Run both uploads in parallel — each takes ~8–9 s independently
           const [authResult, pdfResult] = await Promise.allSettled([
             body.lotAuthority?.data
               ? uploadToSharePoint(spFilename, body.lotAuthority.contentType, body.lotAuthority.data, spConfig, spSubFolder)
-                  .catch(e => { console.error("SP authority upload:", e.message); return null; })
+                  .catch(e => { authErr = e; console.error("SP authority upload:", e.message); return null; })
               : Promise.resolve(null),
             (async () => {
-              const pdfBuffer = await generateOrderPdf(order);
-              const pdfBase64 = pdfBuffer.toString("base64");
-              return uploadToSharePoint("order-summary.pdf", "application/pdf", pdfBase64, spConfig, spSubFolder)
-                .catch(e => { console.error("SP PDF upload:", e.message); return null; });
+              try {
+                const pdfBuffer = await generateOrderPdf(order);
+                const pdfBase64 = pdfBuffer.toString("base64");
+                return await uploadToSharePoint("order-summary.pdf", "application/pdf", pdfBase64, spConfig, spSubFolder)
+                  .catch(e => { pdfErr = e; console.error("SP PDF upload:", e.message); return null; });
+              } catch (e) { pdfErr = e; console.error("SP PDF gen/upload:", e.message); return null; }
             })(),
           ]);
           const spUrl     = authResult.status === "fulfilled" ? authResult.value : null;
           const summaryUrl = pdfResult.status  === "fulfilled" ? pdfResult.value  : null;
-          const oi = data.orders.find(o => o.id === order.id);
-          if (spUrl) {
-            order.lotAuthorityUrl = spUrl;
-            if (oi) { oi.lotAuthorityUrl = spUrl; oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
+          // Fresh read before writing SP results to avoid stale-data overwrites
+          const freshData = await readData().catch(() => data);
+          const freshOi = freshData.orders.find(o => o.id === order.id);
+          if (freshOi) {
+            if (spUrl) { freshOi.lotAuthorityUrl = spUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
+            if (summaryUrl) { freshOi.summaryUrl = summaryUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+            if (!spUrl && body.lotAuthority?.data) { const note = authErr?.message ? authErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note }); }
+            if (!summaryUrl) { const note = pdfErr?.message ? pdfErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note }); }
           }
-          if (summaryUrl) {
-            order.summaryUrl = summaryUrl;
-            if (oi) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-          }
-          if (spUrl) {
-            // already added audit entry above
-          } else if (body.lotAuthority?.data) {
-            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note: "See Vercel logs" });
-          }
-          if (!summaryUrl) {
-            if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note: "See Vercel logs" });
-          }
-          // Always persist final state (SP URLs if succeeded, failure audit entries if not)
-          await writeData(data).catch(e => console.error("SP result persist failed:", e.message));
+          await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for order ${order.id}: auth=${!!spUrl} pdf=${!!summaryUrl}`);
         } catch (e) {
           console.error("SP upload block failed:", e.message);
@@ -202,12 +239,22 @@ export default async function handler(req, res) {
     // already running above in parallel, so emails don't eat into SP time.
     if (smtp.host && smtp.user && smtp.pass) {
       console.log(`Sending emails for order ${order.id}...`);
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
+      const lotNumber = order.items?.[0]?.lotNumber || "";
+      const buildingNameEmail = order.items?.[0]?.planName || "";
+      const adminSubject = (cfg.emailTemplate?.adminNotificationSubject || "New Order — {orderType} #{orderId} — {total}")
+        .replace("{orderType}", orderType)
+        .replace("{orderId}", order.id || "")
+        .replace("{total}", order.total != null ? `$${order.total.toFixed(2)}` : "")
+        .replace("{lotNumber}", lotNumber)
+        .replace("{buildingName}", buildingNameEmail)
+        .replace("{address}", buildingNameEmail);
       const emailJobs = [
         sendMail(smtp, {
-          from: `"TOCS Order Platform" <${toEmail}>`,
+          from: `"TOCS Order Portal" <${toEmail}>`,
           to: toEmail,
-          subject: `New Order #${order.id} — $${(order.total||0).toFixed(2)} AUD`,
-          html: buildOrderEmailHtml(order),
+          subject: adminSubject,
+          html: buildOrderEmailHtml(order, cfg),
           attachments: body.lotAuthority?.data ? [{
             filename: body.lotAuthority.filename,
             content: body.lotAuthority.data,
@@ -219,7 +266,7 @@ export default async function handler(req, res) {
       if (order.contactInfo?.email) {
         emailJobs.push(
           sendMail(smtp, {
-            from: `"TOCS Order Platform" <${toEmail}>`,
+            from: `"TOCS Order Portal" <${toEmail}>`,
             to: order.contactInfo.email,
             subject: `Order Confirmed — ${order.id}`,
             html: buildCustomerEmailHtml(order, cfg),

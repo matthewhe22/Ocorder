@@ -1,7 +1,6 @@
 {
-  "name": "tocs-oc-portal",
+  "name": "ocorder",
   "version": "1.0.0",
-  "description": "TOCS Owner Corporation Certificate Portal",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,8 +18,6 @@
     "@vercel/kv": "^2.0.0",
     "nodemailer": "^6.9.14",
     "pdfkit": "^0.18.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "redis": "^5.11.0",
     "stripe": "^17",
     "xlsx": "^0.18.5"
