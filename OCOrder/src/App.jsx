@@ -2453,37 +2453,84 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-      if (!rows.length) { alert("The file appears to be empty."); return; }
 
       // Map columns flexibly (case-insensitive, spaces allowed)
       const norm = s => String(s).toLowerCase().replace(/[\s_\-]/g, "");
-      const lots = rows.map((row, idx) => {
-        const keys = Object.keys(row);
-        const get = (...names) => {
-          const k = keys.find(k => names.some(n => norm(k) === norm(n)));
-          return k ? String(row[k]).trim() : "";
-        };
-        const number  = get("Lot Number", "Lot No", "Lot", "Number");
-        const level   = get("Level", "Floor");
-        const type    = get("Type", "Lot Type", "Use");
-        const ocRaw   = get("Owner Corp IDs", "Owner Corp", "OC IDs", "OC", "Owner Corporation");
-        const ocIds   = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
-        return { id: "L" + Date.now() + idx, number: number || `Row ${idx + 2}`, level, type: type || "Residential", ownerCorps: ocIds };
-      }).filter(l => l.number);
+      const parseSheetLots = (ws, fixedOcId, baseIdx) => {
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const parsed = [];
+        rows.forEach((row, idx) => {
+          const keys = Object.keys(row);
+          const get = (...names) => {
+            const k = keys.find(k => names.some(n => norm(k) === norm(n)));
+            return k ? String(row[k]).trim() : "";
+          };
+          const number = get("Lot Number", "Lot No", "Lot", "Number");
+          const level  = get("Level", "Floor");
+          const type   = get("Type", "Lot Type", "Use");
+          if (!number) return;
+          let ownerCorps;
+          if (fixedOcId) {
+            ownerCorps = [fixedOcId];
+          } else {
+            const ocRaw = get("Owner Corp IDs", "Owner Corp", "OC IDs", "OC", "Owner Corporation");
+            ownerCorps = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
+          }
+          parsed.push({ id: "L" + Date.now() + (baseIdx + idx), number, level, type: type || "Residential", ownerCorps });
+        });
+        return parsed;
+      };
 
-      const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nThis will REPLACE all existing lots for this plan.`);
+      let lots = [];
+      let newOwnerCorps = null;
+
+      if (wb.SheetNames.length > 1) {
+        // Multi-sheet: each sheet = one Owner Corporation
+        newOwnerCorps = {};
+        let lotIdx = 0;
+        wb.SheetNames.forEach((sheetName, sheetIdx) => {
+          const ocId = "OC-" + (sheetIdx + 1);
+          newOwnerCorps[ocId] = { name: sheetName.trim(), levy: 0 };
+          const ws = wb.Sheets[sheetName];
+          const sheetLots = parseSheetLots(ws, ocId, lotIdx);
+          lotIdx += sheetLots.length;
+          lots = lots.concat(sheetLots);
+        });
+      } else {
+        // Single sheet: existing logic (backward compatible)
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        lots = parseSheetLots(ws, null, 0);
+      }
+
+      if (!lots.length) { alert("No lots found in the file."); return; }
+
+      const ocMsg = newOwnerCorps
+        ? "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
+          Object.entries(newOwnerCorps).map(([id, oc]) => "• " + id + ": " + oc.name).join("\n")
+        : "";
+      const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nThis will REPLACE all existing lots for this plan.${ocMsg}`);
       if (!confirmed) return;
+
+      const payload = { action: "import-lots", planId: targetPlanId, lots };
+      if (newOwnerCorps) payload.ownerCorps = newOwnerCorps;
 
       const r = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ action: "import-lots", planId: targetPlanId, lots }),
+        body: JSON.stringify(payload),
       });
       if (r.ok) {
-        setData(p => ({ ...p, strataPlans: p.strataPlans.map(pl => pl.id !== targetPlanId ? pl : { ...pl, lots }) }));
-        alert(`✅ ${lots.length} lots imported successfully.`);
+        setData(p => ({
+          ...p,
+          strataPlans: p.strataPlans.map(pl => {
+            if (pl.id !== targetPlanId) return pl;
+            const updated = { ...pl, lots };
+            if (newOwnerCorps) updated.ownerCorps = newOwnerCorps;
+            return updated;
+          }),
+        }));
+        const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporations created." : "";
+        alert(`✅ ${lots.length} lots imported successfully.${ocSuccessMsg}`);
       } else {
         const d = await r.json();
         alert("Import failed: " + (d.error || "Unknown error"));
