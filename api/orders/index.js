@@ -50,8 +50,10 @@ export default async function handler(req, res) {
     // CRIT-2: Set status server-side
     if (order.payment === "stripe") {
       order.status = "Awaiting Stripe Payment";
+    } else if (order.payment === "invoice") {
+      order.status = "Invoice to be issued";
     } else {
-      order.status = "Awaiting Payment";
+      order.status = "Pending Payment";
     }
 
     // MED-11: Validate items fields
@@ -86,6 +88,7 @@ export default async function handler(req, res) {
       order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
     }
 
+    order.date = new Date().toISOString();
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
 
     // ── STRIPE PRE-VALIDATION (before Redis save — prevents ghost orders) ────────

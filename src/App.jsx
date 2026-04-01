@@ -495,8 +495,10 @@ export default function App() {
     // orders only to authenticated callers; unauthenticated callers get strataPlans only.
     const savedTok = (() => { try { return sessionStorage.getItem("admin_token"); } catch { return null; } })();
     const dataHeaders = savedTok ? { "Authorization": "Bearer " + savedTok } : {};
-    fetch("/api/data", { headers: dataHeaders }).then(r => r.json()).then(d => setData(d)).catch(() => {});
-    fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {});
+    Promise.all([
+      fetch("/api/data", { headers: dataHeaders }).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(d => setData(d)).catch(() => {}),
+      fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {}),
+    ]).finally(() => setAppLoading(false));
     // Detect Stripe payment redirect: /complete?orderId=xxx&stripeOk=1
     const params = new URLSearchParams(window.location.search);
     if (params.get("stripeOk") === "1" && params.get("orderId")) {
@@ -543,7 +545,21 @@ export default function App() {
       });
   }, [stripeConfirming, stripeOrderId]);
 
-  const plan = data.strataPlans.find(p => p.id === selPlan);
+  // Browser back button: push a history entry on step advance so back returns to previous step
+  useEffect(() => {
+    if (step > 1 && step < 6) window.history.pushState({ step }, "");
+  }, [step]);
+  useEffect(() => {
+    const onPop = (e) => {
+      const prev = e.state?.step;
+      if (prev && prev > 1 && prev < 6) setStep(prev - 1);
+      else if (step > 1 && step < 6) setStep(s => Math.max(1, s - 1));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [step]);
+
+  const plan = (data.strataPlans || []).find(p => p.id === selPlan);
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
@@ -733,7 +749,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
     } catch { return null; }
   });
 
-  const filteredPlans = data.strataPlans.filter(p => {
+  const filteredPlans = (data.strataPlans || []).filter(p => {
     if (!p.active) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -1535,6 +1551,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         <div style={{ textAlign:"center", padding:"2rem 0 0.5rem", marginTop:"3rem", borderTop:"1px solid var(--border)", fontSize:"0.75rem", color:"var(--muted)" }}>
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
           {" · "}Top Owners Corporation Solution
+          {" · "}Last updated {typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : ""}
         </div>
       )}
 
@@ -1912,7 +1929,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
     // Re-fetch data with admin token to load orders (orders not returned to unauthenticated callers)
     fetch("/api/data", { headers: { "Authorization": "Bearer " + token } })
-      .then(r => r.json()).then(d => setData(d)).catch(() => {});
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(d => setData(d)).catch(() => {});
   };
   const handleLogout = () => {
     setAdminToken(null);
@@ -1921,7 +1938,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   if (!adminToken) return <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />;
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const plan = data.strataPlans.find(p => p.id === planId);
+  const plan = (data.strataPlans || []).find(p => p.id === planId);
 
   const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
 
@@ -2502,7 +2519,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option value="">All statuses</option>
               <option>Pending</option>
               <option>Processing</option>
-              <option>Awaiting Payment</option>
+              <option>Issued</option>
+              <option>Paid</option>
+              <option>Cancelled</option>
+              <option>On Hold</option>
+              <option>Awaiting Documents</option>
+              <option>Invoice to be issued</option>
+              <option>Paid</option>
               <option>Awaiting Stripe Payment</option>
               <option>Paid</option>
               <option>Issued</option>
@@ -2558,7 +2581,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {o.status === "Invoice to be issued" && (
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
-                        {(o.status === "Awaiting Payment" || o.status === "Invoice sent, awaiting payment" || o.status === "Awaiting Stripe Payment") && (
+                        {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && o.orderCategory !== "keys" && (
