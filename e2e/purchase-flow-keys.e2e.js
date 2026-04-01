@@ -104,6 +104,21 @@ async function fillKeysStep2(page, { lotNumber = "Lot 1", productName = "E2E Bui
   await page.locator(".prod-card").filter({ hasText: productName }).locator(".add-btn").click();
 }
 
+/**
+ * Fill the delivery address form in the Review step (step 3) if it is shown.
+ * The address form appears when the auto-selected shipping option requires a
+ * physical address. If the form is not visible, this is a no-op.
+ */
+async function fillShippingAddressIfRequired(page) {
+  const streetInput = page.locator('input[placeholder="Street address"]');
+  // Only fill if the street address field is present and visible
+  const visible = await streetInput.isVisible().catch(() => false);
+  if (!visible) return;
+  await streetInput.fill("1 Test Street");
+  await page.locator('input[placeholder="Suburb"]').fill("Sydney");
+  await page.locator('input[placeholder="Postcode"]').fill("2000");
+}
+
 /** Fill contact details in step 4. */
 async function fillContact(page, {
   name = "Test User",
@@ -117,7 +132,7 @@ async function fillContact(page, {
 
 // ─── Happy path: Keys order (pickup) ─────────────────────────────────────────
 
-test("Keys purchase — pick up from BM", async ({ page }) => {
+test("Keys purchase — happy path order", async ({ page }) => {
   const productName = await ensureKeysProduct(page);
   if (!productName) {
     test.skip(true, "Could not set up keys product for test");
@@ -129,6 +144,9 @@ test("Keys purchase — pick up from BM", async ({ page }) => {
 
   await page.getByRole("button", { name: /review order/i }).click();
   await expect(page.getByText("Review Order")).toBeVisible();
+
+  // Fill delivery address if the plan's shipping options require one
+  await fillShippingAddressIfRequired(page);
 
   await page.getByRole("button", { name: /enter contact details/i }).click();
   await fillContact(page);
@@ -154,6 +172,7 @@ test("Keys purchase — increase quantity to 2", async ({ page }) => {
   await page.locator(".prod-card").filter({ hasText: productName }).locator("button").filter({ hasText: "+" }).click();
 
   await page.getByRole("button", { name: /review order/i }).click();
+  await fillShippingAddressIfRequired(page);
   await page.getByRole("button", { name: /enter contact details/i }).click();
   await fillContact(page);
   await page.getByRole("button", { name: /submit order/i }).click();
@@ -173,6 +192,7 @@ test("Keys purchase — submit disabled with empty contact form", async ({ page 
   await fillKeysStep2(page, { productName });
 
   await page.getByRole("button", { name: /review order/i }).click();
+  await fillShippingAddressIfRequired(page);
   await page.getByRole("button", { name: /enter contact details/i }).click();
 
   // Submit button should be disabled when contact form is empty
@@ -192,6 +212,7 @@ test("Keys purchase — Place Another Order resets to step 1", async ({ page }) 
   await selectPlanAndKeys(page);
   await fillKeysStep2(page, { productName });
   await page.getByRole("button", { name: /review order/i }).click();
+  await fillShippingAddressIfRequired(page);
   await page.getByRole("button", { name: /enter contact details/i }).click();
   await fillContact(page);
   await page.getByRole("button", { name: /submit order/i }).click();
