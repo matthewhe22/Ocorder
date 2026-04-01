@@ -1,181 +1,82 @@
-// e2e/admin-settings.e2e.js — E2E tests for admin settings panel
-//
-// Requires dev server at http://localhost:3000 and admin credentials in Redis.
-
+// e2e/admin-settings.e2e.js
+// E2E tests for admin settings management.
 import { test, expect } from "@playwright/test";
 
-const ADMIN_USER = process.env.ADMIN_USER || "testadmin@example.com";
-const ADMIN_PASS = process.env.ADMIN_PASS || "TestPass123!";
+const ADMIN_USER = process.env.ADMIN_USER || "info@tocs.co";
+const ADMIN_PASS = process.env.ADMIN_PASS || "Tocs@Vote";
 
-async function loginAdmin(page) {
-  await page.goto("/");
-  const adminBtn = page.getByRole("button", { name: /admin/i }).first();
-  if (!(await adminBtn.count())) return false;
-  await adminBtn.click();
-  const userInput = page.locator("input[type='email'], input[placeholder*='user' i]").first();
-  const passInput = page.locator("input[type='password']").first();
-  if (!(await userInput.count())) return false;
-  await userInput.fill(ADMIN_USER);
-  await passInput.fill(ADMIN_PASS);
-  const loginBtn = page.getByRole("button", { name: /login|sign in/i }).first();
-  if (!(await loginBtn.count())) return false;
-  await loginBtn.click();
-  await page.waitForTimeout(2000);
-  return true;
-}
+// ─── Helper ───────────────────────────────────────────────────────────────────
 
+/** Log in and navigate to the Settings tab. */
 async function openSettingsTab(page) {
-  const settingsTab = page
-    .getByRole("button", { name: /settings/i })
-    .first()
-    .or(page.getByText(/settings/i).first());
-  if ((await settingsTab.count()) === 0) return false;
-  await settingsTab.click();
-  await page.waitForTimeout(1000);
-  return true;
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: /admin/i }).click();
+  await page.locator('input[type="email"]').fill(ADMIN_USER);
+  await page.locator('input[type="password"]').fill(ADMIN_PASS);
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page.getByRole("button", { name: /^settings$/i })).toBeVisible({ timeout: 8000 });
+  await page.getByRole("button", { name: /^settings$/i }).click();
 }
 
-test.describe("Admin settings panel", () => {
-  test("Settings tab is accessible after login", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
+// ─── Settings page loads ──────────────────────────────────────────────────────
 
-    const opened = await openSettingsTab(page);
-    if (!opened) return test.skip();
+test("Admin settings — settings page loads after login", async ({ page }) => {
+  await openSettingsTab(page);
 
-    // Settings content should be visible
-    await expect(page.locator("body")).not.toBeEmpty();
-  });
+  // Settings tab content should be visible
+  await expect(page.getByText(/smtp|order notification|email template/i).first()).toBeVisible({ timeout: 5000 });
+});
 
-  test("order notification email field is present in settings", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
+// ─── Update order notification email ─────────────────────────────────────────
 
-    const opened = await openSettingsTab(page);
-    if (!opened) return test.skip();
+test("Admin settings — update order notification email", async ({ page }) => {
+  await openSettingsTab(page);
 
-    // Look for order email / notification email input
-    const emailInput = page
-      .locator("input[type='email'][name*='order'], input[placeholder*='order.*email' i], input[placeholder*='notification' i]")
-      .first()
-      .or(page.locator("input[type='email']").first());
+  // Look for the order notification email input — it usually holds the order email address
+  // The SettingsTab renders inputs for orderEmail, payment details, SMTP, templates
+  // Find any email input that's likely the order notification email
+  const emailInputs = page.locator('input[type="email"], input.f-input[type="text"]');
+  const firstEmailInput = emailInputs.first();
 
-    if ((await emailInput.count()) > 0) {
-      await expect(emailInput).toBeVisible();
-    }
-  });
+  // Clear and fill with test value
+  await firstEmailInput.triple_click?.() || await firstEmailInput.click({ clickCount: 3 });
+  await firstEmailInput.fill("e2esettings@test.com");
 
-  test("Update order notification email and verify it persists", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
+  // Save (look for a Save button in the settings panel)
+  await page.getByRole("button", { name: /save/i }).first().click();
 
-    const opened = await openSettingsTab(page);
-    if (!opened) return test.skip();
+  // Expect either a success message or the input value to persist
+  await expect(page.locator('input[value="e2esettings@test.com"]')).toBeVisible({ timeout: 5000 });
+});
 
-    // Find an email input in the settings form
-    const emailInput = page
-      .locator("input[type='email']")
-      .first();
-    if (!(await emailInput.count())) return test.skip();
+// ─── SMTP password placeholder preserved ─────────────────────────────────────
 
-    const testEmail = "notifications-test@example.com";
-    await emailInput.fill(testEmail);
+test("Admin settings — SMTP password shows masked or empty placeholder", async ({ page }) => {
+  await openSettingsTab(page);
 
-    // Save the settings
-    const saveBtn = page
-      .getByRole("button", { name: /save|update/i })
-      .first();
-    if (!(await saveBtn.count())) return test.skip();
+  // The settings GET endpoint returns "••••••••" when SMTP pass is stored.
+  // The password input for SMTP should show either empty or the masked placeholder.
+  // If no password configured, it would be empty.
+  const smtpSection = page.getByText(/smtp/i).first();
+  await expect(smtpSection).toBeVisible({ timeout: 5000 });
 
-    await saveBtn.click();
-    await page.waitForTimeout(1500);
+  // Find password-like inputs
+  const passInputs = page.locator('input[type="password"]');
+  if (await passInputs.count() > 0) {
+    const value = await passInputs.first().inputValue();
+    expect(value === "" || value === "••••••••").toBe(true);
+  }
+});
 
-    // Reload the settings page and verify the value persists
-    await page.reload();
-    await page.waitForTimeout(1000);
+// ─── Payment settings visible ────────────────────────────────────────────────
 
-    const opened2 = await openSettingsTab(page);
-    if (!opened2) return test.skip();
+test("Admin settings — payment details section visible", async ({ page }) => {
+  await openSettingsTab(page);
 
-    const emailInputAfter = page.locator("input[type='email']").first();
-    if ((await emailInputAfter.count()) > 0) {
-      const value = await emailInputAfter.inputValue();
-      // Value should either match or the field may have been reset — just verify the page loaded
-      expect(typeof value).toBe("string");
-    }
-  });
+  // Navigate to Payment tab
+  await page.getByRole("button", { name: /^payment$/i }).click();
 
-  test("SMTP password shows placeholder (not plain text) after save", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
-
-    const opened = await openSettingsTab(page);
-    if (!opened) return test.skip();
-
-    // Look for SMTP password field
-    const smtpPassInput = page
-      .locator("input[type='password'][name*='smtp'], input[placeholder*='smtp.*pass' i], input[type='password']")
-      .first();
-    if (!(await smtpPassInput.count())) return test.skip();
-
-    const value = await smtpPassInput.inputValue();
-    // If a password is already saved, the placeholder should be shown as dots or empty
-    // Not the raw secret — the field should not contain a visible plain-text password
-    // We can only verify it's a password-type input (content is masked by browser)
-    const inputType = await smtpPassInput.getAttribute("type");
-    expect(inputType).toBe("password");
-  });
-
-  test("SMTP password placeholder is preserved when form is submitted with placeholder value", async ({
-    page,
-  }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
-
-    const opened = await openSettingsTab(page);
-    if (!opened) return test.skip();
-
-    // Find SMTP password field
-    const smtpPassInput = page.locator("input[type='password']").first();
-    if (!(await smtpPassInput.count())) return test.skip();
-
-    // Read current value (may be placeholder like "••••••••" or empty)
-    const currentValue = await smtpPassInput.inputValue();
-
-    // Submit the form without changing the password field
-    const saveBtn = page.getByRole("button", { name: /save|update/i }).first();
-    if (!(await saveBtn.count())) return test.skip();
-
-    await saveBtn.click();
-    await page.waitForTimeout(1500);
-
-    // Should not show an error about the password being incorrect
-    const errorMsg = page.getByText(/password.*invalid|password.*required/i).first();
-    // Verify no critical error appeared
-    await expect(page.locator("body")).not.toBeEmpty();
-    // The placeholder-preservation behaviour means submitting an unchanged placeholder
-    // should not cause a settings update failure
-    _ = currentValue; // prevent unused variable lint warning
-  });
-
-  test("Branding/title settings are visible in settings panel", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
-
-    const opened = await openSettingsTab(page);
-    if (!opened) return test.skip();
-
-    // Look for title/branding fields
-    const brandingInput = page
-      .locator(
-        "input[name*='title'], input[placeholder*='title' i], input[name*='brand'], input[placeholder*='brand' i]"
-      )
-      .first();
-    if ((await brandingInput.count()) > 0) {
-      await expect(brandingInput).toBeVisible();
-    } else {
-      // Settings form exists but branding may be under a different label — verify page loaded
-      await expect(page.locator("body")).not.toBeEmpty();
-    }
-  });
+  // Payment details should be present
+  await expect(page.getByText(/bsb|account|payid/i).first()).toBeVisible({ timeout: 5000 });
 });

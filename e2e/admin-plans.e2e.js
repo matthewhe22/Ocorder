@@ -1,82 +1,143 @@
-// e2e/admin-plans.e2e.js — E2E tests for admin plan management
-//
-// Requires dev server at http://localhost:3000 and admin credentials in Redis.
-
+// e2e/admin-plans.e2e.js
+// E2E tests for admin plan management (add, edit, delete).
 import { test, expect } from "@playwright/test";
 
-const ADMIN_USER = process.env.ADMIN_USER || "testadmin@example.com";
-const ADMIN_PASS = process.env.ADMIN_PASS || "TestPass123!";
+const ADMIN_USER = process.env.ADMIN_USER || "info@tocs.co";
+const ADMIN_PASS = process.env.ADMIN_PASS || "Tocs@Vote";
 
-async function loginAdmin(page) {
+// Unique plan ID to avoid conflicts across test runs
+const TEST_PLAN_ID = "SP99001";
+const TEST_PLAN_NAME = "E2E Test Building";
+const TEST_PLAN_NAME_UPDATED = "E2E Updated Building";
+const TEST_PLAN_ADDR = "1 Test Street, Sydney NSW 2000";
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+/** Log in and navigate to the Plans tab. */
+async function openPlansTab(page) {
   await page.goto("/");
-  const adminBtn = page.getByRole("button", { name: /admin/i }).first();
-  if (!(await adminBtn.count())) return false;
-  await adminBtn.click();
-  const userInput = page.locator("input[type='email'], input[placeholder*='user' i]").first();
-  const passInput = page.locator("input[type='password']").first();
-  if (!(await userInput.count())) return false;
-  await userInput.fill(ADMIN_USER);
-  await passInput.fill(ADMIN_PASS);
-  const loginBtn = page.getByRole("button", { name: /login|sign in/i }).first();
-  if (!(await loginBtn.count())) return false;
-  await loginBtn.click();
-  await page.waitForTimeout(2000);
-  return true;
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: /admin/i }).click();
+  await page.locator('input[type="email"]').fill(ADMIN_USER);
+  await page.locator('input[type="password"]').fill(ADMIN_PASS);
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page.getByRole("button", { name: /^plans$/i })).toBeVisible({ timeout: 8000 });
+  // Plans tab is the default; click to make sure
+  await page.getByRole("button", { name: /^plans$/i }).click();
+  await expect(page.getByRole("heading", { name: "Strata Plans" })).toBeVisible({ timeout: 5000 });
 }
 
-test.describe("Admin plan management", () => {
-  test("Plans tab is accessible after login", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
+/** Clean up any test plan that may exist from a prior run. Handles duplicates. */
+async function cleanupTestPlan(page, planName) {
+  // Delete all matching rows, one at a time, until none remain
+  let attempts = 0;
+  while (attempts < 10) {
+    const rows = page.locator(".tbl tbody tr").filter({ hasText: planName });
+    const count = await rows.count();
+    if (count === 0) break;
+    page.once("dialog", d => d.accept());
+    // Use .first() to avoid strict mode violation when multiple rows match
+    await rows.first().locator(".tbl-act-btn").filter({ hasText: /delete/i }).first().click();
+    // Wait for one deletion to complete before attempting the next
+    await page.waitForTimeout(800);
+    attempts++;
+  }
+}
 
-    const plansTab = page.getByRole("button", { name: /plans/i }).first()
-      .or(page.getByText(/plans/i).first());
-    if (await plansTab.count() > 0) {
-      await plansTab.click();
-      await page.waitForTimeout(1000);
-      // Plans content should be visible
-      await expect(page.locator("body")).not.toBeEmpty();
-    } else {
-      test.skip();
-    }
-  });
+// ─── Add a plan ────────────────────────────────────────────────────────────────
 
-  test("existing plans are displayed in the plans table", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
+test("Admin plans — add a new plan", async ({ page }) => {
+  await openPlansTab(page);
+  await cleanupTestPlan(page, TEST_PLAN_NAME);
 
-    const plansTab = page.getByRole("button", { name: /plans/i }).first();
-    if (!(await plansTab.count())) return test.skip();
-    await plansTab.click();
-    await page.waitForTimeout(1000);
+  // Click "Add Plan"
+  await page.getByRole("button", { name: /add plan/i }).click();
 
-    // Harbour View Residences is in DEFAULT_DATA — should appear if Redis has default data
-    const planName = page.getByText(/Harbour View/i).first();
-    if (await planName.count() > 0) {
-      await expect(planName).toBeVisible();
-    }
-  });
+  // Modal should appear
+  await expect(page.locator(".modal")).toBeVisible({ timeout: 5000 });
 
-  test("Add Plan button opens plan editor", async ({ page }) => {
-    const loggedIn = await loginAdmin(page);
-    if (!loggedIn) return test.skip();
+  // Fill Plan ID, Name, Address (the modal has input fields in order)
+  const modalInputs = page.locator(".modal input.f-input, .modal input[type='text']");
+  await modalInputs.nth(0).fill(TEST_PLAN_ID);
+  await modalInputs.nth(1).fill(TEST_PLAN_NAME);
+  await modalInputs.nth(2).fill(TEST_PLAN_ADDR);
 
-    const plansTab = page.getByRole("button", { name: /plans/i }).first();
-    if (!(await plansTab.count())) return test.skip();
-    await plansTab.click();
-    await page.waitForTimeout(1000);
+  // Save
+  await page.locator(".modal").getByRole("button", { name: /save|add/i }).last().click();
 
-    const addBtn = page.getByRole("button", { name: /add plan|new plan/i }).first();
-    if (await addBtn.count() > 0) {
-      await addBtn.click();
-      await page.waitForTimeout(500);
-      // Should show some form or modal for adding a plan
-      const planForm = page.locator("input[placeholder*='Plan ID'], input[placeholder*='Name'], form").first();
-      if (await planForm.count() > 0) {
-        await expect(planForm).toBeVisible();
-      }
-    } else {
-      test.skip();
-    }
-  });
+  // New plan appears in the table
+  await expect(page.getByText(TEST_PLAN_NAME)).toBeVisible({ timeout: 5000 });
+});
+
+// ─── Edit a plan ──────────────────────────────────────────────────────────────
+
+test("Admin plans — edit an existing plan name", async ({ page }) => {
+  await openPlansTab(page);
+
+  // Ensure test plan exists (re-create if previous test deleted it)
+  let planRow = page.locator(".tbl tbody tr").filter({ hasText: TEST_PLAN_NAME });
+  if (await planRow.count() === 0) {
+    await page.getByRole("button", { name: /add plan/i }).click();
+    await expect(page.locator(".modal")).toBeVisible();
+    const modalInputs = page.locator(".modal input.f-input, .modal input[type='text']");
+    await modalInputs.nth(0).fill(TEST_PLAN_ID);
+    await modalInputs.nth(1).fill(TEST_PLAN_NAME);
+    await modalInputs.nth(2).fill(TEST_PLAN_ADDR);
+    await page.locator(".modal").getByRole("button", { name: /save|add/i }).last().click();
+    await page.getByText(TEST_PLAN_NAME).waitFor({ timeout: 5000 });
+    // Wait for the modal overlay to fully close before continuing
+    await expect(page.locator(".overlay")).not.toBeVisible({ timeout: 5000 });
+    planRow = page.locator(".tbl tbody tr").filter({ hasText: TEST_PLAN_NAME });
+  }
+
+  // Click Edit button on the row (use first() to handle any duplicate rows from prior runs)
+  await planRow.first().locator(".tbl-act-btn").filter({ hasText: /edit/i }).first().click();
+  await expect(page.locator(".modal")).toBeVisible({ timeout: 5000 });
+
+  // Clear and update the name (2nd input in modal is Name)
+  const nameInput = page.locator(".modal input.f-input, .modal input[type='text']").nth(1);
+  await nameInput.clear();
+  await nameInput.fill(TEST_PLAN_NAME_UPDATED);
+
+  await page.locator(".modal").getByRole("button", { name: /save|update/i }).last().click();
+
+  // Updated name visible in table
+  await expect(page.getByText(TEST_PLAN_NAME_UPDATED)).toBeVisible({ timeout: 5000 });
+});
+
+// ─── Delete a plan ────────────────────────────────────────────────────────────
+
+test("Admin plans — delete plan removes it from table", async ({ page }) => {
+  await openPlansTab(page);
+
+  // The plan might be named TEST_PLAN_NAME_UPDATED from the edit test, or TEST_PLAN_NAME
+  let planName = TEST_PLAN_NAME_UPDATED;
+  if (await page.locator(".tbl tbody tr").filter({ hasText: TEST_PLAN_NAME_UPDATED }).count() === 0) {
+    planName = TEST_PLAN_NAME;
+  }
+
+  let planRow = page.locator(".tbl tbody tr").filter({ hasText: planName });
+  if (await planRow.count() === 0) {
+    // Create a fresh one to delete
+    await page.getByRole("button", { name: /add plan/i }).click();
+    await expect(page.locator(".modal")).toBeVisible();
+    const modalInputs = page.locator(".modal input.f-input, .modal input[type='text']");
+    await modalInputs.nth(0).fill("SP99099");
+    await modalInputs.nth(1).fill("E2E Delete Building");
+    await modalInputs.nth(2).fill("99 Delete Street, Sydney NSW 2000");
+    await page.locator(".modal").getByRole("button", { name: /save|add/i }).last().click();
+    await page.getByText("E2E Delete Building").waitFor({ timeout: 5000 });
+    // Wait for the modal overlay to fully close before continuing
+    await expect(page.locator(".overlay")).not.toBeVisible({ timeout: 5000 });
+    planName = "E2E Delete Building";
+    planRow = page.locator(".tbl tbody tr").filter({ hasText: planName });
+  }
+
+  // Handle browser confirm dialog
+  page.once("dialog", d => d.accept());
+  // Use first() to handle any duplicate rows from prior test runs
+  await planRow.first().locator(".tbl-act-btn").filter({ hasText: /delete/i }).first().click();
+
+  // Plan row should disappear
+  await expect(page.getByText(planName)).not.toBeVisible({ timeout: 5000 });
 });

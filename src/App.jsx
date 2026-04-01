@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const LOGO_B64 = "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";
@@ -64,6 +64,19 @@ const getApplicantType = (ci) => ci?.applicantType || (ci?.companyName ? "agent"
 
 // Fixed shipping options for Keys/Fob orders.
 // Costs for "keys-std" and "keys-express" come from plan.keysShipping.
+const KEYS_SHIPPING_OPTIONS = [
+  { id: "keys-pickup",  name: "Pick up from BM",      requiresAddress: false },
+  { id: "keys-std",     name: "Standard Delivery",     requiresAddress: true  },
+  { id: "keys-express", name: "Express Delivery",      requiresAddress: true  },
+  { id: "keys-none",    name: "No Shipment Required",  requiresAddress: false },
+];
+
+const getKeysShippingCost = (optId, keysShipping) => {
+  if (optId === "keys-std")     return keysShipping?.deliveryCost ?? 0;
+  if (optId === "keys-express") return keysShipping?.expressCost  ?? 0;
+  return 0; // pickup and none are always $0
+};
+
 // Compute the effective shipping cost for an option, considering per-product overrides
 const calcShippingCost = (opt, cartItems, products) => {
   const prodMap = new Map((products || []).map(p => [p.id, p]));
@@ -309,7 +322,6 @@ const CSS = `
   .alert-info { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
   .alert-ok { background: var(--ok-light); color: var(--ok); border-color: var(--ok); }
   .alert-warn { background: var(--warn-light); color: var(--warn); border-color: var(--warn); }
-  .alert-err { background: var(--red-light); color: var(--red); border-color: var(--red); }
   @keyframes warnPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,90,0,0); } 40% { box-shadow: 0 0 0 5px rgba(180,90,0,0.22); } }
   .pulse-warn { animation: warnPulse 0.7s ease; }
 
@@ -331,8 +343,6 @@ const CSS = `
   .bg-teal { background: #e0f5f2; color: #0d6e62; }
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
-  .bg-warn { background: var(--warn-light); color: var(--warn); }
-  .search-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
   .cat-card:hover { border-color: var(--sage); box-shadow: 0 4px 16px rgba(28,51,38,0.1); transform: translateY(-1px); }
@@ -473,7 +483,6 @@ export default function App() {
     try { return sessionStorage.getItem("admin_token") || null; } catch { return null; }
   });
   const [pubConfig, setPubConfig] = useState(null);
-  const [appLoading, setAppLoading] = useState(true);
   const [stripeConfirming, setStripeConfirming] = useState(false);
   const [stripeConfirmErr, setStripeConfirmErr] = useState("");
   const [stripeOrderId, setStripeOrderId] = useState(null);
@@ -517,12 +526,9 @@ export default function App() {
   // Call stripe-confirm endpoint after Stripe redirects back with ?stripeOk=1
   useEffect(() => {
     if (!stripeConfirming || !stripeOrderId) return;
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 30000);
-    fetch(`/api/orders/${stripeOrderId}/stripe-confirm`, { method: "POST", signal: ctrl.signal })
+    fetch(`/api/orders/${stripeOrderId}/stripe-confirm`, { method: "POST" })
       .then(r => r.json())
       .then(d => {
-        clearTimeout(timeout);
         if (d.success && d.order) {
           setOrder(d.order);
           setStripeConfirming(false);
@@ -533,12 +539,8 @@ export default function App() {
           setStripeConfirming(false);
         }
       })
-      .catch((err) => {
-        clearTimeout(timeout);
-        const msg = err?.name === "AbortError"
-          ? "Payment confirmation timed out. Please contact support at info@tocs.co."
-          : "Network error. Please contact support at info@tocs.co.";
-        setStripeConfirmErr(msg);
+      .catch(() => {
+        setStripeConfirmErr("Network error. Please contact support at info@tocs.co.");
         setStripeConfirming(false);
       });
   }, [stripeConfirming, stripeOrderId]);
@@ -561,32 +563,11 @@ export default function App() {
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
-  // When plan changes, initialise selectedOCs — if plan has lots, OCs are driven by lot selection; otherwise show all
+  // When plan changes, initialise selectedOCs to all OCs in the plan
   useEffect(() => {
-    if (plan) {
-      if (plan.lots && plan.lots.length > 0) setSelectedOCs([]);
-      else setSelectedOCs(Object.keys(plan.ownerCorps || {}));
-    } else {
-      setSelectedOCs([]);
-    }
+    if (plan) setSelectedOCs(Object.keys(plan.ownerCorps || {}));
+    else setSelectedOCs([]);
   }, [selPlan]);
-
-  // When lot number changes on an OC order, auto-assign that lot's OCs
-  useEffect(() => {
-    if (!plan || orderCategory !== "oc") return;
-    const trimmed = lotNumber.trim();
-    if (!trimmed) {
-      setSelectedOCs(Object.keys(plan.ownerCorps || {}));
-      return;
-    }
-    const lot = plan.lots.find(l => l.number.toLowerCase() === trimmed.toLowerCase());
-    if (lot && lot.ownerCorps?.length > 0) {
-      setSelectedOCs(lot.ownerCorps);
-    } else {
-      // Lot not found in mapping — keep all OCs selectable
-      setSelectedOCs(Object.keys(plan.ownerCorps || {}));
-    }
-  }, [lotNumber, orderCategory]);
 
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
 
@@ -608,14 +589,19 @@ export default function App() {
   };
 
   const placeOrder = async (setPlacing, setErr) => {
+    const id = genOrderId();
     const isKeys = orderCategory === "keys";
     const orderPayment = isKeys ? "invoice" : payMethod;
+    const orderStatus = isKeys ? "Invoice to be issued"
+      : orderPayment === "stripe" ? "Awaiting Stripe Payment"
+      : orderPayment === "bank"   ? "Awaiting Payment"
+      : "Paid";
     const contactInfo = {
       ...contact,
       // Include shippingAddress for keys orders with a paid delivery option
       shippingAddress: (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false) ? contact.shippingAddress : undefined,
     };
-    const o = { date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
+    const o = { id, date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, status: orderStatus, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
     try {
       let body = { order: o };
       if (lotAuthFile) {
@@ -640,7 +626,7 @@ export default function App() {
       }
       const finalOrder = returned.order || o;
       setOrder(finalOrder);
-      setData(p => ({ ...p, orders: [finalOrder, ...p.orders] }));
+      setData(p => ({ ...p, orders: [finalOrder, ...(p.orders || [])] }));
       setCart([]);
       setStep(6);
       setPlacing(false);
@@ -651,7 +637,7 @@ export default function App() {
     }
   };
 
-  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false); };
+  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); };
 
   // Auto-correct payMethod when pubConfig loads and the current selection is disabled
   useEffect(() => {
@@ -666,7 +652,7 @@ export default function App() {
       const first = methods.find(m => m.enabled);
       if (first) setPayMethod(first.id);
     }
-  }, [pubConfig, payMethod]);
+  }, [pubConfig]);
 
   // Auto-select the first shipping option when entering Step 3 (if none yet selected)
   useEffect(() => {
@@ -677,35 +663,19 @@ export default function App() {
       const cost = calcShippingCost(opt, cart, plan?.products);
       setSelectedShipping({ id: opt.id, name: opt.name, cost, requiresAddress: opt.requiresAddress !== false });
     }
-  }, [step, plan?.id, orderCategory]); // plan.id tracks plan changes; cart is stable while on step 3
+  }, [step, plan?.id]); // plan.id tracks plan changes; cart is stable while on step 3
 
 
   const goToStep = (s) => {
     if (s < step) setStep(s);
   };
 
-  // 5 wizard steps; step 6 = confirmation page, outside the wizard track
-  const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment"];
-
-  const handleDemoReset = async () => {
-    if (!window.confirm("Reset all demo data to the initial seed state? This will log you out and clear all orders.")) return;
-    try {
-      await fetch("/api/demo/reset", { method: "POST" });
-    } finally {
-      try { sessionStorage.removeItem("admin_token"); } catch {}
-      window.location.href = "/";
-    }
-  };
+  // 6 steps: 1=Plan, 2=Products, 3=Review, 4=Contact, 5=Payment, 6=Complete
+  const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment", "Complete"];
 
   return (
     <>
       <style>{CSS}</style>
-      {pubConfig?.demoMode && (
-        <div style={{background:"#f59e0b",color:"#1c1c1c",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:"12px",fontWeight:600,fontSize:"0.82rem",letterSpacing:"0.03em",zIndex:9999,position:"relative"}}>
-          <span>⚠ DEMO MODE — Data is pre-seeded and will not send real emails. Admin: demo@tocs.co / Demo@1234</span>
-          <button onClick={handleDemoReset} style={{background:"#1c1c1c",color:"#f59e0b",border:"none",borderRadius:"4px",padding:"4px 12px",fontWeight:700,cursor:"pointer",fontSize:"0.8rem",letterSpacing:"0.04em"}}>Reset Demo</button>
-        </div>
-      )}
       <div className="app">
         <header className="hdr">
           <img src={pubConfig?.logo || `data:image/png;base64,${LOGO_B64}`} alt="TOCS" className="hdr-logo" />
@@ -735,13 +705,7 @@ export default function App() {
         </header>
 
         <main className="main">
-          {appLoading ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
-              <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            </div>
-          ) : currentPath === "/privacy-policy" ? (
+          {currentPath === "/privacy-policy" ? (
             <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
           ) : currentView === "portal" ? (
             <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
@@ -761,9 +725,6 @@ export default function App() {
               adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
           )}
         </main>
-        <footer style={{ textAlign: "center", padding: "18px 16px 14px", fontSize: "0.7rem", color: "var(--muted)", borderTop: "1px solid var(--border)", letterSpacing: "0.02em" }}>
-          Last updated {__BUILD_DATE__}
-        </footer>
       </div>
     </>
   );
@@ -773,29 +734,12 @@ export default function App() {
 function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
-  const [extLinkTarget, setExtLinkTarget] = useState(null); // product with externalUrl awaiting confirm
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
-  const [lotInputText, setLotInputText] = useState("");
-  const [lotDropdownOpen, setLotDropdownOpen] = useState(false);
-  // Sync text input when lotNumber is cleared externally (plan change, reset, cancel)
-  useEffect(() => { if (!lotNumber) setLotInputText(""); }, [lotNumber]);
   const [keysPlacing, setKeysPlacing] = useState(false);
   const [keysPlaceErr, setKeysPlaceErr] = useState("");
   const [step2Attempted, setStep2Attempted] = useState(false);
-  const [lotAuthErr, setLotAuthErr] = useState("");
-  const AUTH_MAX_MB = 10;
-  const handleLotAuthFile = (file) => {
-    if (!file) return;
-    if (file.size > AUTH_MAX_MB * 1024 * 1024) {
-      setLotAuthErr(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is ${AUTH_MAX_MB} MB.`);
-      setLotAuthFile(null);
-    } else {
-      setLotAuthErr("");
-      setLotAuthFile(file);
-    }
-  };
   const [recentOrder, setRecentOrder] = useState(() => {
     try {
       const s = localStorage.getItem("tocs_last_order");
@@ -815,6 +759,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const emailValid = EMAIL_RE.test(contact.email);
   const phoneValid  = !contact.phone || PHONE_RE.test(contact.phone.replace(/\s/g, ""));
   const gst = gstOf(total);
+  const exGstTotal = exGst(total);
 
   return (
     <div>
@@ -1018,14 +963,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div className="search-label" style={{ marginBottom: "12px" }}>What are you ordering?</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                 <button className={`cat-card ${orderCategory === "oc" ? "cat-selected" : ""}`}
-                  onClick={() => {
-                    setOrderCategory("oc"); setCart([]); setSelectedShipping(null);
-                    // Re-populate OCs from the currently selected lot (if any)
-                    if (lotNumber && plan?.lots?.length) {
-                      const lotObj = plan.lots.find(l => l.number === lotNumber);
-                      if (lotObj) setSelectedOCs(lotObj.ownerCorps || []);
-                    }
-                  }}>
+                  onClick={() => { setOrderCategory("oc"); setCart([]); setSelectedShipping(null); }}>
                   {orderCategory === "oc" && <span style={{ position:"absolute", top:10, right:10, color:"var(--forest)" }}><Ic n="check" s={16}/></span>}
                   <div className="cat-card-icon">📄</div>
                   <div className="cat-card-title">OC Certificates</div>
@@ -1057,122 +995,18 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <p className="pg-sub">{plan.address} &nbsp;·&nbsp; {plan.id}</p>
 
           <div className="panel" style={{ marginBottom: "1px" }}>
-            <div className="form-row" style={{ marginBottom: 0 }}>
+            <div className="form-row" style={{ marginBottom: orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 ? "1rem" : 0 }}>
               <label className="f-label">Lot Number</label>
-              {plan.lots && plan.lots.length > 0 ? (() => {
-                const selectLot = (lotNum) => {
-                  setLotNumber(lotNum);
-                  setLotInputText(lotNum);
-                  setLotDropdownOpen(false);
-                  setCart([]);
-                  setLotAuthFile(null);
-                  const lotObj = plan.lots.find(l => l.number === lotNum);
-                  if (lotObj && orderCategory === "oc") setSelectedOCs(lotObj.ownerCorps || []);
-                  else if (!lotNum) setSelectedOCs([]);
-                };
-                const filtered = lotInputText.trim()
-                  ? plan.lots.filter(l => l.number.toLowerCase().includes(lotInputText.trim().toLowerCase()))
-                  : plan.lots;
-                return (
-                  <div style={{ position: "relative" }}>
-                    <input
-                      className="f-input"
-                      placeholder="Type to search lots…"
-                      value={lotInputText}
-                      autoComplete="off"
-                      onFocus={() => setLotDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setLotDropdownOpen(false), 150)}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setLotInputText(val);
-                        setLotDropdownOpen(true);
-                        // If text no longer matches the committed lot, clear it
-                        if (lotNumber && val !== lotNumber) {
-                          setLotNumber("");
-                          setSelectedOCs([]);
-                          setCart([]);
-                          setLotAuthFile(null);
-                        }
-                      }}
-                    />
-                    {lotDropdownOpen && filtered.length > 0 && (
-                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid var(--border)", borderRadius: "4px", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 50, maxHeight: "220px", overflowY: "auto", marginTop: "2px" }}>
-                        {filtered.map(l => (
-                          <div
-                            key={l.id}
-                            onMouseDown={() => selectLot(l.number)}
-                            style={{ padding: "9px 14px", cursor: "pointer", fontSize: "0.86rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: lotNumber === l.number ? "var(--sage-tint)" : "white" }}
-                            onMouseEnter={e => e.currentTarget.style.background = "var(--sage-tint)"}
-                            onMouseLeave={e => e.currentTarget.style.background = lotNumber === l.number ? "var(--sage-tint)" : "white"}
-                          >
-                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
-                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                              {[l.level, l.type].filter(Boolean).join(" · ")}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {lotInputText && !lotNumber && filtered.length === 0 && (
-                      <div style={{ fontSize: "0.74rem", color: "var(--red)", marginTop: "4px" }}>
-                        No matching lot found — please check the lot number.
-                      </div>
-                    )}
-                    {lotInputText && !lotNumber && filtered.length > 0 && !lotDropdownOpen && (
-                      <div style={{ fontSize: "0.74rem", color: "var(--muted)", marginTop: "4px" }}>
-                        Please select a lot from the list.
-                      </div>
-                    )}
-                  </div>
-                );
-              })() : (
-                <input
-                  className="f-input"
-                  placeholder="e.g. Lot 5"
-                  value={lotNumber}
-                  onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
-                />
-              )}
+              <input
+                className="f-input"
+                placeholder="e.g. Lot 5"
+                value={lotNumber}
+                onChange={e => { setLotNumber(e.target.value); setCart([]); setLotAuthFile(null); }}
+              />
             </div>
 
-            {orderCategory === "oc" && lotNumber && selectedOCs.length > 0 && (
-              <div style={{ marginTop: "1rem" }}>
-                <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
-                  Owner Corporations for this lot
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {selectedOCs.map((ocId, idx) => {
-                    const oc = plan.ownerCorps?.[ocId];
-                    const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
-                    return (
-                      <div key={ocId} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1.5px solid var(--sage)", borderRadius: "6px", background: "var(--sage-tint)" }}>
-                        <Ic n="check" s={14} style={{ color: "var(--sage)", flexShrink: 0 }}/>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: "0.86rem", color: "var(--forest)" }}>{oc?.name || ocId}</div>
-                          {ocProd && (
-                            <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>
-                              {idx === 0 ? `1st OC rate: ${fmt(ocProd.price)}` : `Additional OC rate: ${fmt(ocProd.secondaryPrice ?? ocProd.price)}`}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {selectedOCs.length > 1 && (() => {
-                  const ocProd = (plan.products || []).find(p => (p.category || "oc") === "oc" && p.perOC);
-                  if (!ocProd || !ocProd.secondaryPrice) return null;
-                  return (
-                    <div style={{ fontSize: "0.76rem", color: "var(--muted)", marginTop: "8px" }}>
-                      <Ic n="info" s={12}/> {selectedOCs.length} OCs — 1st at {fmt(ocProd.price)}, additional at {fmt(ocProd.secondaryPrice)} each.
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {orderCategory === "oc" && !plan.lots?.length && Object.keys(plan.ownerCorps || {}).length > 0 && (
-              <div style={{ marginTop: "1rem" }}>
+            {orderCategory === "oc" && Object.keys(plan.ownerCorps || {}).length > 0 && (
+              <div>
                 <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
                   Owner Corporations — select all that apply
                 </div>
@@ -1267,8 +1101,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     </div>
                   )}
 
-                  {/* Authority document — required for keys orders only */}
-                  {orderCategory === "keys" && (
+                  {/* Authority document — always shown; required for all applicant types */}
                   <div className="form-row" style={{ marginBottom: 0 }}>
                     <label className="f-label">
                       {contact.applicantType === "owner" ? "Levy Notice / Identity Proof" : "Lot Authority Document"}
@@ -1292,21 +1125,15 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                           <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }} onClick={() => setLotAuthFile(null)} title="Remove file"><Ic n="trash" s={15}/></button>
                         </div>
                       ) : (
-                        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: `2px dashed ${lotAuthErr ? "var(--red)" : "var(--border)"}`, borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = lotAuthErr ? "var(--red)" : "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = lotAuthErr ? "var(--red)" : "var(--border)"; if (e.dataTransfer.files[0]) handleLotAuthFile(e.dataTransfer.files[0]); }}>
+                        <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--border)"; if (e.dataTransfer.files[0]) setLotAuthFile(e.dataTransfer.files[0]); }}>
                           <Ic n="upload" s={24}/>
                           <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--forest)" }}>Click to upload or drag & drop</span>
-                          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max {AUTH_MAX_MB} MB</span>
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) handleLotAuthFile(e.target.files[0]); e.target.value = ""; }}/>
+                          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max 10 MB</span>
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setLotAuthFile(e.target.files[0]); }}/>
                         </label>
                       )}
                     </div>
-                    {lotAuthErr && (
-                      <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", color: "var(--red)", fontWeight: 500 }}>
-                        <Ic n="info" s={13}/> {lotAuthErr}
-                      </div>
-                    )}
                   </div>
-                  )}
                 </div>
               </div>
 
@@ -1338,7 +1165,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                       return (
                         <div key={product.id} className={`prod-card ${allAdded ? "added" : ""}`}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
-                            <div className="prod-name">{product.name}{product.externalUrl && <span style={{ marginLeft: "6px", fontSize: "0.6rem", fontWeight: 700, background: "var(--forest)", color: "white", borderRadius: "3px", padding: "1px 5px", letterSpacing: "0.05em", verticalAlign: "middle" }}>EXTERNAL</span>}</div>
+                            <div className="prod-name">{product.name}</div>
                             {product.perOC && (
                               <div className="tip-wrap">
                                 <span className="per-oc-tag">
@@ -1362,12 +1189,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                             </div>
                             {orderCategory === "keys" ? (
                               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                {product.externalUrl ? (
-                                  <button className="add-btn" style={{ background: "var(--forest)", display: "flex", alignItems: "center", gap: "5px" }}
-                                    onClick={() => setExtLinkTarget(product)}>
-                                    <Ic n="arrow" s={12}/> Apply Now
-                                  </button>
-                                ) : allAdded ? (<>
+                                {allAdded ? (<>
                                   <button style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", width: "28px", height: "28px", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
                                     onClick={() => {
                                       if (qty <= 1) { setCart(p => p.filter(i => !(i.productId === product.id))); }
@@ -1402,9 +1224,14 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           )}
 
           {/* Validation warnings */}
-          {lotNumber.trim() && orderCategory === "keys" && !lotAuthFile && (
+          {lotNumber.trim() && (orderCategory === "keys" || contact.applicantType === "agent") && !lotAuthFile && (
             <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
-              <Ic n="shield" s={13}/> An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above.
+              <Ic n="shield" s={13}/> {contact.applicantType === "agent" ? "An authorisation document is required when applying as an agent. Please upload it above." : "An authority document is required for all Keys/Fobs/Remotes orders. Please upload it above."}
+            </div>
+          )}
+          {lotNumber.trim() && orderCategory === "oc" && contact.applicantType === "owner" && !lotAuthFile && (
+            <div className={`alert alert-warn${step2Attempted ? " pulse-warn" : ""}`} style={{ marginBottom: "8px" }}>
+              <Ic n="shield" s={13}/> A Levy Notice is required when applying as an Owner. Please upload it in the Applicant Details section above.
             </div>
           )}
           {lotNumber.trim() && contact.applicantType === "owner" && !contact.ownerName && (
@@ -1417,11 +1244,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             <button className="btn btn-blk btn-lg"
               disabled={cart.length === 0}
               onClick={() => {
-                const hasErr = (contact.applicantType === "owner" && !contact.ownerName) ||
-                  (lotNumber.trim() && !lotAuthFile && orderCategory === "keys");
+                const hasErr = (contact.applicantType === "owner" && !contact.ownerName) || !lotAuthFile;
                 if (hasErr) {
                   setStep2Attempted(true);
-                  const el = document.querySelector(".alert-warn, .f-input:invalid");
+                  const el = document.querySelector(".alert-warn");
                   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
                   return;
                 }
@@ -1499,11 +1325,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               )}
 
               {/* ── Shipping Method Selector (Keys/Fobs orders only — OC certs are delivered by email) ── */}
-              {orderCategory === "keys" && (plan?.shippingOptions || []).length === 0 && (
-                <div style={{ marginTop: "1rem", padding: "12px 16px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "6px", fontSize: "0.85rem", color: "#92400e" }}>
-                  No shipping methods are configured for this building. Please contact the strata manager to arrange delivery.
-                </div>
-              )}
               {(() => {
                 const planShipping = plan?.shippingOptions || [];
                 if (orderCategory !== "keys" || planShipping.length === 0) return null;
@@ -1559,11 +1380,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 </div>
               )}
               <div className="cart-gst-row">
-                <span>Subtotal (ex. GST)</span>
-                <span>{fmt(exGst(total))}</span>
-              </div>
-              <div className="cart-gst-row">
-                <span>GST (10%)</span>
+                <span>GST (10%) included in total</span>
                 <span>{fmt(gstOf(total))}</span>
               </div>
               <div className="cart-grand-row">
@@ -1581,12 +1398,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           {cart.length > 0 && (
             <div style={{ display: "flex", gap: "10px", marginTop: "1px", flexWrap: "wrap" }}>
               <button className="btn btn-out" onClick={() => setStep(2)}><Ic n="arrowL" s={14}/> Edit</button>
-              <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => reset()} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
+              <button className="btn btn-out" style={{ color: "var(--red)", borderColor: "var(--red)" }} onClick={() => { setCart([]); setLotAuthFile(null); setContact(DEFAULT_CONTACT); setSelectedShipping(null); setStep(1); }} title="Cancel order and start again"><Ic n="trash" s={13}/> Cancel</button>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                 <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
                   disabled={
-                    (orderCategory === "keys" && (plan?.shippingOptions || []).length === 0) ||
-                    (orderCategory === "keys" && (plan?.shippingOptions || []).length > 0 && !selectedShipping) ||
+                    (orderCategory === "keys" && plan?.shippingOptions?.length > 0 && !selectedShipping) ||
                     (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
                   }
                   onClick={() => {
@@ -1661,14 +1477,9 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           </div>
 
           <div style={{ display: "flex", gap: "10px", marginTop: "1px" }}>
-            <button className="btn btn-out" onClick={() => { setNameTouched(false); setEmailTouched(false); setPhoneTouched(false); setStep(3); }}><Ic n="arrowL" s={14}/> Back</button>
+            <button className="btn btn-out" onClick={() => setStep(3)}><Ic n="arrowL" s={14}/> Back</button>
             {orderCategory === "keys" ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}
-                onClick={() => {
-                  if (!contact.name || !contact.email || !emailValid || !contact.phone || !phoneValid) {
-                    setNameTouched(true); setPhoneTouched(true); setEmailTouched(true);
-                  }
-                }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                 {keysPlaceErr && <div className="alert alert-warn" style={{ margin: 0 }}>{keysPlaceErr}</div>}
                 <button
                   className="btn btn-blk btn-lg"
@@ -1703,13 +1514,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         </div>
       )}
 
-      {/* ── STEP 5: PAYMENT ── (keys orders submit at step 4 — redirect back if reached here) */}
-      {step === 5 && orderCategory === "keys" && (
-        <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
-          <p style={{ color: "var(--muted)", marginBottom: "1rem" }}>Keys / Fobs orders are submitted directly from the contact step.</p>
-          <button className="btn btn-out" onClick={() => setStep(4)}><Ic n="arrowL" s={14}/> Back to Contact Details</button>
-        </div>
-      )}
+      {/* ── STEP 5: PAYMENT ── */}
       {step === 5 && orderCategory !== "keys" && (
         <PaymentStep
           cart={cart} total={total} contact={contact}
@@ -1747,39 +1552,6 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
           {" · "}Top Owners Corporation Solution
           {" · "}Last updated {typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : ""}
-        </div>
-      )}
-
-      {/* ── External link confirmation dialog ── */}
-      {extLinkTarget && (
-        <div className="overlay" onClick={() => setExtLinkTarget(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "1rem" }}>
-              <span style={{ fontSize: "1.6rem" }}>🔗</span>
-              <h2 className="modal-tt" style={{ margin: 0 }}>Apply via External Provider</h2>
-            </div>
-            <p style={{ fontSize: "0.88rem", color: "var(--ink)", marginBottom: "0.75rem", lineHeight: 1.6 }}>
-              <strong>{extLinkTarget.name}</strong> requires you to apply directly with the supplier.
-            </p>
-            <p style={{ fontSize: "0.88rem", color: "var(--ink)", marginBottom: "0.5rem", lineHeight: 1.6 }}>
-              You will be redirected to:
-            </p>
-            <div style={{ background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "6px", padding: "8px 12px", fontSize: "0.8rem", fontFamily: "monospace", wordBreak: "break-all", marginBottom: "1rem", color: "var(--forest)" }}>
-              {extLinkTarget.externalUrl}
-            </div>
-            <div className="alert alert-warn" style={{ marginBottom: "1rem", fontSize: "0.82rem" }}>
-              <Ic n="info" s={13}/> Your current order will be <strong>closed</strong> when you continue. You can start a new order at any time.
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => setExtLinkTarget(null)}>Cancel</button>
-              <button className="btn btn-blk" style={{ flex: 1 }} onClick={() => {
-                const url = extLinkTarget.externalUrl;
-                setExtLinkTarget(null);
-                reset();
-                window.open(url, "_blank", "noopener,noreferrer");
-              }}>Continue &amp; Close Order <Ic n="arrow" s={13}/></button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1914,21 +1686,13 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
         ))}
         {selectedShipping && selectedShipping.cost > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: "8px" }}>
-            <span style={{ color: "var(--muted)" }}>{selectedShipping.name}</span>
+            <span style={{ color: "var(--muted)" }}>{selectedShipping.label}</span>
             <span style={{ color: "var(--forest)", fontWeight: 600 }}>{fmt(selectedShipping.cost)}</span>
           </div>
         )}
-        <div style={{ borderTop: "1px solid var(--border2)", marginTop: "10px", paddingTop: "10px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "4px" }}>
-            <span>Subtotal (ex. GST)</span><span>{fmt(exGst(total))}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "8px" }}>
-            <span>GST (10%)</span><span>{fmt(gstOf(total))}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "0.88rem" }}>
-            <span style={{ color: "var(--forest)" }}>Total (incl. GST)</span>
-            <span style={{ color: "var(--forest)" }}>{fmt(total)}</span>
-          </div>
+        <div style={{ borderTop: "1px solid var(--border2)", marginTop: "10px", paddingTop: "10px", display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "0.88rem" }}>
+          <span style={{ color: "var(--forest)" }}>Total (incl. GST)</span>
+          <span style={{ color: "var(--forest)" }}>{fmt(total)}</span>
         </div>
       </div>
     </div>
@@ -2004,10 +1768,6 @@ function ConfirmationPage({ order, reset, pubConfig }) {
           <div className="alert alert-warn" style={{ marginTop: "1rem" }}>
             Please transfer <strong>{fmt(order.total)}</strong> and use <strong>{order.id}</strong> as your payment reference. Certificate processing begins on receipt of funds.
           </div>
-        ) : order.payment === "payid" ? (
-          <div className="alert alert-warn" style={{ marginTop: "1rem" }}>
-            Please send <strong>{fmt(order.total)}</strong> via PayID and use <strong>{order.id}</strong> as your payment reference. Certificate processing begins on receipt of funds.
-          </div>
         ) : (
           <div className="alert alert-ok" style={{ marginTop: "1rem" }}>
             Payment received. Your certificate(s) will be processed within the stated turnaround time.
@@ -2052,9 +1812,9 @@ function ConfirmationPage({ order, reset, pubConfig }) {
             <strong>{fmt(item.price)}</strong>
           </div>
         ))}
-        {((order.selectedShipping?.cost ?? order.selectedShipping?.price) > 0) && (
+        {order.selectedShipping?.cost > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
-            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost ?? order.selectedShipping.price)}</span>
+            <span>Shipping — {order.selectedShipping.name}</span><span>{fmt(order.selectedShipping.cost)}</span>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", padding: "8px 0", borderBottom: "1px solid var(--border2)" }}>
@@ -2131,7 +1891,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
         Privacy Policy
       </h1>
       <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: "2.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1.5rem" }}>
-        Top Owners Corporation Solution · Last updated: {__BUILD_DATE__}
+        Top Owners Corporation Solution · Last updated: March 2026
       </p>
 
       {sections.map(({ heading, body }) => (
@@ -2164,23 +1924,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
   const [adminToast, setAdminToast] = useState(null);
 
-  const filteredOrders = useMemo(() => (data.orders || []).filter(o => {
-    const statusOk = !orderFilter.status || o.status === orderFilter.status;
-    const categoryOk = !orderFilter.category || (o.orderCategory || "oc") === orderFilter.category;
-    const building = o.items?.[0]?.planName || "";
-    const lot = o.items?.[0]?.lotNumber || "";
-    const planOk = !orderFilter.plan.trim() || building.toLowerCase().includes(orderFilter.plan.trim().toLowerCase()) || (o.items?.[0]?.planId || "").toLowerCase().includes(orderFilter.plan.trim().toLowerCase());
-    const lotOk = !orderFilter.lot.trim() || lot.toLowerCase().includes(orderFilter.lot.trim().toLowerCase());
-    const txt = orderFilter.text.toLowerCase();
-    if (!txt) return statusOk && categoryOk && planOk && lotOk;
-    const textOk = (o.id || "").toLowerCase().includes(txt) ||
-      (o.contactInfo?.name || "").toLowerCase().includes(txt) ||
-      (o.contactInfo?.email || "").toLowerCase().includes(txt) ||
-      (o.contactInfo?.companyName || "").toLowerCase().includes(txt) ||
-      building.toLowerCase().includes(txt) || lot.toLowerCase().includes(txt);
-    return statusOk && categoryOk && planOk && lotOk && textOk;
-  }), [data.orders, orderFilter]);
-
   const handleAuth = (token, user) => {
     setAdminToken(token);
     try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
@@ -2189,10 +1932,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       .then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(d => setData(d)).catch(() => {});
   };
   const handleLogout = () => {
-    const tok = adminToken;
     setAdminToken(null);
     try { sessionStorage.removeItem("admin_token"); sessionStorage.removeItem("admin_user"); } catch {}
-    if (tok) fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + tok }, body: JSON.stringify({ action: "logout" }) }).catch(() => {});
   };
 
   if (!adminToken) return <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />;
@@ -2226,11 +1967,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── Plan CRUD ───────────────────────────────────────────────────────────────
   const addPlan = async () => {
     if (!form.id || !form.name) return;
-    if (data.strataPlans.some(p => p.id === form.id.trim())) {
-      alert(`A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.`);
-      return;
-    }
-    const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
+    const plans = [...data.strataPlans, { id: form.id, name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
     await savePlans(plans);
     setModal(null); setForm({});
   };
@@ -2278,7 +2015,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
         ...(isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, parseFloat(form.managerAdminCharge) || 0) } : {}),
-        ...(isKeys && form.externalUrl?.trim() ? { externalUrl: form.externalUrl.trim() } : {}),
         ...(shippingCosts ? { shippingCosts } : {}),
       }]
     });
@@ -2298,7 +2034,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         turnaround: form.turnaround || "5 business days", perOC: form.perOC === "true",
         category: form.category || "oc",
         managerAdminCharge: isKeys && form.managerAdminCharge !== "" && form.managerAdminCharge !== undefined ? Math.max(0, parseFloat(form.managerAdminCharge) || 0) : undefined,
-        externalUrl: isKeys && form.externalUrl?.trim() ? form.externalUrl.trim() : undefined,
         ...(shippingCosts ? { shippingCosts } : { shippingCosts: undefined }),
       })
     });
@@ -2317,6 +2052,28 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setEditTarget({ type: "plan", id: p.id });
     setForm({});
     setModal("manageShipping");
+  };
+
+  const openKeysShipping = (p) => {
+    setEditTarget({ type: "plan", id: p.id });
+    setForm({
+      keysDeliveryCost: p.keysShipping?.deliveryCost ?? 0,
+      keysExpressCost:  p.keysShipping?.expressCost  ?? 0,
+    });
+    setModal("keysShipping");
+  };
+
+  const saveKeysShipping = async () => {
+    const deliveryCost = Math.max(0, parseFloat(form.keysDeliveryCost) || 0);
+    const expressCost  = Math.max(0, parseFloat(form.keysExpressCost)  || 0);
+    const plans = data.strataPlans.map(p =>
+      p.id !== editTarget.id ? p
+        : { ...p, keysShipping: { deliveryCost, expressCost } }
+    );
+    await savePlans(plans);
+    setModal(null);
+    setEditTarget(null);
+    setForm({});
   };
 
   const addShippingOption = async () => {
@@ -2397,11 +2154,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   // ── Order actions ───────────────────────────────────────────────────────────
-  const adminToastTimer = useRef(null);
   const showAdminToast = (type, msg) => {
-    if (adminToastTimer.current) clearTimeout(adminToastTimer.current);
     setAdminToast({ type, msg });
-    adminToastTimer.current = setTimeout(() => setAdminToast(null), 4000);
+    setTimeout(() => setAdminToast(null), 4000);
   };
 
   const updateOrderStatus = async (oid, status) => {
@@ -2427,7 +2182,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
-  const markPaid      = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
+  const markPaid      = (oid) => updateOrderStatus(oid, "Paid");
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
@@ -2440,7 +2195,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (prod.shippingCosts) {
       Object.entries(prod.shippingCosts).forEach(([k, v]) => { scFields[`sc_${k}`] = v; });
     }
-    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", externalUrl: prod.externalUrl || "", ...scFields });
+    setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", ...scFields });
     setModal("editProduct");
   };
 
@@ -2590,8 +2345,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${p.perOC ? "bg-b" : "bg-gray"}`}>{p.perOC ? "Yes" : "No"}</span></td>
                       <td>{(p.category || "oc") === "keys" && p.managerAdminCharge !== undefined ? <span style={{fontWeight:600}}>{fmt(p.managerAdminCharge)}</span> : <span style={{color:"var(--muted)"}}>—</span>}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
-                        <button className="tbl-act-btn" aria-label="Edit product" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
-                        <button className="tbl-act-btn danger" aria-label="Delete product" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
+                        <button className="tbl-act-btn" onClick={() => openEditProduct(p)}><Ic n="edit" s={13}/></button>
+                        <button className="tbl-act-btn danger" onClick={() => deleteProd(p.id)}><Ic n="trash" s={13}/></button>
                       </td>
                     </tr>
                   ))}
@@ -2636,8 +2391,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><span className={`badge ${l.type==="Residential"?"bg-b":l.type==="Commercial"?"bg-gold":"bg-gray"}`}>{l.type}</span></td>
                       <td style={{ fontSize: "0.78rem" }}>{l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")}</td>
                       <td style={{ display: "flex", gap: "6px" }}>
-                        <button className="tbl-act-btn" aria-label="Edit lot" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
-                        <button className="tbl-act-btn danger" aria-label="Delete lot" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
+                        <button className="tbl-act-btn" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
+                        <button className="tbl-act-btn danger" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
                       </td>
                     </tr>
                   ))}
@@ -2677,8 +2432,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         <td>{oc.name}</td>
                         <td>{lotsCount}</td>
                         <td style={{ display: "flex", gap: "6px" }}>
-                          <button className="tbl-act-btn" aria-label="Edit owner corporation" onClick={() => openEditOC(ocId, oc)}><Ic n="edit" s={13}/></button>
-                          <button className="tbl-act-btn danger" aria-label="Delete owner corporation" onClick={() => deleteOC(ocId)}><Ic n="trash" s={13}/></button>
+                          <button className="tbl-act-btn" onClick={() => openEditOC(ocId, oc)}><Ic n="edit" s={13}/></button>
+                          <button className="tbl-act-btn danger" onClick={() => deleteOC(ocId)}><Ic n="trash" s={13}/></button>
                         </td>
                       </tr>
                     );
@@ -2693,6 +2448,23 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── ORDERS ── */}
       {adminTab === "orders" && (() => {
+        const filteredOrders = (data.orders || []).filter(o => {
+          const statusOk = !orderFilter.status || o.status === orderFilter.status;
+          const categoryOk = !orderFilter.category || (o.orderCategory || "oc") === orderFilter.category;
+          const building = o.items?.[0]?.planName || "";
+          const lot = o.items?.[0]?.lotNumber || "";
+          const planOk = !orderFilter.plan.trim() || building.toLowerCase().includes(orderFilter.plan.trim().toLowerCase()) || (o.items?.[0]?.planId || "").toLowerCase().includes(orderFilter.plan.trim().toLowerCase());
+          const lotOk = !orderFilter.lot.trim() || lot.toLowerCase().includes(orderFilter.lot.trim().toLowerCase());
+          const txt = orderFilter.text.toLowerCase();
+          if (!txt) return statusOk && categoryOk && planOk && lotOk;
+          const textOk = (o.id || "").toLowerCase().includes(txt) ||
+            (o.contactInfo?.name || "").toLowerCase().includes(txt) ||
+            (o.contactInfo?.email || "").toLowerCase().includes(txt) ||
+            (o.contactInfo?.companyName || "").toLowerCase().includes(txt) ||
+            building.toLowerCase().includes(txt) ||
+            lot.toLowerCase().includes(txt);
+          return statusOk && categoryOk && planOk && lotOk && textOk;
+        });
         return (
         <div className="panel">
           {adminToast && (
@@ -2745,7 +2517,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <select className="f-select" style={{ flex: "0 0 200px", padding: "6px 10px", fontSize: "0.82rem" }}
               value={orderFilter.status} onChange={e => setOrderFilter(p => ({ ...p, status: e.target.value }))}>
               <option value="">All statuses</option>
-              <option>Pending Payment</option>
+              <option>Pending</option>
               <option>Processing</option>
               <option>Issued</option>
               <option>Paid</option>
@@ -2755,6 +2527,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>Invoice to be issued</option>
               <option>Paid</option>
               <option>Awaiting Stripe Payment</option>
+              <option>Paid</option>
+              <option>Issued</option>
+              <option>Cancelled</option>
+              <option>Invoice to be issued</option>
+              <option>Invoice sent, awaiting payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
               <button className="btn btn-out" style={{ padding: "6px 10px", fontSize: "0.78rem" }}
@@ -2793,15 +2570,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td><strong>{fmt(o.total)}</strong></td>
                       <td><span className={`badge ${
                         o.status==="Issued"?"bg-b":
-                        o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
-                        o.status==="Processing"?"bg-teal":
-                        o.status==="Pending Payment"?"bg-gold":
-                        o.status==="On Hold"?"bg-warn":
-                        o.status==="Awaiting Documents"?"bg-purple":
+                        o.status==="Paid"?"bg-g":
+                        o.status==="Awaiting Stripe Payment"?"bg-purple":
+                        o.status==="Invoice sent, awaiting payment"?"bg-slate":
                         o.status==="Invoice to be issued"?"bg-teal":
-                        o.status==="Awaiting Stripe Payment"?"bg-slate":
-                        "bg-gray"
+                        "bg-gold"
                       }`}>{o.status}</span></td>
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
@@ -2810,7 +2584,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
-                        {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
+                        {o.status !== "Issued" && o.status !== "Cancelled" && o.orderCategory !== "keys" && (
                           <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && (
@@ -2895,7 +2669,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     {effectiveType === "agent" && ci.companyName && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Company</td><td style={{ paddingBottom:"4px" }}>{ci.companyName}</td></tr>}
                                     {hasRef && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>OC Reference</td><td style={{ paddingBottom:"4px" }}>{ci.ocReference}</td></tr>}
                                     {hasAddr && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Delivery Address</td><td style={{ paddingBottom:"4px" }}>{ci.shippingAddress.street}, {ci.shippingAddress.suburb} {ci.shippingAddress.state} {ci.shippingAddress.postcode}</td></tr>}
-                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost ?? o.selectedShipping.price)}</td></tr>}
+                                    {hasShipping && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Shipping</td><td style={{ paddingBottom:"4px" }}>{o.selectedShipping.name} — {fmt(o.selectedShipping.cost)}</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
@@ -2986,7 +2760,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           adminToken={adminToken}
           onClose={() => setSendInvoiceModal(null)}
           onSent={(oid) => {
-            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: "Pending Payment", auditLog: [...(o.auditLog||[]), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${o.contactInfo?.email}` }] }) }));
+            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: "Invoice sent, awaiting payment", auditLog: [...(o.auditLog||[]), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${o.contactInfo?.email}` }] }) }));
             setSendInvoiceModal(null);
           }}
         />
@@ -3095,13 +2869,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Internal charge for admin reporting. Not included in the product price shown to applicants.</div>
               </div>
             )}
-            {(form.category || "oc") === "keys" && (
-              <div className="form-row">
-                <label className="f-label">External Application URL <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>(optional)</span></label>
-                <input className="f-input" type="url" placeholder="https://supplier.com/apply" value={form.externalUrl||""} onChange={e => upd("externalUrl",e.target.value)}/>
-                <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>If set, applicants will see an "Apply Now" button that redirects to this URL instead of adding to cart. Their order will be closed on redirect.</div>
-              </div>
-            )}
             {/* Shipping cost overrides — shown when plan has shipping options */}
             {(() => {
               const activePlan = data.strataPlans.find(p => p.id === planId);
@@ -3194,32 +2961,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               </select>
             </div>
             <div className="form-row">
-              <label className="f-label">Owner Corporations</label>
-              {plan && Object.keys(plan.ownerCorps).length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
-                  {Object.entries(plan.ownerCorps).map(([ocId, oc]) => {
-                    const selected = (form.ocIds || "").split(",").map(s => s.trim()).filter(Boolean).includes(ocId);
-                    return (
-                      <label key={ocId} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 12px", border: `1.5px solid ${selected ? "var(--sage)" : "var(--border)"}`, borderRadius: "6px", cursor: "pointer", background: selected ? "var(--sage-tint)" : "white" }}>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => {
-                            const cur = (form.ocIds || "").split(",").map(s => s.trim()).filter(Boolean);
-                            const next = selected ? cur.filter(id => id !== ocId) : [...cur, ocId];
-                            upd("ocIds", next.join(", "));
-                          }}
-                          style={{ width: "14px", height: "14px", accentColor: "var(--forest)", flexShrink: 0 }}
-                        />
-                        <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--forest)", fontFamily: "monospace" }}>{ocId}</span>
-                        <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{oc.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "4px" }}>No Owner Corporations defined for this plan. Add OCs first.</div>
-              )}
+              <label className="f-label">Owner Corp IDs (comma-separated)</label>
+              <input className="f-input" placeholder="OC-A, OC-B" value={form.ocIds||""} onChange={e => upd("ocIds",e.target.value)}/>
+              {plan && <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:"4px"}}>Available: {Object.keys(plan.ownerCorps).join(", ")}</div>}
             </div>
             <div style={{ display: "flex", gap: "8px", marginTop: "0.5rem" }}>
               <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); }}>Cancel</button>
@@ -3329,7 +3073,7 @@ function AdminLogin({ onAuth, pubConfig }) {
           }
         </button>
         <div style={{ textAlign: "center", marginTop: "1.25rem" }}>
-          <a href="mailto:info@tocs.co?subject=Admin%20Password%20Reset%20Request&body=Please%20reset%20my%20admin%20password." style={{ fontSize: "0.75rem", color: "var(--muted)", textDecoration: "none" }}>Forgot password? Contact admin</a>
+          <a href="mailto:info@tocs.co" style={{ fontSize: "0.75rem", color: "var(--muted)", textDecoration: "none" }}>Forgot password? Contact admin</a>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -3339,38 +3083,8 @@ function AdminLogin({ onAuth, pubConfig }) {
 
 
 
-// ─── FOCUS TRAP HOOK ──────────────────────────────────────────────────────────
-// Auto-focuses the first interactive element in a modal and traps Tab within it.
-// Returns a ref to attach to the modal container div.
-function useFocusTrap(onEscape) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const FOCUSABLE = 'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
-    const first = el.querySelector(FOCUSABLE);
-    if (first) first.focus();
-    const trap = (e) => {
-      if (e.key === "Escape") { onEscape?.(); return; }
-      if (e.key !== "Tab") return;
-      const els = [...el.querySelectorAll(FOCUSABLE)];
-      if (!els.length) return;
-      const idx = els.indexOf(document.activeElement);
-      if (e.shiftKey) {
-        if (idx <= 0) { e.preventDefault(); els[els.length - 1].focus(); }
-      } else {
-        if (idx === els.length - 1) { e.preventDefault(); els[0].focus(); }
-      }
-    };
-    el.addEventListener("keydown", trap);
-    return () => el.removeEventListener("keydown", trap);
-  }, [onEscape]);
-  return ref;
-}
-
 // ─── CANCEL ORDER MODAL ───────────────────────────────────────────────────────
 function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
-  const trapRef = useFocusTrap(onClose);
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3401,10 +3115,10 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Cancel Order" style={{ maxWidth: "480px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: "480px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0, color: "var(--red)" }}>Cancel Order</h2>
-          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
 
         <div className="alert alert-warn" style={{ marginBottom: "1.2rem" }}>
@@ -3458,7 +3172,6 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
 
 // ─── SEND CERTIFICATE MODAL ───────────────────────────────────────────────────
 function SendCertificateModal({ order, adminToken, onClose, onSent }) {
-  const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
   const [certFile, setCertFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -3515,10 +3228,10 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Send Certificate" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0 }}>Send Certificate</h2>
-          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
         <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "1rem" }}>
           To: <strong style={{ color: "var(--ink)" }}>{contact.name}</strong> &lt;{contact.email}&gt; · Order {order.id}
@@ -3565,7 +3278,6 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
 // ─── SEND INVOICE MODAL ───────────────────────────────────────────────────────
 function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
-  const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
   const [invoiceFile, setInvoiceFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -3617,10 +3329,10 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Send Invoice" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: "540px", width: "100%" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem" }}>
           <h2 className="modal-tt" style={{ marginBottom: 0 }}>Send Invoice</h2>
-          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
         </div>
         <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "1rem" }}>
           To: <strong style={{ color: "var(--ink)" }}>{contact.name}</strong> &lt;{contact.email}&gt; · Order {order.id}

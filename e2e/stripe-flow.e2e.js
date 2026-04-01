@@ -1,45 +1,75 @@
-// e2e/stripe-flow.e2e.js — E2E tests for Stripe payment flow
+// e2e/stripe-flow.e2e.js
+// E2E tests for Stripe payment flow scenarios.
 //
-// Requires:
-//   - Dev server at http://localhost:3000
-//   - STRIPE_SECRET_KEY configured (test key)
-//   - Redis with DEFAULT_DATA
-//
-// Note: Full Stripe checkout redirect cannot be tested without a live Stripe key.
-// Tests verify the UI state and navigation without completing a real Stripe session.
-
+// The Stripe redirect test requires a live STRIPE_SECRET_KEY and is skipped
+// if it is not set.  The cancellation banner and error-state tests run against
+// any server instance.
 import { test, expect } from "@playwright/test";
 
-test.describe("Stripe payment flow", () => {
-  test("stripe cancellation banner appears when cancelled=1 param is present", async ({ page }) => {
-    await page.goto("/?cancelled=1");
+const STRIPE_ENABLED = !!process.env.STRIPE_SECRET_KEY;
 
-    // Look for cancellation banner
-    const banner = page.getByText(/cancel|cancelled|payment/i).first();
-    // Banner may or may not be visible depending on implementation
-    // At minimum, the page should load without error
-    await expect(page).toHaveURL(/cancelled=1/);
-  });
+// ─── Stripe cancellation banner ───────────────────────────────────────────────
 
-  test("direct navigation to /complete with invalid orderId shows error state", async ({ page }) => {
-    await page.goto("/complete?orderId=NONEXISTENT-ORDER-ID&stripeOk=1");
+test("Stripe — cancellation banner shown on /?cancelled=1", async ({ page }) => {
+  await page.goto("/?cancelled=1");
+  await page.waitForLoadState("networkidle");
 
-    // Should show some kind of error or loading state
-    await page.waitForTimeout(2000);
+  // The app shows a yellow cancellation banner
+  await expect(page.getByText(/payment cancelled/i)).toBeVisible({ timeout: 8000 });
 
-    // The page should either show an error message or fallback UI
-    // Not crash with a white screen
-    const body = page.locator("body");
-    await expect(body).not.toBeEmpty();
-  });
+  // Dismiss button (renders as × with no accessible name, but aria-label may vary)
+  const dismissBtn = page.locator("button[aria-label='Dismiss'], button").filter({ hasText: "×" }).first();
+  await dismissBtn.click();
 
-  test("Stripe Credit/Debit Card payment option visible when stripeEnabled", async ({ page }) => {
-    await page.goto("/");
+  // Banner should disappear
+  await expect(page.getByText(/payment cancelled/i)).not.toBeVisible({ timeout: 5000 });
+});
 
-    // Navigate to payment step to check if stripe option is visible
-    // This depends on whether STRIPE_SECRET_KEY is configured
-    const stripeOption = page.getByText(/Credit.*Debit.*Card|Card Payment|Stripe/i).first();
-    // May or may not be visible depending on server config — just verify no crash
-    await expect(page.locator("body")).not.toBeEmpty();
-  });
+// ─── Stripe error state ────────────────────────────────────────────────────────
+
+test("Stripe — error shown for non-existent order stripe confirm", async ({ page }) => {
+  // Simulate Stripe redirecting back with a made-up order ID
+  await page.goto("/complete?orderId=NONEXISTENT-ORDER-E2E&stripeOk=1");
+  await page.waitForLoadState("networkidle");
+
+  // App attempts to call /api/orders/NONEXISTENT-ORDER-E2E/stripe-confirm
+  // which fails, and shows an error message
+  await expect(
+    page.getByText(/could not be verified|error|contact support|network error/i).first()
+  ).toBeVisible({ timeout: 15000 });
+});
+
+// ─── Stripe payment method visible when stripe is enabled ─────────────────────
+
+test.skip(!STRIPE_ENABLED, "STRIPE_SECRET_KEY not set — skipping card payment test");
+test("Stripe — credit card option visible when stripe enabled", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+
+  await page.locator('.s1-search-bar input').fill("Harbour");
+  await page.locator('.plan-card').filter({ hasText: "Harbour View Residences" }).first().click();
+  await page.locator('.cat-card').filter({ hasText: "OC Certificates" }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
+
+  await page.locator('input[placeholder="e.g. Lot 5"]').fill("Lot 1");
+  await page.locator('input[placeholder="e.g. Jane Smith"]').fill("Test Owner");
+
+  const FIXTURE_PDF = new URL("./fixtures/authority-doc.pdf", import.meta.url).pathname;
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(FIXTURE_PDF);
+
+  await page.getByText("OC Certificate — Standard").first().waitFor();
+  await page.locator(".prod-card").filter({ hasText: "OC Certificate — Standard" }).locator(".add-btn").click();
+
+  await page.getByRole("button", { name: /review order/i }).click();
+  await page.getByRole("button", { name: /enter contact details/i }).click();
+
+  await page.locator('input[placeholder="Jane Smith"], input.f-input[type="text"]').first().fill("Test User");
+  await page.locator('input[placeholder="jane@example.com"]').fill("stripe@example.com");
+  await page.locator('input[placeholder="0400 000 000"]').fill("0412 345 678");
+
+  await page.getByRole("button", { name: /choose payment/i }).click();
+
+  // Stripe card option should be visible
+  await expect(page.locator(".pay-method").filter({ hasText: /credit|debit|card/i })).toBeVisible();
 });

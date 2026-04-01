@@ -1,113 +1,93 @@
-// e2e/admin-login.e2e.js — E2E tests for admin authentication
+// e2e/admin-login.e2e.js
+// E2E tests for admin authentication.
 //
-// Requires:
-//   - Dev server at http://localhost:3000
-//   - Redis configured with admin credentials (ADMIN_USER / ADMIN_PASS or stored config)
-//
-// Test credentials from test/setup.js:
-//   user: testadmin@example.com
-//   pass: TestPass123!
-
+// The default admin credentials used by server.js are:
+//   user: info@tocs.co
+//   pass: Tocs@Vote
+// Override via ADMIN_USER / ADMIN_PASS env vars if needed.
 import { test, expect } from "@playwright/test";
 
-const ADMIN_USER = process.env.ADMIN_USER || "testadmin@example.com";
-const ADMIN_PASS = process.env.ADMIN_PASS || "TestPass123!";
+const ADMIN_USER = process.env.ADMIN_USER || "info@tocs.co";
+const ADMIN_PASS = process.env.ADMIN_PASS || "Tocs@Vote";
 
-// Helper to locate the Admin nav button
-async function openAdminPanel(page) {
-  const adminBtn = page.getByRole("button", { name: /admin/i }).first()
-    .or(page.getByText(/admin/i).first());
-  if (await adminBtn.count() > 0) {
-    await adminBtn.click();
-    return true;
-  }
-  return false;
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+/** Navigate to the admin panel login form. */
+async function openAdminLogin(page) {
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: /admin/i }).click();
 }
 
-test.describe("Admin authentication", () => {
-  test("login form is shown when Admin is clicked", async ({ page }) => {
-    await page.goto("/");
-    const found = await openAdminPanel(page);
-    if (!found) return test.skip();
+/** Log in with provided credentials. */
+async function loginAs(page, { user, pass }) {
+  await openAdminLogin(page);
+  // The login form has type="email" for username and type="password" for password
+  await page.locator('input[type="email"]').fill(user);
+  await page.locator('input[type="password"]').fill(pass);
+  // The login button has text "Sign In"
+  await page.getByRole("button", { name: /sign in/i }).click();
+}
 
-    // Look for login form elements
-    const loginForm = page.locator("input[type='password'], input[placeholder*='password' i]").first();
-    await expect(loginForm).toBeVisible({ timeout: 5000 }).catch(() => {
-      // Admin might require different navigation path
-    });
-  });
+// ─── Happy path ───────────────────────────────────────────────────────────────
 
-  test("invalid credentials show error message", async ({ page }) => {
-    await page.goto("/");
-    const found = await openAdminPanel(page);
-    if (!found) return test.skip();
+test("Admin login — valid credentials shows admin panel", async ({ page }) => {
+  await loginAs(page, { user: ADMIN_USER, pass: ADMIN_PASS });
 
-    const userInput = page.locator("input[type='email'], input[placeholder*='user' i], input[placeholder*='email' i]").first();
-    const passInput = page.locator("input[type='password']").first();
+  // After login the Orders tab should be visible in the admin bar
+  await expect(page.getByRole("button", { name: /^orders$/i })).toBeVisible({ timeout: 8000 });
+});
 
-    if (!(await userInput.count()) || !(await passInput.count())) return test.skip();
+// ─── Invalid credentials ──────────────────────────────────────────────────────
 
-    await userInput.fill("wrong@example.com");
-    await passInput.fill("wrongpass");
+test("Admin login — wrong password shows error", async ({ page }) => {
+  await loginAs(page, { user: ADMIN_USER, pass: "WrongPassword99!" });
 
-    const loginBtn = page.getByRole("button", { name: /login|sign in/i }).first();
-    if (await loginBtn.count() > 0) {
-      await loginBtn.click();
-      // Should show error
-      const errorMsg = page.getByText(/incorrect|invalid|wrong|unauthorized/i).first();
-      await expect(errorMsg).toBeVisible({ timeout: 5000 }).catch(() => {});
-    }
-  });
+  // Error message shown
+  await expect(page.locator(".login-err")).toBeVisible();
+});
 
-  test("successful login shows admin panel", async ({ page }) => {
-    await page.goto("/");
-    const found = await openAdminPanel(page);
-    if (!found) return test.skip();
+// ─── Token persistence across reload ─────────────────────────────────────────
 
-    const userInput = page.locator("input[type='email'], input[placeholder*='user' i], input[placeholder*='email' i]").first();
-    const passInput = page.locator("input[type='password']").first();
+test("Admin login — token persists after page reload", async ({ page }) => {
+  await loginAs(page, { user: ADMIN_USER, pass: ADMIN_PASS });
+  await expect(page.getByRole("button", { name: /^orders$/i })).toBeVisible({ timeout: 8000 });
 
-    if (!(await userInput.count()) || !(await passInput.count())) return test.skip();
+  // Reload the page
+  await page.reload();
+  await page.waitForLoadState("networkidle");
 
-    await userInput.fill(ADMIN_USER);
-    await passInput.fill(ADMIN_PASS);
+  // Navigate back to admin
+  await page.getByRole("button", { name: /admin/i }).click();
 
-    const loginBtn = page.getByRole("button", { name: /login|sign in/i }).first();
-    if (await loginBtn.count() > 0) {
-      await loginBtn.click();
-      await page.waitForTimeout(2000);
-      // Admin panel should now be visible — look for orders, settings, etc.
-      const adminContent = page.getByText(/orders|settings|logout/i).first();
-      await expect(adminContent).toBeVisible({ timeout: 5000 }).catch(() => {});
-    }
-  });
+  // Should still be logged in (token in sessionStorage)
+  await expect(page.getByRole("button", { name: /^orders$/i })).toBeVisible({ timeout: 8000 });
+});
 
-  test("logout clears admin token from sessionStorage", async ({ page }) => {
-    await page.goto("/");
-    const found = await openAdminPanel(page);
-    if (!found) return test.skip();
+// ─── Logout ───────────────────────────────────────────────────────────────────
 
-    // Log in
-    const userInput = page.locator("input[type='email'], input[placeholder*='user' i]").first();
-    const passInput = page.locator("input[type='password']").first();
-    if (!(await userInput.count())) return test.skip();
+test("Admin login — logout clears session and shows login form", async ({ page }) => {
+  await loginAs(page, { user: ADMIN_USER, pass: ADMIN_PASS });
+  await expect(page.getByRole("button", { name: /^orders$/i })).toBeVisible({ timeout: 8000 });
 
-    await userInput.fill(ADMIN_USER);
-    await passInput.fill(ADMIN_PASS);
-    const loginBtn = page.getByRole("button", { name: /login|sign in/i }).first();
-    if (await loginBtn.count() > 0) await loginBtn.click();
-    await page.waitForTimeout(2000);
+  // Click "Sign Out" button
+  await page.getByRole("button", { name: /sign out/i }).click();
 
-    // Log out
-    const logoutBtn = page.getByRole("button", { name: /logout|sign out/i }).first();
-    if (await logoutBtn.count() > 0) {
-      await logoutBtn.click();
-      await page.waitForTimeout(500);
+  // Login form (password input) should reappear
+  await expect(page.locator('input[type="password"]')).toBeVisible();
 
-      // Token should be cleared
-      const token = await page.evaluate(() => sessionStorage.getItem("admin_token"));
-      // Either null or undefined after logout
-      expect(token == null).toBe(true);
-    }
-  });
+  // sessionStorage should have no token
+  const token = await page.evaluate(() => sessionStorage.getItem("admin_token"));
+  expect(token).toBeNull();
+});
+
+// ─── Enter key submits the form ───────────────────────────────────────────────
+
+test("Admin login — pressing Enter in password field submits", async ({ page }) => {
+  await openAdminLogin(page);
+  await page.locator('input[type="email"]').fill(ADMIN_USER);
+  await page.locator('input[type="password"]').fill(ADMIN_PASS);
+  await page.locator('input[type="password"]').press("Enter");
+
+  await expect(page.getByRole("button", { name: /^orders$/i })).toBeVisible({ timeout: 8000 });
 });

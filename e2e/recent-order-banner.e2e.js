@@ -1,71 +1,92 @@
-// e2e/recent-order-banner.e2e.js — E2E tests for the recent order banner
-//
-// Tests the localStorage-based banner that shows when a customer has placed
-// an order within the last 7 days.
-
+// e2e/recent-order-banner.e2e.js
+// E2E tests for the recent order banner shown on the home page.
 import { test, expect } from "@playwright/test";
 
-test.describe("Recent order banner", () => {
-  test("banner shown for an order placed within the last 7 days", async ({ page }) => {
-    await page.goto("/");
+// ─── Banner shown for recent order ────────────────────────────────────────────
 
-    // Set localStorage to simulate a recent order
-    const recentOrder = {
-      id: "TOCS-BANNER-TEST",
-      date: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(), // 2 days ago
-      status: "Pending Payment",
-      payment: "bank",
-      total: 220,
-    };
+test("Recent order banner — shown for order placed within last 7 days", async ({ page }) => {
+  // Navigate and inject a recent order into localStorage before the app reads it
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
 
-    await page.evaluate((order) => {
-      localStorage.setItem("tocs_last_order", JSON.stringify(order));
-    }, recentOrder);
+  // Set localStorage to simulate a recent order
+  const recentOrder = {
+    id: "TOCS-E2ETEST-ABC",
+    date: new Date().toISOString(),
+    email: "recent@example.com",
+    total: 220,
+    payment: "bank",
+    orderCategory: "oc",
+  };
+  await page.evaluate((order) => {
+    localStorage.setItem("tocs_last_order", JSON.stringify(order));
+  }, recentOrder);
 
-    await page.reload();
-    await page.waitForTimeout(1000);
+  // Reload to have the app read from localStorage on mount
+  await page.reload();
+  await page.waitForLoadState("networkidle");
 
-    // Look for a banner referencing the recent order
-    // The exact text depends on the implementation
-    const banner = page.locator("[class*='banner'], [class*='alert'], [class*='notice']").first();
-    // If there is a banner, it should be visible
-    // (Implementation-dependent — test that we can at least read the page)
-    await expect(page.locator("body")).not.toBeEmpty();
-  });
+  // Recent order banner should be visible with the order ID
+  await expect(page.getByText("TOCS-E2ETEST-ABC")).toBeVisible();
+});
 
-  test("banner NOT shown for an order placed 8+ days ago", async ({ page }) => {
-    await page.goto("/");
+// ─── Banner hidden for order placed 8+ days ago ────────────────────────────────
 
-    // Set localStorage to simulate an old order (8 days ago)
-    const oldOrder = {
-      id: "TOCS-OLD-ORDER",
-      date: new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString(), // 8 days ago
-      status: "Pending Payment",
-      payment: "bank",
-      total: 220,
-    };
+test("Recent order banner — not shown for order 8 days ago", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
 
-    await page.evaluate((order) => {
-      localStorage.setItem("tocs_last_order", JSON.stringify(order));
-    }, oldOrder);
+  // Inject an old order (8 days ago)
+  const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const oldOrder = {
+    id: "TOCS-OLDORDER-XYZ",
+    date: eightDaysAgo,
+    email: "old@example.com",
+    total: 220,
+    payment: "bank",
+    orderCategory: "oc",
+  };
+  await page.evaluate((order) => {
+    localStorage.setItem("tocs_last_order", JSON.stringify(order));
+  }, oldOrder);
 
-    await page.reload();
-    await page.waitForTimeout(1000);
+  await page.reload();
+  await page.waitForLoadState("networkidle");
 
-    // Page should load without errors
-    await expect(page.locator("body")).not.toBeEmpty();
+  // Old order banner should NOT be visible
+  await expect(page.getByText("TOCS-OLDORDER-XYZ")).not.toBeVisible();
+});
 
-    // Verify localStorage was read
-    const storedOrder = await page.evaluate(() => localStorage.getItem("tocs_last_order"));
-    expect(storedOrder).not.toBeNull();
-  });
+// ─── Banner can be dismissed ──────────────────────────────────────────────────
 
-  test("localStorage.tocs_last_order is set after completing an order", async ({ page }) => {
-    await page.goto("/");
+test("Recent order banner — dismiss button hides banner", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
 
-    // Check that localStorage is accessible
-    const initialValue = await page.evaluate(() => localStorage.getItem("tocs_last_order"));
-    // May be null or have a value — just verify localStorage is accessible
-    expect(typeof initialValue === "string" || initialValue === null).toBe(true);
-  });
+  const recentOrder = {
+    id: "TOCS-DISMISS-TEST",
+    date: new Date().toISOString(),
+    email: "dismiss@example.com",
+    total: 220,
+    payment: "bank",
+    orderCategory: "oc",
+  };
+  await page.evaluate((order) => {
+    localStorage.setItem("tocs_last_order", JSON.stringify(order));
+  }, recentOrder);
+
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  // Banner visible
+  await expect(page.getByText("TOCS-DISMISS-TEST")).toBeVisible();
+
+  // Click dismiss (×) button near the banner
+  // The dismiss button renders as a button with aria-label="Dismiss" and text "×"
+  // It is the only button inside the recent order banner
+  const dismissBtn = page.locator('[aria-label="Dismiss"]');
+  await dismissBtn.click();
+
+  // Banner should be gone
+  await expect(page.getByText("TOCS-DISMISS-TEST")).not.toBeVisible();
 });

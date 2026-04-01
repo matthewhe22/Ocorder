@@ -3,15 +3,13 @@ import http from "http";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import crypto from "crypto";
 import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIST        = path.join(__dirname, "dist");
-const DATA_FILE   = path.join(__dirname, process.env.DATA_FILE   || "data.json");
-const CONFIG_FILE = path.join(__dirname, process.env.CONFIG_FILE || "config.json");
-const UPLOADS_DIR = path.join(__dirname, process.env.UPLOADS_DIR || "uploads");
-const DEMO_MODE   = process.env.DEMO_MODE === "true";
+const DIST         = path.join(__dirname, "dist");
+const DATA_FILE    = path.join(__dirname, "data.json");
+const CONFIG_FILE  = path.join(__dirname, "config.json");
+const UPLOADS_DIR  = path.join(__dirname, "uploads");
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
@@ -39,14 +37,13 @@ const DEFAULT_DATA = {
         "OC-B": { name: "Owner Corporation B — Commercial",  levy: 2400 },
       },
       products: [
-        { id:"P1", name:"OC Certificate — Standard",           description:"s151 SMA Owner Corporation Certificate",            price:220, secondaryPrice:150, turnaround:"5 business days",   perOC:true,  category:"oc"   },
-        { id:"P2", name:"OC Certificate — Urgent",             description:"Priority processing, 24–48 hour turnaround",        price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true,  category:"oc"   },
-        { id:"P3", name:"Register of Owners Search",           description:"Current register of lot owners and addresses",      price: 55,                    turnaround:"3 business days",   perOC:false, category:"oc"   },
-        { id:"P4", name:"Insurance Certificate of Currency",   description:"Current building insurance details and certificate",price: 75,                    turnaround:"2 business days",   perOC:false, category:"oc"   },
-        { id:"P5", name:"Meeting Minutes — Last 2 Years",      description:"Minutes of AGM and general meetings",              price:110,                    turnaround:"5 business days",   perOC:false, category:"oc"   },
-        { id:"P6", name:"Financial Statements",                description:"Latest audited financial statements",               price: 95,                    turnaround:"5 business days",   perOC:false, category:"oc"   },
+        { id:"P1", name:"OC Certificate — Standard",           description:"s151 SMA Owner Corporation Certificate",            price:220, secondaryPrice:150, turnaround:"5 business days",   perOC:true  },
+        { id:"P2", name:"OC Certificate — Urgent",             description:"Priority processing, 24–48 hour turnaround",        price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true  },
+        { id:"P3", name:"Register of Owners Search",           description:"Current register of lot owners and addresses",      price: 55,                    turnaround:"3 business days",   perOC:false },
+        { id:"P4", name:"Insurance Certificate of Currency",   description:"Current building insurance details and certificate",price: 75,                    turnaround:"2 business days",   perOC:false },
+        { id:"P5", name:"Meeting Minutes — Last 2 Years",      description:"Minutes of AGM and general meetings",              price:110,                    turnaround:"5 business days",   perOC:false },
+        { id:"P6", name:"Financial Statements",                description:"Latest audited financial statements",               price: 95,                    turnaround:"5 business days",   perOC:false },
       ],
-      keysShipping: { deliveryCost: 15, expressCost: 25 },
       active: true,
     },
   ],
@@ -71,82 +68,11 @@ const DEFAULT_CONFIG = {
   },
 };
 
-// ── Demo seed data (restored by /api/demo/reset) ──────────────────────────────
-const DEMO_SEED_DATA = {
-  strataPlans: [
-    {
-      id: "SP10001", name: "Harbour View Residences", address: "45 Marina Drive, Sydney NSW 2000", active: true,
-      lots: [
-        { id: "L1", number: "Lot 1", level: "Ground",   type: "Residential", ownerCorps: ["OC-A"] },
-        { id: "L2", number: "Lot 2", level: "Level 1",  type: "Residential", ownerCorps: ["OC-A"] },
-        { id: "L3", number: "Lot 3", level: "Level 2",  type: "Residential", ownerCorps: ["OC-A","OC-B"] },
-        { id: "L4", number: "Lot 4", level: "Level 3",  type: "Commercial",  ownerCorps: ["OC-B"] },
-        { id: "L5", number: "Lot 5 (Parking)", level: "Basement", type: "Parking", ownerCorps: ["OC-A"] },
-      ],
-      ownerCorps: {
-        "OC-A": { name: "OC A — Residential", levy: 1200 },
-        "OC-B": { name: "OC B — Commercial",  levy: 2800 },
-      },
-      products: [
-        { id:"P1", name:"OC Certificate — Standard", description:"s151 SMA Owner Corporation Certificate", price:220, secondaryPrice:150, turnaround:"5 business days", perOC:true,  category:"oc"   },
-        { id:"P2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true, category:"oc"   },
-        { id:"P3", name:"Register of Owners Search", description:"Current register of lot owners",           price:55,  turnaround:"3 business days", perOC:false, category:"oc"   },
-        { id:"P4", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:75, turnaround:"2 business days", perOC:false, category:"oc"   },
-      ],
-      keysShipping: { deliveryCost: 12, expressCost: 25 },
-    },
-    {
-      id: "SP10002", name: "Parkside Gardens", address: "12 Garden Street, Melbourne VIC 3000", active: true,
-      lots: [
-        { id: "G1", number: "Lot 101", level: "Level 1", type: "Residential", ownerCorps: ["OC-A"] },
-        { id: "G2", number: "Lot 102", level: "Level 1", type: "Residential", ownerCorps: ["OC-A"] },
-        { id: "G3", number: "Lot 201", level: "Level 2", type: "Residential", ownerCorps: ["OC-A"] },
-        { id: "G4", number: "Lot 202", level: "Level 2", type: "Residential", ownerCorps: ["OC-A"] },
-        { id: "G5", number: "Lot G01 (Garage)", level: "Basement", type: "Parking", ownerCorps: ["OC-A"] },
-      ],
-      ownerCorps: { "OC-A": { name: "Parkside Gardens OC", levy: 950 } },
-      products: [
-        { id:"Q1", name:"OC Certificate — Standard", description:"s151 SMA Owner Corporation Certificate", price:200, secondaryPrice:140, turnaround:"5 business days", perOC:true  },
-        { id:"Q2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:360, secondaryPrice:260, turnaround:"1–2 business days", perOC:true },
-        { id:"Q3", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:70, turnaround:"2 business days", perOC:false },
-      ],
-      keysShipping: { deliveryCost: 12, expressCost: 25 },
-    },
-  ],
-  orders: [
-    { id:"DEMO-001", planId:"SP10001", lotId:"L1", orderCategory:"oc", contactInfo:{name:"Sarah Johnson",  email:"sarah.j@lawfirm.com.au", phone:"0412 345 678", companyName:"Johnson Legal"}, status:"Pending Payment",      payment:"bank",    items:[{productId:"P1",lotId:"L1",lotNumber:"Lot 1",planName:"Harbour View Residences",ocName:"OC A — Residential",ocId:"OC-A",productName:"OC Certificate — Standard",qty:1,price:220}], date:"2026-03-25T09:12:00.000Z", total:220, auditLog:[{ts:"2026-03-25T09:12:00.000Z",action:"Order created",note:"Customer: Sarah Johnson"}] },
-    { id:"DEMO-002", planId:"SP10001", lotId:"L3", orderCategory:"oc", contactInfo:{name:"Michael Chen",   email:"m.chen@conveyancing.com", phone:"0421 987 654", companyName:"Chen & Partners"}, status:"Processing",           payment:"bank",    items:[{productId:"P1",lotId:"L3",lotNumber:"Lot 3",planName:"Harbour View Residences",ocName:"OC A — Residential",ocId:"OC-A",productName:"OC Certificate — Standard",qty:1,price:220},{productId:"P1",lotId:"L3",lotNumber:"Lot 3",planName:"Harbour View Residences",ocName:"OC B — Commercial",ocId:"OC-B",productName:"OC Certificate — Standard",qty:1,price:150}], date:"2026-03-24T14:30:00.000Z", total:370, auditLog:[{ts:"2026-03-24T14:30:00.000Z",action:"Order created",note:"Customer: Michael Chen"},{ts:"2026-03-24T16:00:00.000Z",action:"Status changed to Processing",note:"Payment confirmed"}] },
-    { id:"DEMO-003", planId:"SP10001", lotId:"L2", orderCategory:"oc", contactInfo:{name:"Emma Williams",  email:"emma@propertysearch.com.au", phone:"0433 111 222"}, status:"Issued",                payment:"payid",   items:[{productId:"P2",lotId:"L2",lotNumber:"Lot 2",planName:"Harbour View Residences",ocName:"OC A — Residential",ocId:"OC-A",productName:"OC Certificate — Urgent",qty:1,price:385}], date:"2026-03-23T10:00:00.000Z", total:385, auditLog:[{ts:"2026-03-23T10:00:00.000Z",action:"Order created",note:"Customer: Emma Williams"},{ts:"2026-03-23T11:30:00.000Z",action:"Status changed to Processing"},{ts:"2026-03-24T09:00:00.000Z",action:"Certificate issued",note:"To: emma@propertysearch.com.au"}] },
-    { id:"DEMO-004", planId:"SP10002", lotId:"G1", orderCategory:"oc", contactInfo:{name:"David Park",     email:"david.p@email.com",         phone:"0455 333 444", companyName:"Park Conveyancing"}, status:"Awaiting Documents",   payment:"bank",    items:[{productId:"Q1",lotId:"G1",lotNumber:"Lot 101",planName:"Parkside Gardens",ocName:"Parkside Gardens OC",ocId:"OC-A",productName:"OC Certificate — Standard",qty:1,price:200}], date:"2026-03-25T11:45:00.000Z", total:200, auditLog:[{ts:"2026-03-25T11:45:00.000Z",action:"Order created",note:"Customer: David Park"},{ts:"2026-03-25T13:00:00.000Z",action:"Status changed to Awaiting Documents",note:"Authority document required"}] },
-    { id:"DEMO-005", planId:"SP10001", lotId:"L4", orderCategory:"oc", contactInfo:{name:"Priya Sharma",   email:"priya@legalgroup.com",       phone:"0466 555 666", companyName:"Legal Group Pty Ltd"}, status:"On Hold",             payment:"bank",    items:[{productId:"P1",lotId:"L4",lotNumber:"Lot 4",planName:"Harbour View Residences",ocName:"OC B — Commercial",ocId:"OC-B",productName:"OC Certificate — Standard",qty:1,price:220}], date:"2026-03-22T08:20:00.000Z", total:220, auditLog:[{ts:"2026-03-22T08:20:00.000Z",action:"Order created",note:"Customer: Priya Sharma"},{ts:"2026-03-22T10:00:00.000Z",action:"Status changed to On Hold",note:"Awaiting owner verification"}] },
-    { id:"DEMO-006", planId:"SP10002", lotId:"G3", orderCategory:"oc", contactInfo:{name:"James Liu",      email:"james.liu@buysell.com.au",   phone:"0477 777 888"}, status:"Cancelled",            payment:"bank",    items:[{productId:"Q1",lotId:"G3",lotNumber:"Lot 201",planName:"Parkside Gardens",ocName:"Parkside Gardens OC",ocId:"OC-A",productName:"OC Certificate — Standard",qty:1,price:200}], date:"2026-03-20T15:00:00.000Z", total:200, cancelReason:"Customer requested cancellation", auditLog:[{ts:"2026-03-20T15:00:00.000Z",action:"Order created",note:"Customer: James Liu"},{ts:"2026-03-21T09:00:00.000Z",action:"Order cancelled",note:"Customer requested cancellation"}] },
-    { id:"DEMO-007", planId:"SP10001", lotId:"L5", orderCategory:"oc", contactInfo:{name:"Olivia Brown",   email:"olivia.b@settlements.com",   phone:"0488 999 000", companyName:"Brown Settlements"}, status:"Invoice to be issued", payment:"invoice", items:[{productId:"P4",lotId:"L5",lotNumber:"Lot 5 (Parking)",planName:"Harbour View Residences",ocName:"OC A — Residential",ocId:"OC-A",productName:"Insurance Certificate",qty:1,price:75}], date:"2026-03-26T07:30:00.000Z", total:75, auditLog:[{ts:"2026-03-26T07:30:00.000Z",action:"Order created",note:"Customer: Olivia Brown"}] },
-  ],
-};
-
-const DEMO_DEFAULT_CONFIG = {
-  admins: [{ id: "demo-admin", username: "demo@tocs.co", password: "Demo@1234", name: "Demo Admin" }],
-  orderEmail: "demo@tocs.co",
-  smtp: {},
-  paymentDetails: { accountName: "TOCS Demo Account", bsb: "000-000", accountNumber: "000000", payid: "demo@tocs.com.au" },
-  paymentMethods: { bankEnabled: true, payidEnabled: true },
-  emailTemplate: {
-    certificateSubject: "Your OC Certificate — Order #{orderId}",
-    certificateGreeting: "Dear {name},\n\nPlease find attached your OC Certificate for Lot {lotNumber} at {address}.\n\nKind regards,\nTOCS Team",
-    footer: "TOCS Demo Environment  |  demo@tocs.co",
-  },
-};
-
-// ── Valid order statuses ───────────────────────────────────────────────────────
-const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Awaiting Stripe Payment","Paid"];
-
 // ── In-memory sessions  Map<token, { user, exp }> ─────────────────────────────
 const SESSIONS = new Map();
-// Purge expired sessions every 30 minutes to prevent unbounded growth
-setInterval(() => { const now = Date.now(); for (const [t, s] of SESSIONS) if (now > s.exp) SESSIONS.delete(t); }, 30 * 60 * 1000).unref();
 
 function genToken() {
-  return crypto.randomBytes(32).toString("hex");
+  return [...Array(40)].map(() => Math.floor(Math.random() * 16).toString(16)).join("");
 }
 function validToken(token) {
   if (!token) return false;
@@ -169,29 +95,22 @@ function getAdmins(cfg) {
 function readData() {
   try {
     const d = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    // Back-fill status on legacy orders that pre-date the status field
     if (Array.isArray(d.orders)) {
       d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
     }
     return d;
-  } catch { return structuredClone(DEMO_MODE ? DEMO_SEED_DATA : DEFAULT_DATA); }
+  } catch { return structuredClone(DEFAULT_DATA); }
 }
 function writeData(d) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
 }
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch {
-    const seed = DEMO_MODE ? DEMO_DEFAULT_CONFIG : DEFAULT_CONFIG;
-    writeConfig(seed); return structuredClone(seed);
+    writeConfig(DEFAULT_CONFIG); return structuredClone(DEFAULT_CONFIG);
   }
 }
 function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
-
-// ── Demo-mode startup seeding ─────────────────────────────────────────────────
-// On first launch (or after manual deletion of data files), seed demo content.
-if (DEMO_MODE) {
-  if (!fs.existsSync(DATA_FILE))   writeData(structuredClone(DEMO_SEED_DATA));
-  if (!fs.existsSync(CONFIG_FILE)) writeConfig(structuredClone(DEMO_DEFAULT_CONFIG));
-}
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 function esc(str) {
@@ -346,7 +265,7 @@ function buildCertEmailHtml(order, message, cfg) {
     .replace(/{address}/g, esc(lot?.planName || ""));
   const bodyText = message || raw;
   const htmlBody = esc(bodyText).replace(/\n/g, "<br>");
-  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -365,16 +284,6 @@ function buildCertEmailHtml(order, message, cfg) {
 </body></html>`;
 }
 
-// ── Shared SMTP transporter factory ──────────────────────────────────────────
-function createSmtpTransporter(smtp) {
-  return nodemailer.createTransport({
-    host: smtp.host, port: Number(smtp.port) || 587,
-    secure: Number(smtp.port) === 465,
-    auth: { user: smtp.user, pass: smtp.pass },
-    tls: { rejectUnauthorized: false },
-  });
-}
-
 // ── Send admin notification (with optional authority doc attachment) ────────────
 async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
   const smtp = cfg.smtp || {};
@@ -384,7 +293,12 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
   }
   const toEmail = cfg.orderEmail || "Orders@tocs.co";
   try {
-    const transporter = createSmtpTransporter(smtp);
+    const transporter = nodemailer.createTransport({
+      host: smtp.host, port: Number(smtp.port) || 587,
+      secure: Number(smtp.port) === 465,
+      auth: { user: smtp.user, pass: smtp.pass },
+      tls: { rejectUnauthorized: false },
+    });
     const tpl = cfg.emailTemplate || {};
     const orderType = order.orderCategory === "keys" ? "Keys" : "OC Certificate";
     const firstItem = order.items?.[0];
@@ -418,7 +332,12 @@ async function sendCustomerEmail(order, cfg) {
   const toEmail = order.contactInfo?.email;
   if (!toEmail) return;
   try {
-    const transporter = createSmtpTransporter(smtp);
+    const transporter = nodemailer.createTransport({
+      host: smtp.host, port: Number(smtp.port) || 587,
+      secure: Number(smtp.port) === 465,
+      auth: { user: smtp.user, pass: smtp.pass },
+      tls: { rejectUnauthorized: false },
+    });
     const customerSubject = `Order Confirmed — ${order.id}`;
     await transporter.sendMail({
       from: `"TOCS Order Portal" <${cfg.orderEmail || "Orders@tocs.co"}>`,
@@ -442,16 +361,16 @@ function readBody(req, res) {
     let body = "";
     req.on("data", c => {
       body += c;
-      if (body.length > 15e6) {
+      if (body.length > 2e6) {
         if (res && !res.headersSent) {
-          const msg = JSON.stringify({ error: "Request body too large (max 15 MB)." });
+          const msg = JSON.stringify({ error: "Request body too large (max 2 MB)." });
           res.writeHead(413, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(msg) });
           res.end(msg);
         }
         req.destroy();
       }
     });
-    req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({ _parseError: true }); } });
+    req.on("end",  () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({}); } });
     req.on("error", reject);
   });
 }
@@ -527,28 +446,9 @@ async function handler(req, res) {
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  // CORS — same-origin always allowed; set ALLOWED_ORIGINS env var for additional domains
-  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
-  const reqOrigin = req.headers["origin"];
-  const host = req.headers["host"] || "";
-  let isSameOrigin = false;
-  try { isSameOrigin = !!reqOrigin && new URL(reqOrigin).host === host; } catch {}
-  if (reqOrigin && (isSameOrigin || ALLOWED_ORIGINS.includes(reqOrigin))) {
-    res.setHeader("Access-Control-Allow-Origin", reqOrigin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Vary", "Origin");
-  }
 
   const { method } = req;
   const urlPath = req.url.split("?")[0];
-
-  // Handle CORS preflight — always 204 for API routes
-  if (method === "OPTIONS") {
-    res.writeHead(urlPath.startsWith("/api/") ? 204 : 405);
-    return res.end();
-  }
 
   // ── Health ─────────────────────────────────────────────────────────────────
   if (urlPath === "/health") {
@@ -563,7 +463,7 @@ async function handler(req, res) {
     if (validToken(token)) return json(res, 200, d);
     // Strip admin-only fields from products before returning to public callers
     return json(res, 200, {
-      strataPlans: d.strataPlans.filter(p => p.active !== false).map(plan => ({
+      strataPlans: d.strataPlans.map(plan => ({
         ...plan,
         products: (plan.products || []).map(({ managerAdminCharge, ...prod }) => prod),
       })),
@@ -581,20 +481,13 @@ async function handler(req, res) {
       if (!user || !pass) return json(res, 400, { error: "Username and password are required." });
       const cfg = readConfig();
       const admins = getAdmins(cfg);
-      const match = admins.find(a => a.username.toLowerCase() === user.toLowerCase() && a.password === pass);
+      const match = admins.find(a => a.username === user && a.password === pass);
       if (match) {
         const token = genToken();
         SESSIONS.set(token, { user: match.username, exp: Date.now() + 8 * 60 * 60 * 1000 });
         return json(res, 200, { token, user: match.username, name: match.name });
       }
       return json(res, 401, { error: "Incorrect username or password." });
-    }
-
-    // action=logout
-    if (action === "logout") {
-      const token = authHeader(req);
-      if (token) SESSIONS.delete(token);
-      return json(res, 200, { ok: true });
     }
 
     // action=list-admins
@@ -662,9 +555,9 @@ async function handler(req, res) {
       if (idx === -1) return json(res, 404, { error: "Admin not found." });
       admins[idx] = { ...admins[idx], password: newPassword };
       cfg.admins = admins;
-      cfg.admin = { user: cfg.admins[0].username, pass: cfg.admins[0].password }; // legacy sync
+      cfg.user = cfg.admins[0].username;
+      cfg.pass = cfg.admins[0].password;
       writeConfig(cfg);
-      SESSIONS.clear(); // invalidate all sessions after any password reset
       return json(res, 200, { ok: true });
     }
 
@@ -698,140 +591,71 @@ async function handler(req, res) {
   // ── POST /api/orders  (public — customer places order, JSON + optional base64 file) ─
   if (urlPath === "/api/orders" && method === "POST") {
     const body = await readBody(req, res);
-    if (body._parseError) return json(res, 400, { error: "Invalid JSON in request body." });
     const raw = body.order || body; // support both { order, lotAuthority } and flat order
-    if (!Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
-    // Generate server-side ID — never trust client-supplied IDs
-    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + crypto.randomBytes(2).toString("hex").toUpperCase();
-    if (!raw.contactInfo?.name?.trim() || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
-    if (!raw.contactInfo?.phone || !String(raw.contactInfo.phone).trim()) return json(res, 400, { error: "Customer phone number is required." });
-    if (String(raw.contactInfo.phone).trim().length < 6) return json(res, 400, { error: "Phone number must be at least 6 characters." });
-    if (String(raw.contactInfo.phone).length > 30) return json(res, 400, { error: "Phone number must not exceed 30 characters." });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((raw.contactInfo.email || "").trim())) return json(res, 400, { error: "A valid customer email address is required." });
-    if ((raw.contactInfo.name || "").trim().length > 200) return json(res, 400, { error: "Name must not exceed 200 characters." });
-    if ((raw.contactInfo.companyName || "").length > 200) return json(res, 400, { error: "Company name must not exceed 200 characters." });
-    if ((raw.contactInfo.ocReference || "").length > 100) return json(res, 400, { error: "OC reference must not exceed 100 characters." });
+    if (!raw.id || !Array.isArray(raw.items)) return json(res, 400, { error: "Invalid order." });
+    // Validate order ID format: no path separators or control characters
+    if (/[/\\?\s#\x00-\x1f]/.test(raw.id)) return json(res, 400, { error: "Order ID must not contain spaces, slashes, or control characters." });
+    if (raw.id.length > 100) return json(res, 400, { error: "Order ID must not exceed 100 characters." });
     if (raw.items.length === 0) return json(res, 400, { error: "Order must contain at least one item." });
-    if (raw.items.length > 50) return json(res, 400, { error: "Order cannot contain more than 50 items." });
-    // BUG-A1/A2/A3: validate orderCategory is present and a known value (case-sensitive)
-    const orderCategoryNorm = typeof raw.orderCategory === "string" ? raw.orderCategory.toLowerCase() : "";
-    if (!["oc", "keys"].includes(orderCategoryNorm)) return json(res, 400, { error: "orderCategory must be 'oc' or 'keys'." });
-    if (orderCategoryNorm === "keys" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for Keys/Fobs/Remotes orders." });
-    if (orderCategoryNorm === "keys" && !raw.selectedShipping?.type) return json(res, 400, { error: "A shipping method is required for Keys/Fobs/Remotes orders." });
-    // Validate payment method against config (prevents bypass of disabled methods)
+    if (!raw.contactInfo?.name || !raw.contactInfo?.email) return json(res, 400, { error: "Customer name and email are required." });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.contactInfo.email)) return json(res, 400, { error: "A valid customer email address is required." });
+    if ((raw.contactInfo.name || "").length > 200) return json(res, 400, { error: "Name must not exceed 200 characters." });
+    if ((raw.contactInfo.companyName || "").length > 200) return json(res, 400, { error: "Company name must not exceed 200 characters." });
+    // Validate payment method
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
-    {
-      const pmCfg = readConfig();
-      const pm = pmCfg.paymentMethods || {};
-      if ((raw.payment === "stripe" || raw.payment === "card") && !pmCfg.stripe?.secretKey)
-        return json(res, 400, { error: "Stripe payments are not configured. Please choose another payment method." });
-      if (raw.payment === "bank" && pm.bankEnabled === false)
-        return json(res, 400, { error: "Bank transfer payments are currently disabled." });
-      if (raw.payment === "payid" && pm.payidEnabled === false)
-        return json(res, 400, { error: "PayID payments are currently disabled." });
-    }
     // Strip control characters from string values that flow into email subjects / headers
-    // Strip control characters AND HTML angle brackets (prevent XSS in admin UI and emails)
-    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f<>]/g, "") : v;
+    const stripCtrl = (v) => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]/g, "") : v;
     // Whitelist fields — never persist client-supplied admin fields
+    // planId may live at the top level or on each item (frontend sends it on items only)
+    const resolvedPlanId = raw.planId || raw.items?.[0]?.planId;
     const order = {
-      id: serverId,
-      planId: raw.planId,
+      id: raw.id,
+      planId: resolvedPlanId,
       lotId: raw.lotId,
-      orderCategory: orderCategoryNorm,
+      orderCategory: raw.orderCategory,
       contactInfo: {
         name:        stripCtrl(raw.contactInfo?.name  || ""),
-        email:       stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()),
+        email:       stripCtrl(raw.contactInfo?.email || ""),
         phone:       stripCtrl(raw.contactInfo?.phone || ""),
         companyName: stripCtrl(raw.contactInfo?.companyName || ""),
-        ocReference: stripCtrl(raw.contactInfo?.ocReference || ""),
       },
-      status: raw.payment === "stripe" ? "Awaiting Stripe Payment"
-            : raw.payment === "card" ? "Processing"
-            : raw.payment === "invoice" ? "Invoice to be issued"
-            : "Pending Payment",
+      status: (raw.payment === "stripe" || raw.payment === "card") ? "Processing" : "Pending Payment",
       payment: raw.payment || "bank",
       items: (raw.items || []).map(item => ({
         productId:   item.productId,
         lotId:       item.lotId,
         lotNumber:   stripCtrl(item.lotNumber   || ""),
-        planName:    "", // overridden from catalog below
+        planName:    stripCtrl(item.planName    || ""),
         ocName:      stripCtrl(item.ocName      || ""),
-        productName: stripCtrl(item.productName || ""), // overridden from catalog below
-        ocId:        null, // set from catalog for perOC products only; stripped for non-perOC
+        productName: stripCtrl(item.productName || ""),
+        ocId:        item.ocId   || null,
         qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
       })),
-      // Shipping only applies to keys/fob orders; price validated from catalog below
-      selectedShipping: (orderCategoryNorm === "keys" && raw.selectedShipping) ? {
-        id:    stripCtrl(String(raw.selectedShipping.id   || "")),
-        name:  stripCtrl(String(raw.selectedShipping.name || "")),
-        type:  stripCtrl(String(raw.selectedShipping.type || "")),
-        price: 0, // set from catalog below
+      selectedShipping: raw.selectedShipping ? {
+        type:  stripCtrl(String(raw.selectedShipping.type  || "")),
+        price: Math.max(0, Number(raw.selectedShipping.price) || 0),
       } : undefined,
     };
-    // Always use server time — never trust client-supplied date
-    order.date = new Date().toISOString();
+    // Always normalise date to a valid ISO string — never trust client clock alone
+    const parsedDate = raw.date ? new Date(raw.date) : null;
+    order.date = (parsedDate && !isNaN(parsedDate)) ? parsedDate.toISOString() : new Date().toISOString();
     // Validate + override item prices against the plan's product catalog
-    const d = readData();
     {
-      const plan = d.strataPlans.find(p => p.id === order.planId && p.active !== false);
-      // Require a known active plan — no plan means no price enforcement
+      const d = readData();
+      const plan = d.strataPlans.find(p => p.id === order.planId);
+      // Require a known plan — no plan means no price enforcement
       if (!plan) return json(res, 400, { error: "A valid planId is required." });
       if (!plan.products?.length) return json(res, 400, { error: "The specified plan has no products." });
-      // GAP-2: validate order.lotId against plan lots (if provided)
-      if (order.lotId) {
-        const knownLot = plan.lots.find(l => l.id === order.lotId);
-        if (!knownLot) return json(res, 400, { error: `Lot "${order.lotId}" does not exist in the selected plan.` });
-      }
-      // Snapshot plan name onto order itself for display in admin/emails
-      order.planName = plan.name;
-      // Count how many times each perOC product appears per OC to apply secondaryPrice;
-      // also detect duplicate (productId, ocId) combinations.
-      const ocCountPerProduct = {}; // key: `${productId}:${ocId}` for perOC
-      const seenItems = new Set(); // detect true duplicates
+      // Count how many times each perOC product appears per lot to apply secondaryPrice
+      const ocCountPerProduct = {}; // key: `${productId}:${lotId}`
       for (const item of order.items) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
-        // GAP-10: lotNumber required on every item
-        if (!item.lotNumber?.trim()) return json(res, 400, { error: "Each order item must include a lot number." });
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
-        // M-7: cross-validate product category vs order category.
-        // Use the stored product.category field; fall back to managerAdminCharge for legacy products without it.
-        const productCategory = product.category || (product.managerAdminCharge !== undefined ? "keys" : "oc");
-        if (order.orderCategory === "keys" && productCategory !== "keys") {
-          return json(res, 400, { error: `Product ${item.productId} is not valid for keys/fobs orders.` });
-        }
-        if (order.orderCategory === "oc" && productCategory === "keys") {
-          return json(res, 400, { error: `Product ${item.productId} is not valid for OC certificate orders.` });
-        }
-        const isKeysProduct = productCategory === "keys";
-        // GAP-1: for perOC products, ocId must exist in plan.ownerCorps
         if (product.perOC) {
-          if (!item.ocId || !plan.ownerCorps?.[item.ocId]) {
-            return json(res, 400, { error: `A valid Owner Corporation (ocId) is required for product ${item.productId}. Received: "${item.ocId}"` });
-          }
-          // Snapshot OC name from plan catalog (not client-supplied)
-          item.ocName = plan.ownerCorps[item.ocId]?.name || item.ocId;
-        }
-        // Reject duplicate (productId, ocId) for perOC; reject duplicate (productId, lotId) for non-perOC
-        const dupKey = product.perOC
-          ? `${item.productId}:${item.ocId}`
-          : `${item.productId}:${item.lotId || item.lotNumber}`;
-        if (seenItems.has(dupKey)) {
-          return json(res, 400, { error: product.perOC
-            ? `Duplicate item: product ${item.productId} for OC ${item.ocId} appears more than once.`
-            : `Duplicate item: product ${item.productId} for lot ${item.lotNumber} appears more than once.` });
-        }
-        seenItems.add(dupKey);
-        // Snapshot productName and planName from catalog
-        item.productName = product.name || item.productName;
-        item.planName = plan.name;
-        if (product.perOC) {
-          // BUG-5: perOC products are always qty 1 — one certificate per OC
-          item.qty = 1;
-          const key = `${item.productId}:${item.ocId || ""}`;
+          const key = `${item.productId}:${item.lotId || ""}`;
           ocCountPerProduct[key] = (ocCountPerProduct[key] || 0) + 1;
           item.price = ocCountPerProduct[key] === 1
             ? Number(product.price)
@@ -845,62 +669,33 @@ async function handler(req, res) {
           item.managerAdminCharge = product.managerAdminCharge;
         }
       }
-      // H-3: validate and set shipping cost from plan catalog (not from client)
-      if (order.orderCategory === "keys" && order.selectedShipping) {
-        const ks = plan.keysShipping || {};
-        const shippingType = order.selectedShipping.type;
-        if (shippingType.toLowerCase() === "express") {
-          order.selectedShipping.price = Math.max(0, Number(ks.expressCost) || 0);
-        } else {
-          // standard/pickup/delivery — use deliveryCost
-          order.selectedShipping.price = Math.max(0, Number(ks.deliveryCost) || 0);
-        }
-      }
     }
-    // H-4: shipping only applies to keys orders
-    const shippingCost = (order.orderCategory === "keys" && order.selectedShipping)
-      ? Math.max(0, Number(order.selectedShipping.price) || 0) : 0;
+    const shippingCost = order.selectedShipping ? Math.max(0, Number(order.selectedShipping.price) || 0) : 0;
     const recalcTotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0) + shippingCost;
     order.total = Math.round(recalcTotal * 100) / 100;
 
     // Duplicate check BEFORE writing any files to disk
+    const d = readData();
     if (d.orders.find(o => o.id === order.id)) {
       return json(res, 409, { error: "An order with this ID already exists." });
     }
 
-    const AUTH_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
     let authorityBuf = null;
     let authorityFilename = null;
     if (body.lotAuthority?.data) {
       try {
         const decoded = Buffer.from(body.lotAuthority.data, "base64");
         if (decoded.length === 0) throw new Error("Empty or invalid base64 data");
-        if (decoded.length > AUTH_MAX_BYTES) {
-          return json(res, 400, { error: "Authority document must not exceed 10 MB." });
-        }
-        // Whitelist allowed file extensions and validate magic bytes
+        // Whitelist allowed file extensions
         const ALLOWED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
         const rawExt = path.extname(body.lotAuthority.filename || "").toLowerCase();
-        if (!ALLOWED_EXTS.includes(rawExt)) {
-          return json(res, 400, { error: "Authority document must be a PDF, JPG, or PNG file." });
-        }
-        // Validate file magic bytes match the declared extension
-        const isPDF  = decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46; // %PDF
-        const isJPEG = decoded[0] === 0xFF && decoded[1] === 0xD8 && decoded[2] === 0xFF;
-        const isPNG  = decoded[0] === 0x89 && decoded[1] === 0x50 && decoded[2] === 0x4E && decoded[3] === 0x47;
-        const validMagic = (rawExt === ".pdf" && isPDF) || ([".jpg",".jpeg"].includes(rawExt) && isJPEG) || (rawExt === ".png" && isPNG);
-        if (!validMagic) {
-          return json(res, 400, { error: "Authority document content does not match the declared file type." });
-        }
+        const ext = ALLOWED_EXTS.includes(rawExt) ? rawExt : ".bin";
         authorityBuf = decoded;
-        authorityFilename = order.id + "-lot-authority" + rawExt;
+        authorityFilename = order.id + "-lot-authority" + ext;
         fs.writeFileSync(path.join(UPLOADS_DIR, authorityFilename), authorityBuf);
         order.lotAuthorityFile = authorityFilename;
         console.log(`  📎  Lot authority saved: ${authorityFilename}`);
-      } catch (e) {
-        if (res.headersSent) return;
-        console.error("  ❌  Failed to save authority file:", e.message);
-      }
+      } catch (e) { console.error("  ❌  Failed to save authority file:", e.message); }
     }
 
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
@@ -926,30 +721,7 @@ async function handler(req, res) {
 
     // Strip admin-only fields before returning to the customer
     const customerOrder = { ...order, items: order.items.map(({ managerAdminCharge, ...item }) => item) };
-    return json(res, 201, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
-  }
-
-  // ── DELETE /api/orders/:id/delete  (admin — permanently remove a cancelled order) ─
-  const deleteMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/delete$/);
-  if (deleteMatch && method === "DELETE") {
-    const token = authHeader(req);
-    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const d = readData();
-    const idx = d.orders.findIndex(o => o.id === deleteMatch[1]);
-    if (idx === -1) return json(res, 404, { error: "Order not found." });
-    const order = d.orders[idx];
-    if (order.status !== "Cancelled") return json(res, 400, { error: "Only cancelled orders can be deleted." });
-    // Delete associated authority file if present
-    if (order.lotAuthorityFile) {
-      try {
-        const safeFilename = path.basename(order.lotAuthorityFile).replace(/[^\w.\-]/g, "_");
-        const filePath = path.resolve(UPLOADS_DIR, safeFilename);
-        if (filePath.startsWith(UPLOADS_DIR + path.sep)) fs.unlinkSync(filePath);
-      } catch (e) { if (e.code !== "ENOENT") console.error("  ❌  Failed to delete authority file:", e.message); }
-    }
-    d.orders.splice(idx, 1);
-    writeData(d);
-    return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
 
   // ── PUT /api/orders/:id/status  (admin) ───────────────────────────────────
@@ -959,6 +731,7 @@ async function handler(req, res) {
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { status, note } = await readBody(req, res);
     if (!status || typeof status !== "string" || !status.trim()) return json(res, 400, { error: "A non-empty status string is required." });
+    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid"];
     if (!VALID_STATUSES.includes(status)) return json(res, 400, { error: `Invalid status. Allowed: ${VALID_STATUSES.join(", ")}.` });
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === statusMatch[1]);
@@ -1007,17 +780,14 @@ async function handler(req, res) {
     return;
   }
 
-  // ── POST /api/orders/:id/send-certificate  &  send-invoice  (admin) ─────────
+  // ── POST /api/orders/:id/send-certificate  (admin) ────────────────────────
   const sendCertMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/send-certificate$/);
-  const sendInvMatch  = urlPath.match(/^\/api\/orders\/([^/]+)\/send-invoice$/);
-  if ((sendCertMatch || sendInvMatch) && method === "POST") {
-    const isCert = !!sendCertMatch;
-    const orderId = (sendCertMatch || sendInvMatch)[1];
+  if (sendCertMatch && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const { message, attachment } = await readBody(req, res);
     const d = readData();
-    const idx = d.orders.findIndex(o => o.id === orderId);
+    const idx = d.orders.findIndex(o => o.id === sendCertMatch[1]);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
     const order = d.orders[idx];
     const recipientEmail = order.contactInfo?.email;
@@ -1026,25 +796,26 @@ async function handler(req, res) {
     const smtp = cfg.smtp || {};
     if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
     try {
-      const transporter = createSmtpTransporter(smtp);
+      const transporter = nodemailer.createTransport({
+        host: smtp.host, port: Number(smtp.port) || 587,
+        secure: Number(smtp.port) === 465,
+        auth: { user: smtp.user, pass: smtp.pass },
+        tls: { rejectUnauthorized: false },
+      });
       const tpl = cfg.emailTemplate || {};
-      const subj = isCert
-        ? (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id)
-        : `Invoice for Order #${order.id}`;
-      const html = isCert
-        ? buildCertEmailHtml(order, message, cfg)
-        : `<p>${esc(message || "").replace(/\n/g, "<br>")}</p>`;
+      const subj = (tpl.certificateSubject || "Your OC Certificate — Order #{orderId}").replace(/{orderId}/g, order.id);
       const mailOpts = {
         from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
-        to: recipientEmail, subject: subj, html,
+        to: recipientEmail,
+        subject: subj,
+        html: buildCertEmailHtml(order, message, cfg),
       };
       if (attachment?.data) {
-        const defaultFilename = isCert ? "OC-Certificate.pdf" : "Invoice.pdf";
-        mailOpts.attachments = [{ filename: attachment.filename || defaultFilename, content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+        mailOpts.attachments = [{ filename: attachment.filename || "OC-Certificate.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
       }
       await transporter.sendMail(mailOpts);
-      d.orders[idx].status = isCert ? "Issued" : "Pending Payment";
-      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: isCert ? "Certificate issued" : "Invoice sent", note: `To: ${recipientEmail}` }];
+      d.orders[idx].status = "Issued";
+      d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `To: ${recipientEmail}` }];
       writeData(d);
       return json(res, 200, { ok: true });
     } catch (err) {
@@ -1076,19 +847,13 @@ async function handler(req, res) {
       ]);
     }
     // Strip control characters (including embedded newlines) to prevent row-splitting in spreadsheets
-    const csvEsc = v => {
-      const s = String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""');
-      // Prefix formula-injection characters to prevent spreadsheet code execution
-      return /^[=+\-@\t]/.test(s) ? `"'${s}"` : `"${s}"`;
-    };
+    const csvEsc = v => `"${String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""')}"`;
     const csv = rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
-    const csvBuf = Buffer.from(csv, "utf8");
     res.writeHead(200, {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "text/csv",
       "Content-Disposition": `attachment; filename="tocs-orders-${new Date().toISOString().slice(0,10)}.csv"`,
-      "Content-Length": csvBuf.length,
     });
-    return res.end(csvBuf);
+    return res.end(csv);
   }
 
   // ── POST /api/lots/import  (admin — import lots from parsed Excel data) ────
@@ -1112,40 +877,16 @@ async function handler(req, res) {
     const d = readData();
     const idx = d.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return json(res, 404, { error: "Plan not found." });
-    const prevCount = (d.strataPlans[idx].lots || []).length;
     d.strataPlans[idx].lots = [...seenLots.values()];
-    const newCount = d.strataPlans[idx].lots.length;
-    d.strataPlans[idx].lotsImportLog = [
-      ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)), // keep last 50 entries
-      { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${newCount} lots` },
-    ];
     writeData(d);
-    return json(res, 200, { ok: true, count: newCount });
+    return json(res, 200, { ok: true, count: d.strataPlans[idx].lots.length });
   }
 
   // ── POST /api/plans  (admin — save full plans array) ──────────────────────
   if (urlPath === "/api/plans" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const body = await readBody(req, res);
-    // Support import-lots action (mirrors Vercel api/plans.js sub-route)
-    if (body.action === "import-lots") {
-      const { planId, lots } = body;
-      if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
-      if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
-      const d = readData();
-      const idx = d.strataPlans.findIndex(p => p.id === planId);
-      if (idx === -1) return json(res, 404, { error: "Plan not found." });
-      const prevCount = d.strataPlans[idx].lots?.length || 0;
-      d.strataPlans[idx].lots = lots;
-      d.strataPlans[idx].lotsImportLog = [
-        ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)),
-        { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${lots.length} lots` },
-      ];
-      writeData(d);
-      return json(res, 200, { ok: true, count: lots.length });
-    }
-    const { plans } = body;
+    const { plans } = await readBody(req, res);
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });
     if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
     // Validate each plan is an object with a non-empty id and name
@@ -1171,16 +912,6 @@ async function handler(req, res) {
             if (typeof prod.managerAdminCharge !== "number" || !Number.isFinite(prod.managerAdminCharge) || prod.managerAdminCharge < 0)
               return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}' has an invalid managerAdminCharge (must be a non-negative number).` });
           }
-          // externalUrl: only allowed on keys-category products, must be http/https, max 2048 chars
-          if (prod.externalUrl !== undefined && prod.externalUrl !== null && prod.externalUrl !== "") {
-            const prodCategory = prod.category || (prod.managerAdminCharge !== undefined ? "keys" : "oc");
-            if (prodCategory !== "keys")
-              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl is only allowed on Keys/Fobs products.` });
-            if (typeof prod.externalUrl !== "string" || prod.externalUrl.length > 2048)
-              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl must be a string of max 2048 characters.` });
-            if (!/^https?:\/\/.+/i.test(prod.externalUrl))
-              return json(res, 400, { error: `Product '${prod.name || prod.id}' in plan '${p.id}': externalUrl must start with http:// or https://.` });
-          }
         }
       }
     }
@@ -1204,7 +935,12 @@ async function handler(req, res) {
     }
     const toEmail = cfg.orderEmail || "Orders@tocs.co";
     try {
-      const transporter = createSmtpTransporter(smtp);
+      const transporter = nodemailer.createTransport({
+        host: smtp.host, port: Number(smtp.port) || 587,
+        secure: Number(smtp.port) === 465,
+        auth: { user: smtp.user, pass: smtp.pass },
+        tls: { rejectUnauthorized: false },
+      });
       await transporter.verify();
       await transporter.sendMail({
         from: `"TOCS Order Portal" <${toEmail}>`,
@@ -1241,18 +977,7 @@ async function handler(req, res) {
         accountNumber: pd.accountNumber || "522011",
         payid: pd.payid || "accounts@tocs.com.au",
       },
-      demoMode: DEMO_MODE,
     });
-  }
-
-  // ── POST /api/demo/reset  (demo mode only — restore seed data) ─────────────
-  if (urlPath === "/api/demo/reset" && method === "POST") {
-    if (!DEMO_MODE) return json(res, 403, { error: "Not available in production." });
-    writeData(structuredClone(DEMO_SEED_DATA));
-    writeConfig(structuredClone(DEMO_DEFAULT_CONFIG));
-    SESSIONS.clear();
-    console.log("  🔄  Demo data reset to seed state.");
-    return json(res, 200, { ok: true, message: "Demo data has been reset to the initial state." });
   }
 
   // ── GET /api/config/settings  (admin) ─────────────────────────────────────
@@ -1339,17 +1064,14 @@ async function handler(req, res) {
       [/^\/api\/data$/, ["GET"]],
       [/^\/api\/orders$/, ["POST"]],
       [/^\/api\/orders\/export$/, ["GET"]],
-      [/^\/api\/orders\/[^/]+\/delete$/, ["DELETE"]],
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
-      [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],
       [/^\/api\/lots\/import$/, ["POST"]],
       [/^\/api\/plans$/, ["POST"]],
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
       [/^\/api\/config\/public$/, ["GET"]],
       [/^\/api\/config\/test-email$/, ["POST"]],
-      [/^\/api\/demo\/reset$/, ["POST"]],
     ];
     for (const [pattern, methods] of knownRoutes) {
       if (pattern.test(urlPath)) {
@@ -1392,17 +1114,14 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  const modeLabel  = DEMO_MODE ? "DEMO \uD83D\uDD04" : "Production";
-  const dataLabel  = (process.env.DATA_FILE   || "data.json").padEnd(27);
-  const cfgLabel   = (process.env.CONFIG_FILE || "config.json").padEnd(27);
   console.log(`
 ╔════════════════════════════════════════════╗
 ║   TOCS Owner Corporation Portal            ║
 ╠════════════════════════════════════════════╣
 ║   Server  : http://${HOST}:${PORT}${" ".repeat(Math.max(0, 22 - HOST.length - String(PORT).length))}║
-║   Mode    : ${modeLabel.padEnd(29)}║
-║   Data    : ${dataLabel}║
-║   Config  : ${cfgLabel}║
+║   Env     : ${(process.env.NODE_ENV || "production").padEnd(29)}║
+║   Dist    : ./dist                         ║
+║   Data    : ./data.json                    ║
 ╚════════════════════════════════════════════╝
 `);
 });
