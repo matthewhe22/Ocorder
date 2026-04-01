@@ -1,13 +1,4 @@
-// test/nodemailer-mock.js
-// Intercepts nodemailer sendMail calls so unit/integration tests never hit a
-// real SMTP server.  Call mockNodemailer() at the top of any test file that
-// imports (directly or transitively) from nodemailer.
-//
-// Usage:
-//   import { mockNodemailer, sentMail, resetSentMail } from "../../test/nodemailer-mock.js";
-//   mockNodemailer();
-//   beforeEach(() => resetSentMail());
-
+// test/nodemailer-mock.js — Intercepts sendMail calls without hitting a real SMTP server.
 import { vi } from "vitest";
 
 // Captures all sent mail objects for assertion in tests

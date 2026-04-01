@@ -1,8 +1,7 @@
-// test/setup.js
-// Loaded by vitest.config.js setupFiles — runs before every test file.
-// Sets safe test values for all environment variables used by the app.
+// test/setup.js — Global setup for all Vitest test files
+// Loaded via vitest.config.js setupFiles before each test file.
 
-process.env.REDIS_URL      = process.env.TEST_REDIS_URL || "redis://localhost:6379";
+process.env.REDIS_URL      = process.env.TEST_REDIS_URL || "redis://localhost:6399";
 process.env.ADMIN_USER     = "testadmin@example.com";
 process.env.ADMIN_PASS     = "TestPass123!";
 process.env.TOKEN_SECRET   = "test-token-secret-32-chars-minimum";

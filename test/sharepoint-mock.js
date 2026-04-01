@@ -1,11 +1,4 @@
-// test/sharepoint-mock.js
-// Mocks the SharePoint upload module so tests never make real Graph API calls.
-//
-// Usage:
-//   import { mockSharePointEnabled, mockSharePointDisabled } from "../../test/sharepoint-mock.js";
-//   mockSharePointEnabled();   // SP upload returns a URL
-//   mockSharePointDisabled();  // SP upload returns null / SHAREPOINT_ENABLED is false
-
+// test/sharepoint-mock.js — Mock for SharePoint upload module.
 import { vi } from "vitest";
 
 export function mockSharePointEnabled(returnUrl = "https://sp.example.com/file") {
