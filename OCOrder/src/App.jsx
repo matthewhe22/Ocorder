@@ -2499,6 +2499,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           lotIdx += sheetLots.length;
           lots = lots.concat(sheetLots);
         });
+        // Consolidate lots that appear in multiple sheets: merge ownerCorps arrays
+        const byNumber = new Map();
+        lots.forEach(lot => {
+          const key = lot.number.trim().toLowerCase();
+          if (byNumber.has(key)) {
+            const existing = byNumber.get(key);
+            lot.ownerCorps.forEach(oc => { if (!existing.ownerCorps.includes(oc)) existing.ownerCorps.push(oc); });
+          } else {
+            byNumber.set(key, { ...lot });
+          }
+        });
+        lots = [...byNumber.values()];
       } else {
         // Single sheet: existing logic (backward compatible)
         const ws = wb.Sheets[wb.SheetNames[0]];
