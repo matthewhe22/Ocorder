@@ -27,13 +27,20 @@ async function openPlansTab(page) {
   await expect(page.getByRole("heading", { name: "Strata Plans" })).toBeVisible({ timeout: 5000 });
 }
 
-/** Clean up any test plan that may exist from a prior run. */
+/** Clean up any test plan that may exist from a prior run. Handles duplicates. */
 async function cleanupTestPlan(page, planName) {
-  const planRow = page.locator(".tbl tbody tr").filter({ hasText: planName });
-  if (await planRow.count() > 0) {
+  // Delete all matching rows, one at a time, until none remain
+  let attempts = 0;
+  while (attempts < 10) {
+    const rows = page.locator(".tbl tbody tr").filter({ hasText: planName });
+    const count = await rows.count();
+    if (count === 0) break;
     page.once("dialog", d => d.accept());
-    await planRow.locator(".tbl-act-btn").filter({ hasText: /delete/i }).click();
-    await expect(page.getByText(planName)).not.toBeVisible({ timeout: 5000 });
+    // Use .first() to avoid strict mode violation when multiple rows match
+    await rows.first().locator(".tbl-act-btn").filter({ hasText: /delete/i }).first().click();
+    // Wait for one deletion to complete before attempting the next
+    await page.waitForTimeout(800);
+    attempts++;
   }
 }
 
@@ -83,8 +90,8 @@ test("Admin plans — edit an existing plan name", async ({ page }) => {
     planRow = page.locator(".tbl tbody tr").filter({ hasText: TEST_PLAN_NAME });
   }
 
-  // Click Edit button on the row
-  await planRow.locator(".tbl-act-btn").filter({ hasText: /edit/i }).click();
+  // Click Edit button on the row (use first() to handle any duplicate rows from prior runs)
+  await planRow.first().locator(".tbl-act-btn").filter({ hasText: /edit/i }).first().click();
   await expect(page.locator(".modal")).toBeVisible({ timeout: 5000 });
 
   // Clear and update the name (2nd input in modal is Name)
@@ -128,7 +135,8 @@ test("Admin plans — delete plan removes it from table", async ({ page }) => {
 
   // Handle browser confirm dialog
   page.once("dialog", d => d.accept());
-  await planRow.locator(".tbl-act-btn").filter({ hasText: /delete/i }).click();
+  // Use first() to handle any duplicate rows from prior test runs
+  await planRow.first().locator(".tbl-act-btn").filter({ hasText: /delete/i }).first().click();
 
   // Plan row should disappear
   await expect(page.getByText(planName)).not.toBeVisible({ timeout: 5000 });

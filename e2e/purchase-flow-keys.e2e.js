@@ -107,13 +107,18 @@ async function fillKeysStep2(page, { lotNumber = "Lot 1", productName = "E2E Bui
 /**
  * Fill the delivery address form in the Review step (step 3) if it is shown.
  * The address form appears when the auto-selected shipping option requires a
- * physical address. If the form is not visible, this is a no-op.
+ * physical address. Waits briefly for the useEffect auto-selection to fire,
+ * then fills the fields. If the form never appears, this is a no-op.
  */
 async function fillShippingAddressIfRequired(page) {
+  // Wait a tick for the useEffect auto-selection to fire and render the address form
   const streetInput = page.locator('input[placeholder="Street address"]');
-  // Only fill if the street address field is present and visible
-  const visible = await streetInput.isVisible().catch(() => false);
-  if (!visible) return;
+  try {
+    await streetInput.waitFor({ state: "visible", timeout: 3000 });
+  } catch {
+    // Address form not visible — plan has no shipping options or pickup selected
+    return;
+  }
   await streetInput.fill("1 Test Street");
   await page.locator('input[placeholder="Suburb"]').fill("Sydney");
   await page.locator('input[placeholder="Postcode"]').fill("2000");
