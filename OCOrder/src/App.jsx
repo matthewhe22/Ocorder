@@ -2181,12 +2181,15 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     return statusOk && categoryOk && planOk && lotOk && textOk;
   }), [data.orders, orderFilter]);
 
-  const handleAuth = (token, user) => {
-    setAdminToken(token);
+  const handleAuth = async (token, user) => {
     try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
-    // Re-fetch data with admin token to load orders (orders not returned to unauthenticated callers)
-    fetch("/api/data", { headers: { "Authorization": "Bearer " + token } })
-      .then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(d => setData(d)).catch(() => {});
+    // Fetch full authenticated data BEFORE showing admin UI to avoid blank-page race condition.
+    // (setAdminToken triggers re-render; data must be ready before that render happens.)
+    try {
+      const r = await fetch("/api/data", { headers: { "Authorization": "Bearer " + token } });
+      if (r.ok) { const d = await r.json(); setData(d); }
+    } catch {}
+    setAdminToken(token);
   };
   const handleLogout = () => {
     const tok = adminToken;
@@ -3331,7 +3334,7 @@ function AdminLogin({ onAuth, pubConfig }) {
       });
       const data = await r.json();
       if (r.ok) {
-        onAuth(data.token, data.user || user);
+        await onAuth(data.token, data.user || user);
       } else {
         setErr(data.error || "Incorrect username or password.");
         setPass("");
