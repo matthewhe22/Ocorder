@@ -2,7 +2,7 @@
 
 **Feature area:** Admin panel
 **Status:** Implemented
-**Last updated:** 2026-03-30
+**Last updated:** 2026-03-31
 
 ---
 
@@ -43,6 +43,7 @@ The admin panel is embedded in the same React SPA as the customer portal, access
 - "Delete" button shows a browser confirm dialog and removes the plan plus all its lots, products, and owner corporations. Deleting the selected plan switches the active plan selector to the first remaining plan.
 - All plan CRUD persists to Redis via `POST /api/plans`.
 - Each plan has a "Shipping" button to manage OC certificate shipping options and a "Keys Shipping" button to configure Keys/Fobs delivery costs.
+- E2E tests that create a plan inline (setup step) must wait for the modal overlay to fully close before attempting to click plan action buttons; the `.overlay` element must not be visible before proceeding.
 
 ---
 

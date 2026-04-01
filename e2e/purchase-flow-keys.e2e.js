@@ -17,31 +17,41 @@ const ADMIN_PASS = process.env.ADMIN_PASS || "Tocs@Vote";
 
 /**
  * Ensure the first active plan has at least one "keys" product.
- * If not, adds one via the admin API and returns whether it added one.
+ * Returns the name of the keys product to use in tests, or null if unavailable.
+ *
+ * Strategy:
+ *   1. If a product named "E2E Building Entry Key" exists, use it.
+ *   2. If any keys product exists, use it (return its name).
+ *   3. Try to add "E2E Building Entry Key" via the admin API.
+ *   4. If the add fails (e.g. Redis unavailable), return null.
  */
 async function ensureKeysProduct(page) {
   // Log in to get admin token
   const loginResp = await page.request.post("/api/auth", {
     data: { action: "login", user: ADMIN_USER, pass: ADMIN_PASS },
   });
-  if (!loginResp.ok()) return false;
+  if (!loginResp.ok()) return null;
   const { token } = await loginResp.json();
 
   // Get current data
   const dataResp = await page.request.get("/api/data", {
     headers: { Authorization: "Bearer " + token },
   });
-  if (!dataResp.ok()) return false;
+  if (!dataResp.ok()) return null;
   const data = await dataResp.json();
 
   const plan = data.strataPlans?.find(p => p.active);
-  if (!plan) return false;
+  if (!plan) return null;
 
-  // Check if keys product exists
-  const hasKeys = plan.products?.some(p => p.category === "keys");
-  if (hasKeys) return true;
+  // If the specific E2E product already exists, use it
+  const e2eProduct = plan.products?.find(p => p.category === "keys" && p.name === "E2E Building Entry Key");
+  if (e2eProduct) return "E2E Building Entry Key";
 
-  // Add a keys product to the plan
+  // If any keys product exists, use the first one's name
+  const existingKeys = plan.products?.find(p => p.category === "keys");
+  if (existingKeys) return existingKeys.name;
+
+  // No keys product — try to add one via the admin API
   const newProduct = {
     id: "K_E2E_1",
     name: "E2E Building Entry Key",
@@ -58,7 +68,7 @@ async function ensureKeysProduct(page) {
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
     data: { plans: updatedPlans },
   });
-  return saveResp.ok();
+  return saveResp.ok() ? "E2E Building Entry Key" : null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -108,14 +118,14 @@ async function fillContact(page, {
 // ─── Happy path: Keys order (pickup) ─────────────────────────────────────────
 
 test("Keys purchase — pick up from BM", async ({ page }) => {
-  const ready = await ensureKeysProduct(page);
-  if (!ready) {
+  const productName = await ensureKeysProduct(page);
+  if (!productName) {
     test.skip(true, "Could not set up keys product for test");
     return;
   }
 
   await selectPlanAndKeys(page);
-  await fillKeysStep2(page);
+  await fillKeysStep2(page, { productName });
 
   await page.getByRole("button", { name: /review order/i }).click();
   await expect(page.getByText("Review Order")).toBeVisible();
@@ -131,17 +141,17 @@ test("Keys purchase — pick up from BM", async ({ page }) => {
 // ─── Happy path: Keys with increased quantity ─────────────────────────────────
 
 test("Keys purchase — increase quantity to 2", async ({ page }) => {
-  const ready = await ensureKeysProduct(page);
-  if (!ready) {
+  const productName = await ensureKeysProduct(page);
+  if (!productName) {
     test.skip(true, "Could not set up keys product for test");
     return;
   }
 
   await selectPlanAndKeys(page);
-  await fillKeysStep2(page);
+  await fillKeysStep2(page, { productName });
 
   // Increase qty to 2 by clicking the + button
-  await page.locator(".prod-card").filter({ hasText: "E2E Building Entry Key" }).locator("button").filter({ hasText: "+" }).click();
+  await page.locator(".prod-card").filter({ hasText: productName }).locator("button").filter({ hasText: "+" }).click();
 
   await page.getByRole("button", { name: /review order/i }).click();
   await page.getByRole("button", { name: /enter contact details/i }).click();
@@ -153,14 +163,14 @@ test("Keys purchase — increase quantity to 2", async ({ page }) => {
 // ─── Validation: Submit disabled without contact fields ───────────────────────
 
 test("Keys purchase — submit disabled with empty contact form", async ({ page }) => {
-  const ready = await ensureKeysProduct(page);
-  if (!ready) {
+  const productName = await ensureKeysProduct(page);
+  if (!productName) {
     test.skip(true, "Could not set up keys product for test");
     return;
   }
 
   await selectPlanAndKeys(page);
-  await fillKeysStep2(page);
+  await fillKeysStep2(page, { productName });
 
   await page.getByRole("button", { name: /review order/i }).click();
   await page.getByRole("button", { name: /enter contact details/i }).click();
@@ -173,14 +183,14 @@ test("Keys purchase — submit disabled with empty contact form", async ({ page 
 // ─── Place Another Order resets flow ─────────────────────────────────────────
 
 test("Keys purchase — Place Another Order resets to step 1", async ({ page }) => {
-  const ready = await ensureKeysProduct(page);
-  if (!ready) {
+  const productName = await ensureKeysProduct(page);
+  if (!productName) {
     test.skip(true, "Could not set up keys product for test");
     return;
   }
 
   await selectPlanAndKeys(page);
-  await fillKeysStep2(page);
+  await fillKeysStep2(page, { productName });
   await page.getByRole("button", { name: /review order/i }).click();
   await page.getByRole("button", { name: /enter contact details/i }).click();
   await fillContact(page);

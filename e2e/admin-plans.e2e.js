@@ -33,7 +33,7 @@ async function cleanupTestPlan(page, planName) {
   if (await planRow.count() > 0) {
     page.once("dialog", d => d.accept());
     await planRow.locator(".tbl-act-btn").filter({ hasText: /delete/i }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText(planName)).not.toBeVisible({ timeout: 5000 });
   }
 }
 
@@ -78,6 +78,8 @@ test("Admin plans — edit an existing plan name", async ({ page }) => {
     await modalInputs.nth(2).fill(TEST_PLAN_ADDR);
     await page.locator(".modal").getByRole("button", { name: /save|add/i }).last().click();
     await page.getByText(TEST_PLAN_NAME).waitFor({ timeout: 5000 });
+    // Wait for the modal overlay to fully close before continuing
+    await expect(page.locator(".overlay")).not.toBeVisible({ timeout: 5000 });
     planRow = page.locator(".tbl tbody tr").filter({ hasText: TEST_PLAN_NAME });
   }
 
@@ -118,6 +120,8 @@ test("Admin plans — delete plan removes it from table", async ({ page }) => {
     await modalInputs.nth(2).fill("99 Delete Street, Sydney NSW 2000");
     await page.locator(".modal").getByRole("button", { name: /save|add/i }).last().click();
     await page.getByText("E2E Delete Building").waitFor({ timeout: 5000 });
+    // Wait for the modal overlay to fully close before continuing
+    await expect(page.locator(".overlay")).not.toBeVisible({ timeout: 5000 });
     planName = "E2E Delete Building";
     planRow = page.locator(".tbl tbody tr").filter({ hasText: planName });
   }
