@@ -881,7 +881,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <div className="s1-title">
             <div className="s1-eyebrow">Top Owners Corporation Solution</div>
             <h1 className="s1-h1">TOCS Order Portal</h1>
-            <p className="s1-sub">Order certificates, keys, fobs, swipes and more for your NSW strata property</p>
+            <p className="s1-sub">Order certificates, keys, fobs, swipes and more for your property</p>
             {/* Search bar — shows input when no building selected, summary when selected */}
             {!selPlan ? (
               <div className="s1-search-bar">
@@ -2117,7 +2117,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
     },
     {
       heading: "Privacy Policy Complaints and Enquiries",
-      body: `If you have any queries or complaints about our Privacy Policy please contact us at:\n\nTop Owners Corporation Solution\nSydney, NSW, Australia\nEmail: info@tocs.co`,
+      body: `If you have any queries or complaints about our Privacy Policy please contact us at:\n\nTop Owners Corporation Solution\nEmail: info@tocs.co`,
     },
   ];
 
