@@ -653,6 +653,15 @@ export default function App() {
 
   const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false); };
 
+  const handleAuth = async (token, user) => {
+    try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
+    try {
+      const r = await fetch("/api/data", { headers: { "Authorization": "Bearer " + token } });
+      if (r.ok) { const d = await r.json(); setData(d); }
+    } catch {}
+    setAdminToken(token);
+  };
+
   // Auto-correct payMethod when pubConfig loads and the current selection is disabled
   useEffect(() => {
     if (!pubConfig) return;
@@ -756,6 +765,8 @@ export default function App() {
               shippingCost={shippingCost}
               stripeConfirming={stripeConfirming} stripeConfirmErr={stripeConfirmErr} stripeOrderId={stripeOrderId}
               stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled} />
+          ) : !adminToken ? (
+            <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />
           ) : (
             <Admin data={data} setData={setData} adminTab={adminTab} setAdminTab={setAdminTab}
               adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
@@ -2181,16 +2192,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     return statusOk && categoryOk && planOk && lotOk && textOk;
   }), [data.orders, orderFilter]);
 
-  const handleAuth = async (token, user) => {
-    try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
-    // Fetch full authenticated data BEFORE showing admin UI to avoid blank-page race condition.
-    // (setAdminToken triggers re-render; data must be ready before that render happens.)
-    try {
-      const r = await fetch("/api/data", { headers: { "Authorization": "Bearer " + token } });
-      if (r.ok) { const d = await r.json(); setData(d); }
-    } catch {}
-    setAdminToken(token);
-  };
   const handleLogout = () => {
     const tok = adminToken;
     setAdminToken(null);
@@ -2198,7 +2199,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (tok) fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + tok }, body: JSON.stringify({ action: "logout" }) }).catch(() => {});
   };
 
-  if (!adminToken) return <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />;
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const plan = (data.strataPlans || []).find(p => p.id === planId);
 
