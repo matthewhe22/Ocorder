@@ -46,7 +46,7 @@ export async function getPiqToken(cfg) {
     grant_type:    "client_credentials",
     client_id:     clientId,
     client_secret: clientSecret,
-    scope:         "arrears buildings lots suppliers",
+    scope:         "buildings lots",
   });
 
   const resp = await fetch(`${baseUrl}/oauth/access_token`, {
