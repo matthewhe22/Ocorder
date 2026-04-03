@@ -2529,7 +2529,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const confirmDeletePlans = async (ids) => {
     const idSet = new Set(ids);
     let msg = `Delete ${ids.length} plan(s)? This cannot be undone.`;
-    const hasOrders = (data.orders || []).some(o => idSet.has(o.items?.[0]?.planId));
+    const hasOrders = (data.orders || []).some(o =>
+      (o.items || []).some(item => idSet.has(item.planId))
+    );
     if (hasOrders) msg += "\n\nOne or more of these plans have existing orders. Deleting will not remove orders but they will reference a plan that no longer exists.";
     if (!window.confirm(msg)) return;
     const plans = (data.strataPlans || []).filter(p => !idSet.has(p.id));
@@ -2905,7 +2907,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <tr>
                 <th style={{ width: 32 }}>
                   <input type="checkbox"
-                    checked={sortedPlans.length > 0 && sortedPlans.every(p => selectedPlanIds.has(p.id))}
+                    ref={el => { if (el) { const some = sortedPlans.some(p => selectedPlanIds.has(p.id)); const all = sortedPlans.length > 0 && sortedPlans.every(p => selectedPlanIds.has(p.id)); el.indeterminate = some && !all; el.checked = all; } }}
                     onChange={e => {
                       if (e.target.checked) setSelectedPlanIds(new Set(sortedPlans.map(p => p.id)));
                       else setSelectedPlanIds(new Set());
