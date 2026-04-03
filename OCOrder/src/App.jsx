@@ -2175,7 +2175,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
   const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
-  const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { running, rows:[{planId,status,ocs,lots,err}], done }
+  const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { phase, templatePlanId, rows, warning, error, saveErr }
+  const [planSort, setPlanSort] = useState({ col: null, dir: "asc" });
+  const [selectedPlanIds, setSelectedPlanIds] = useState(new Set());
   const [adminToast, setAdminToast] = useState(null);
 
   // ── PIQ Sync: fetch preview data from PIQ for a given plan ──────────────────
@@ -2381,6 +2383,20 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const sortedPlans = useMemo(() => {
+    const plans = data.strataPlans || [];
+    if (!planSort.col) return plans;
+    return [...plans].sort((a, b) => {
+      let va, vb;
+      if (planSort.col === "id")       { va = a.id || "";       vb = b.id || ""; }
+      else if (planSort.col === "name"){ va = a.name || "";     vb = b.name || ""; }
+      else if (planSort.col === "lots"){ va = (a.lots || []).length; vb = (b.lots || []).length; }
+      else                             { va = (a.products || []).length; vb = (b.products || []).length; }
+      if (typeof va === "string") return planSort.dir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      return planSort.dir === "asc" ? va - vb : vb - va;
+    });
+  }, [data.strataPlans, planSort]);
+
   const plan = (data.strataPlans || []).find(p => p.id === planId);
 
   const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
@@ -2432,11 +2448,16 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setModal(null); setForm({}); setEditTarget(null);
   };
 
-  const deletePlan = async (id) => {
-    if (!window.confirm("Delete this strata plan and all its lots, products and Owner Corporations? This cannot be undone.")) return;
-    const plans = data.strataPlans.filter(p => p.id !== id);
+  const confirmDeletePlans = async (ids) => {
+    const idSet = new Set(ids);
+    let msg = `Delete ${ids.length} plan(s)? This cannot be undone.`;
+    const hasOrders = (data.orders || []).some(o => idSet.has(o.items?.[0]?.planId));
+    if (hasOrders) msg += "\n\nOne or more of these plans have existing orders. Deleting will not remove orders but they will reference a plan that no longer exists.";
+    if (!window.confirm(msg)) return;
+    const plans = (data.strataPlans || []).filter(p => !idSet.has(p.id));
     await savePlans(plans);
-    if (planId === id) setPlanId(plans[0]?.id || "");
+    setSelectedPlanIds(new Set());
+    if (idSet.has(planId)) setPlanId(plans[0]?.id || "");
   };
 
   // ── Product CRUD ────────────────────────────────────────────────────────────
