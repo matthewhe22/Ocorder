@@ -1118,7 +1118,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                           >
                             <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
                             <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                              {[l.level, l.type].filter(Boolean).join(" · ")}
+                              {l.type || ""}
                             </span>
                           </div>
                         ))}
@@ -2167,6 +2167,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [editTarget, setEditTarget] = useState(null);
   const [planSaveErr, setPlanSaveErr] = useState(null);
   const [planId, setPlanId] = useState(data.strataPlans[0]?.id || "");
+  const [lotOcErr, setLotOcErr] = useState("");
   const [form, setForm] = useState({});
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [orderFilter, setOrderFilter] = useState({ text: "", status: "", category: "", plan: "", lot: "" });
@@ -2174,6 +2175,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
   const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
+  const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { running, rows:[{planId,status,ocs,lots,err}], done }
   const [adminToast, setAdminToast] = useState(null);
 
   // ── PIQ Sync: fetch preview data from PIQ for a given plan ──────────────────
@@ -2250,7 +2252,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             id:         `piq-${l.piqLotId}`,
             number:     l.lotNumber,
             unitNumber: l.unitNumber || "",
-            level:      "",
             type:       "",
             ownerCorps: autoAssignOC || [],
             piqLotId:   l.piqLotId,
@@ -2276,6 +2277,82 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       }
     } catch (e) {
       setPiqSyncModal(s => ({ ...s, error: "Unable to save: " + e.message }));
+    }
+  };
+
+  // ── PIQ Sync All: sync every plan from PIQ in sequence, then save ────────────
+  const syncAllFromPiq = async () => {
+    const plans = data.strataPlans;
+    const rows = plans.map(p => ({ planId: p.id, planName: p.name, status: "pending", ocs: 0, lots: 0, err: null }));
+    setPiqSyncAllModal({ running: true, rows, done: false });
+
+    // Work on a mutable copy of strataPlans
+    const updatedPlans = plans.map(p => ({ ...p }));
+
+    for (let i = 0; i < plans.length; i++) {
+      const plan = plans[i];
+      // Update row status to running
+      setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "running" } : r) }));
+      try {
+        const r = await fetch("/api/config/settings?action=sync-piq", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+          body: JSON.stringify({ planId: plan.id }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) throw new Error(d.error || "PIQ sync failed");
+
+        // Merge OCs
+        const existing = updatedPlans[i];
+        existing.piqBuildingId = d.piqBuildingId;
+        const existingOCs = existing.ownerCorps || {};
+        for (const s of (d.schedules || [])) {
+          const key = Object.keys(existingOCs).find(k => existingOCs[k].piqScheduleId === s.piqScheduleId || existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase());
+          if (key) { existingOCs[key].piqScheduleId = s.piqScheduleId; }
+          else { existingOCs[`OC-${s.piqScheduleId}`] = { name: s.name, levy: 0, piqScheduleId: s.piqScheduleId }; }
+        }
+        existing.ownerCorps = existingOCs;
+        const ocKeys = Object.keys(existingOCs);
+        const autoOC = ocKeys.length === 1 ? ocKeys : null;
+
+        // Merge lots
+        const existingLots = existing.lots || [];
+        const norm = s => String(s).trim().toLowerCase();
+        for (const l of (d.lots || [])) {
+          const ei = existingLots.findIndex(el => el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber));
+          if (ei >= 0) {
+            existingLots[ei].piqLotId = l.piqLotId;
+            existingLots[ei].unitNumber = l.unitNumber || existingLots[ei].unitNumber || "";
+            if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0)) existingLots[ei].ownerCorps = autoOC;
+          } else {
+            existingLots.push({ id: `piq-${l.piqLotId}`, number: l.lotNumber, unitNumber: l.unitNumber || "", type: "", ownerCorps: autoOC || [], piqLotId: l.piqLotId });
+          }
+        }
+        existing.lots = existingLots;
+        updatedPlans[i] = existing;
+
+        setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "ok", ocs: d.schedules?.length || 0, lots: d.lots?.length || 0 } : r) }));
+      } catch (err) {
+        setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "err", err: err.message } : r) }));
+      }
+    }
+
+    // Save all plans
+    try {
+      const sr = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ plans: updatedPlans }),
+      });
+      if (sr.ok) {
+        setData(p => ({ ...p, strataPlans: updatedPlans }));
+        setPiqSyncAllModal(m => ({ ...m, running: false, done: true }));
+      } else {
+        const e = await sr.json();
+        setPiqSyncAllModal(m => ({ ...m, running: false, done: true, saveErr: e.error || "Save failed." }));
+      }
+    } catch (e) {
+      setPiqSyncAllModal(m => ({ ...m, running: false, done: true, saveErr: e.message }));
     }
   };
 
@@ -2442,8 +2519,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── Lot CRUD ────────────────────────────────────────────────────────────────
   const addLot = async () => {
     if (!form.lotNum) return;
+    const ocList = form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [];
+    if (!ocList.length && Object.keys(plan?.ownerCorps || {}).length > 0) {
+      setLotOcErr("Owner Corporation is required. Please select at least one.");
+      return;
+    }
+    setLotOcErr("");
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
-      ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, level: form.level || "", type: form.lotType || "Residential", ownerCorps: form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [] }]
+      ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, type: form.lotType || "Residential", ownerCorps: ocList }]
     });
     await savePlans(plans);
     setModal(null); setForm({});
@@ -2451,10 +2534,16 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   const saveLot = async () => {
     if (!form.lotNum) return;
+    const ocList = form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [];
+    if (!ocList.length && Object.keys(plan?.ownerCorps || {}).length > 0) {
+      setLotOcErr("Owner Corporation is required. Please select at least one.");
+      return;
+    }
+    setLotOcErr("");
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, lots: pl.lots.map(l => l.id !== editTarget.id ? l : {
-        ...l, number: form.lotNum, level: form.level || "", type: form.lotType || "Residential",
-        ownerCorps: form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [],
+        ...l, number: form.lotNum, type: form.lotType || "Residential",
+        ownerCorps: ocList,
       })
     });
     await savePlans(plans);
@@ -2538,7 +2627,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nThis indicates the customer will pay directly (not via the Send Invoice flow).`)) updateOrderStatus(oid, "Pending Payment"); };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
-    setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
+    setLotOcErr("");
+    setForm({ lotNum: lot.number, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
     setModal("editLot");
   };
 
@@ -2574,7 +2664,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             return k ? String(row[k]).trim() : "";
           };
           const number = get("Lot Number", "Lot No", "Lot", "Number");
-          const level  = get("Level", "Floor");
           const type   = get("Type", "Lot Type", "Use");
           if (!number) return;
           let ownerCorps;
@@ -2584,7 +2673,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             const ocRaw = get("Owner Corp IDs", "Owner Corp", "OC IDs", "OC", "Owner Corporation");
             ownerCorps = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
           }
-          parsed.push({ id: "L" + Date.now() + (baseIdx + idx), number, level, type: type || "Residential", ownerCorps });
+          parsed.push({ id: "L" + Date.now() + (baseIdx + idx), number, type: type || "Residential", ownerCorps });
         });
         return parsed;
       };
@@ -2695,9 +2784,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         <div className="panel">
           <div className="section-hd">
             <h2 className="section-tt">Strata Plans</h2>
-            <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
-              <Ic n="plus" s={13}/> Add Plan
-            </button>
+            <div style={{ display:"flex", gap:"8px" }}>
+              <button className="btn btn-out" style={{ padding:"8px 16px", fontSize:"0.72rem", background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={syncAllFromPiq}>
+                <Ic n="cloud" s={13}/> Sync All from PIQ
+              </button>
+              <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
+                <Ic n="plus" s={13}/> Add Plan
+              </button>
+            </div>
           </div>
           <table className="tbl">
             <thead><tr><th>Plan ID</th><th>Name</th><th>Address</th><th>Lots</th><th>Products</th><th>Shipping</th><th></th></tr></thead>
@@ -2786,20 +2880,24 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     <Ic n="upload" s={13}/> Import Excel
                     <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => importLotsFromFile(e, planId)}/>
                   </label>
-                  <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("lot"); }}>
+                  <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setLotOcErr(""); setModal("lot"); }}>
                     <Ic n="plus" s={13}/> Add Lot
                   </button>
                 </div>
               </div>
               <table className="tbl">
-                <thead><tr><th>Lot</th><th>Level</th><th>Type</th><th>Owner Corporations</th><th></th></tr></thead>
+                <thead><tr><th>Lot</th><th>Type</th><th>Owner Corporations</th><th></th></tr></thead>
                 <tbody>
                   {plan.lots.map(l => (
-                    <tr key={l.id}>
+                    <tr key={l.id} style={(!l.ownerCorps || l.ownerCorps.length === 0) ? { background:"#fffbeb", borderLeft:"3px solid #f59e0b" } : {}}>
                       <td><strong>{l.number}</strong></td>
-                      <td>{l.level}</td>
                       <td><span className={`badge ${l.type==="Residential"?"bg-b":l.type==="Commercial"?"bg-gold":"bg-gray"}`}>{l.type}</span></td>
-                      <td style={{ fontSize: "0.78rem" }}>{l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")}</td>
+                      <td style={{ fontSize: "0.78rem" }}>
+                        {(!l.ownerCorps || l.ownerCorps.length === 0)
+                          ? <span style={{ color:"#b45309", fontWeight:600, fontSize:"0.75rem" }}>⚠ No OC assigned</span>
+                          : l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")
+                        }
+                      </td>
                       <td style={{ display: "flex", gap: "6px" }}>
                         <button className="tbl-act-btn" aria-label="Edit lot" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
                         <button className="tbl-act-btn danger" aria-label="Delete lot" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
@@ -3140,6 +3238,54 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         );
       })()}
 
+      {/* PIQ Sync All Modal */}
+      {piqSyncAllModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"560px", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ background:"#1a5fa8", borderRadius:"10px 10px 0 0", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Sync All Buildings from PropertyIQ</span>
+              {!piqSyncAllModal.running && <button onClick={() => setPiqSyncAllModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>}
+            </div>
+            <div style={{ padding:"20px" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
+                  <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
+                  <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>OCs</th>
+                  <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>Lots</th>
+                  <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Status</th>
+                </tr></thead>
+                <tbody>
+                  {(piqSyncAllModal.rows || []).map(row => (
+                    <tr key={row.planId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                      <td style={{ padding:"7px 8px" }}><strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{row.planId}</strong><br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{row.planName}</span></td>
+                      <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.ocs : "—"}</td>
+                      <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.lots : "—"}</td>
+                      <td style={{ padding:"7px 8px" }}>
+                        {row.status === "pending" && <span style={{ color:"var(--muted)" }}>Waiting…</span>}
+                        {row.status === "running" && <span style={{ color:"#1a5fa8" }}>⟳ Syncing…</span>}
+                        {row.status === "ok" && <span style={{ color:"#16a34a", fontWeight:600 }}>✓ Done</span>}
+                        {row.status === "err" && <span style={{ color:"#dc2626", fontSize:"0.75rem" }} title={row.err}>✗ {row.err?.substring(0,60)}{row.err?.length > 60 ? "…" : ""}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {piqSyncAllModal.saveErr && <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqSyncAllModal.saveErr}</div>}
+              {piqSyncAllModal.done && !piqSyncAllModal.saveErr && (
+                <div style={{ marginTop:"14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>
+                  ✓ Sync complete. Lots with multiple OCs are highlighted in the Lots tab — assign OCs manually.
+                </div>
+              )}
+              {!piqSyncAllModal.running && (
+                <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
+                  <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PIQ Sync Preview Modal */}
       {piqSyncModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
@@ -3441,9 +3587,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         <div className="overlay" onClick={() => { setModal(null); setEditTarget(null); }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2 className="modal-tt">{modal === "editLot" ? "Edit Lot" : "Add Lot"}</h2>
-            {[["lotNum","Lot Number (e.g. Lot 10)"],["level","Level (e.g. Level 3)"]].map(([k,ph]) => (
-              <div className="form-row" key={k}><label className="f-label">{ph}</label><input className="f-input" placeholder={ph} value={form[k]||""} onChange={e => upd(k,e.target.value)}/></div>
-            ))}
+            <div className="form-row"><label className="f-label">Lot Number (e.g. Lot 10)</label><input className="f-input" placeholder="Lot Number (e.g. Lot 10)" value={form.lotNum||""} onChange={e => upd("lotNum",e.target.value)}/></div>
             <div className="form-row"><label className="f-label">Type</label>
               <select className="f-select" value={form.lotType||"Residential"} onChange={e => upd("lotType",e.target.value)}>
                 {["Residential","Commercial","Parking","Storage","Mixed"].map(t => <option key={t}>{t}</option>)}
@@ -3477,8 +3621,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "4px" }}>No Owner Corporations defined for this plan. Add OCs first.</div>
               )}
             </div>
+            {lotOcErr && <div style={{ color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"6px", padding:"8px 12px", fontSize:"0.78rem", marginTop:"4px" }}>{lotOcErr}</div>}
             <div style={{ display: "flex", gap: "8px", marginTop: "0.5rem" }}>
-              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); }}>Cancel</button>
+              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); setLotOcErr(""); }}>Cancel</button>
               <button className="btn btn-blk" style={{ flex: 1 }} onClick={modal === "editLot" ? saveLot : addLot}>
                 {modal === "editLot" ? "Save Changes" : "Add Lot"}
               </button>

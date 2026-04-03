@@ -42,7 +42,6 @@ export default async function handler(req, res) {
       const existIdx = existingLots.findIndex(el => norm(el.number) === norm(incoming.number));
       if (existIdx >= 0) {
         // Update mutable fields; preserve id, piqLotId, unitNumber
-        existingLots[existIdx].level      = incoming.level      || existingLots[existIdx].level;
         existingLots[existIdx].type       = incoming.type       || existingLots[existIdx].type;
         existingLots[existIdx].ownerCorps = incoming.ownerCorps?.length
           ? incoming.ownerCorps
