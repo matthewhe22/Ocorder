@@ -2226,6 +2226,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       }
       plan.ownerCorps = existingOCs;
 
+      // If exactly one OC/schedule exists, auto-assign all lots to it.
+      // PIQ lot objects don't carry a scheduleId field, so assignment must be inferred.
+      const ocKeys = Object.keys(existingOCs);
+      const autoAssignOC = ocKeys.length === 1 ? ocKeys : null; // [key] or null
+
       // Merge lots (non-destructive: existing lots preserved; piqLotId + unitNumber added)
       const existingLots = plan.lots || [];
       for (const l of (result.lots || [])) {
@@ -2236,6 +2241,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         if (existingIdx >= 0) {
           existingLots[existingIdx].piqLotId   = l.piqLotId;
           existingLots[existingIdx].unitNumber  = l.unitNumber || existingLots[existingIdx].unitNumber || "";
+          // Auto-assign OC if the lot currently has none and there is only one OC
+          if (autoAssignOC && (!existingLots[existingIdx].ownerCorps || existingLots[existingIdx].ownerCorps.length === 0)) {
+            existingLots[existingIdx].ownerCorps = autoAssignOC;
+          }
         } else {
           existingLots.push({
             id:         `piq-${l.piqLotId}`,
@@ -2243,7 +2252,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             unitNumber: l.unitNumber || "",
             level:      "",
             type:       "",
-            ownerCorps: [],
+            ownerCorps: autoAssignOC || [],
             piqLotId:   l.piqLotId,
           });
         }
@@ -3194,7 +3203,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     }
                   </div>
                   <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"6px", padding:"10px 14px", fontSize:"0.78rem", marginBottom:"16px" }}>
-                    ℹ️ Importing will add/update Owner Corporations and Lots in plan <strong>{piqSyncModal.planId}</strong>. Existing data will not be deleted. Lot-to-OC assignments can be edited in the Lots tab afterwards.
+                    ℹ️ Importing will add/update Owner Corporations and Lots in plan <strong>{piqSyncModal.planId}</strong>. Existing data will not be deleted.
+                    {(piqSyncModal.result.schedules?.length === 1)
+                      ? <> All lots will be <strong>automatically assigned</strong> to the single OC (<em>{piqSyncModal.result.schedules[0].name}</em>).</>
+                      : <> Lot-to-OC assignments can be set in the <strong>Lots tab</strong> after import (PIQ does not expose per-lot schedule membership).</>
+                    }
                   </div>
                   <div style={{ display:"flex", gap:"10px" }}>
                     <button className="btn btn-blk" style={{ flex:1 }} onClick={confirmPiqSync}>

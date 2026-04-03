@@ -117,8 +117,10 @@ export async function getPiqBuilding(cfg, splan) {
  */
 export async function getPiqSchedules(cfg, buildingId) {
   const { access_token, baseUrl } = await getPiqToken(cfg);
+  // Single-building endpoint returns { data: <Building>, links: {} }
+  // Schedule data lives at result.data.schedules.data (not result.schedules.data)
   const result = await piqGet(access_token, baseUrl, `/buildings/${buildingId}`, { include: "schedule" });
-  return result?.schedules?.data || [];
+  return result?.data?.schedules?.data || [];
 }
 
 /**
