@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Convene — Brand Identity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --midnight:   #0D1B2A;
+      --midnight-2: #0F2238;
+      --gold:       #C49A3C;
+      --gold-light: #D4AE58;
+      --gold-pale:  #EDD9A3;
+      --cream:      #F6F0E4;
+      --cream-2:    #EDE6D6;
+      --sage:       #4A7255;
+      --muted:      #8A8A7A;
+      --white:      #FFFFFF;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Jost', sans-serif;
+      background: var(--cream);
+      color: var(--midnight);
+      overflow-x: hidden;
+    }
+
+    /* ─────────────────────────────────────────────
+       SECTION SHARED
+    ───────────────────────────────────────────── */
+    .section-eyebrow {
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      font-size: 9px;
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 52px;
+    }
+    .section-eyebrow.light { color: rgba(255,255,255,0.3); }
+
+    /* ─────────────────────────────────────────────
+       HERO — LIGHT
+    ───────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 40px;
+      background: var(--cream);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Subtle radial glow in background */
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 35% 45%, rgba(196,154,60,0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 50% at 72% 62%, rgba(13,27,42,0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* Fine diagonal grid texture */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 28px,
+          rgba(13,27,42,0.018) 28px,
+          rgba(13,27,42,0.018) 29px
+        );
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── PRIMARY HORIZONTAL LOCKUP ── */
+    .lockup-h {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+    }
+
+    .mark-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .mark-svg-lg {
+      width: 84px;
+      height: 84px;
+      display: block;
+    }
+
+    .wordmark-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .wordmark {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 500;
+      font-size: 42px;
+      letter-spacing: 0.32em;
+      color: var(--midnight);
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .tagline {
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      font-size: 9.5px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    /* ── STACKED LOCKUP ── */
+    .lockup-v {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .lockup-v .wordmark {
+      font-size: 28px;
+      letter-spacing: 0.4em;
+      text-align: center;
+    }
+
+    .lockup-v .tagline {
+      text-align: center;
+      margin-top: -6px;
+    }
+
+    /* ── FADE-UP ANIMATION ── */
+    .appear {
+      opacity: 0;
+      transform: translateY(14px);
+      animation: fade-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    .appear-1 { animation-delay: 0.15s; }
+    .appear-2 { animation-delay: 0.35s; }
+    .appear-3 { animation-delay: 0.55s; }
+
+    @keyframes fade-up {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── SVG ARC DRAW ANIMATION ── */
+    .arc-animated {
+      stroke-dasharray: 182;
+      stroke-dashoffset: 182;
+      animation: draw-arc 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards 0.2s;
+    }
+
+    .ring-animated {
+      opacity: 0;
+      animation: ring-in 0.7s ease forwards 0.1s;
+    }
+
+    .dot-animated {
+      opacity: 0;
+      transform-origin: 86px 50px;
+      transform: scale(0);
+      animation: dot-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 1.45s;
+    }
+
+    @keyframes draw-arc {
+      to { stroke-dashoffset: 0; }
+    }
+
+    @keyframes ring-in {
+      to { opacity: 1; }
+    }
+
+    @keyframes dot-pop {
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Subtle dot pulse after appearing */
+    .dot-pulse {
+      animation:
+        dot-pop  0.45s cubic-bezier(0.34,1.56,0.64,1) forwards 1.45s,
+        dot-glow 3s ease-in-out infinite 2.1s;
+    }
+
+    @keyframes dot-glow {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.65; }
+    }
+
+    /* ── THIN HORIZONTAL RULE ── */
+    .rule {
+      width: 1px;
+      height: 72px;
+      background: linear-gradient(to bottom, transparent, rgba(196,154,60,0.35), transparent);
+      margin: 64px auto;
+    }
+
+    /* ─────────────────────────────────────────────
+       DARK SECTION
+    ───────────────────────────────────────────── */
+    .dark-section {
+      background: var(--midnight);
+      padding: 100px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dark-section::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 55% 55% at 50% 50%, rgba(196,154,60,0.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .dark-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 64px;
+      width: 100%;
+    }
+
+    /* Two lockups side by side */
+    .dark-row {
+      display: flex;
+      gap: 80px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .dark-divider {
+      width: 1px;
+      height: 80px;
+      background: rgba(196,154,60,0.18);
+    }
+
+    .lockup-h.dark .wordmark   { color: var(--white); }
+    .lockup-h.dark .tagline    { color: var(--gold); }
+    .lockup-v.dark .wordmark   { color: var(--white); }
+    .lockup-v.dark .tagline    { color: var(--gold); }
+
+    /* ── MARK-ONLY SCALE STRIP ── */
+    .scale-strip {
+      display: flex;
+      align-items: flex-end;
+      gap: 40px;
+      margin-top: 20px;
+    }
+
+    .scale-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .scale-label {
+      font-family: 'Jost', sans-serif;
+      font-weight: 200;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.25);
+    }
+
+    /* ─────────────────────────────────────────────
+       COLOUR PALETTE
+    ───────────────────────────────────────────── */
+    .palette-section {
+      background: var(--cream-2);
+      padding: 88px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .palette-row {
+      display: flex;
+      gap: 3px;
+      width: min(680px, 100%);
+    }
+
+    .swatch {
+      flex: 1;
+      aspect-ratio: 1 / 1.35;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 14px 12px;
+    }
+
+    .swatch-name {
+      font-family: 'Jost', sans-serif;
+      font-size: 8.5px;
+      letter-spacing: 0.15em;
+      font-weight: 400;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .swatch-hex {
+      font-family: 'Jost', sans-serif;
+      font-size: 10px;
+      font-weight: 200;
+      letter-spacing: 0.06em;
+    }
+
+    /* ─────────────────────────────────────────────
+       TYPOGRAPHY SECTION
+    ───────────────────────────────────────────── */
+    .type-section {
+      padding: 88px 40px;
+      background: var(--cream);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .type-inner {
+      width: min(720px, 100%);
+    }
+
+    .type-display {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 80px;
+      font-weight: 300;
+      line-height: 0.95;
+      color: var(--midnight);
+      margin-bottom: 6px;
+    }
+
+    .type-display-italic {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 52px;
+      font-weight: 300;
+      font-style: italic;
+      color: var(--gold);
+      margin-bottom: 36px;
+    }
+
+    .type-divider {
+      width: 40px;
+      height: 1px;
+      background: var(--gold);
+      margin-bottom: 28px;
+      opacity: 0.5;
+    }
+
+    .type-meta {
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .type-body {
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--midnight);
+      opacity: 0.7;
+      max-width: 560px;
+      margin-bottom: 48px;
+    }
+
+    /* ─────────────────────────────────────────────
+       PRODUCT APPLICATION
+    ───────────────────────────────────────────── */
+    .app-section {
+      background: var(--midnight);
+      padding: 100px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Faint large C watermark in background */
+    .bg-watermark {
+      position: absolute;
+      right: -60px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 460px;
+      height: 460px;
+      opacity: 0.04;
+      pointer-events: none;
+    }
+
+    .app-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+
+    .app-cards {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 0;
+    }
+
+    .app-card {
+      width: 250px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(196,154,60,0.14);
+      padding: 36px 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      transition: border-color 0.3s ease;
+      cursor: default;
+    }
+
+    .app-card:hover {
+      border-color: rgba(196,154,60,0.35);
+    }
+
+    .card-mark {
+      width: 38px;
+      height: 38px;
+      margin-bottom: 28px;
+    }
+
+    .card-product {
+      font-family: 'Jost', sans-serif;
+      font-size: 9px;
+      letter-spacing: 0.3em;
+      font-weight: 400;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 10px;
+    }
+
+    .card-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      color: var(--white);
+      text-transform: uppercase;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    .card-rule {
+      width: 28px;
+      height: 1px;
+      background: rgba(196,154,60,0.4);
+      margin-bottom: 18px;
+    }
+
+    .card-desc {
+      font-family: 'Jost', sans-serif;
+      font-size: 12px;
+      font-weight: 300;
+      line-height: 1.7;
+      color: rgba(255,255,255,0.35);
+    }
+
+    /* ─────────────────────────────────────────────
+       FOOTER
+    ───────────────────────────────────────────── */
+    .footer {
+      background: var(--midnight-2);
+      padding: 48px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+      border-top: 1px solid rgba(196,154,60,0.1);
+    }
+
+    .footer-mark {
+      width: 32px;
+      height: 32px;
+      opacity: 0.5;
+    }
+
+    .footer-text {
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 1 — HERO (LIGHT)
+═══════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-inner">
+    <p class="section-eyebrow appear appear-1">Brand Identity System — Convene 2026</p>
+
+    <!-- PRIMARY HORIZONTAL LOCKUP -->
+    <div class="lockup-h appear appear-2">
+
+      <!-- ANIMATED MARK -->
+      <div class="mark-wrap">
+        <svg class="mark-svg-lg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- Thin outer gold ring -->
+          <circle cx="50" cy="50" r="45"
+                  fill="none" stroke="#C49A3C" stroke-width="0.65"
+                  class="ring-animated"/>
+          <!-- C arc — midnight navy, draws in on load -->
+          <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9"
+                fill="none"
+                stroke="#0D1B2A"
+                stroke-width="5.2"
+                stroke-linecap="round"
+                class="arc-animated"/>
+          <!-- Convergence dot — gold, pops in after arc -->
+          <circle cx="86" cy="50" r="5"
+                  fill="#C49A3C"
+                  class="dot-pulse"/>
+        </svg>
+      </div>
+
+      <!-- WORDMARK + TAGLINE -->
+      <div class="wordmark-block">
+        <div class="wordmark">Convene</div>
+        <div class="tagline">Strata Governance Platform</div>
+      </div>
+
+    </div><!-- /lockup-h -->
+
+    <div class="rule"></div>
+
+    <!-- DESCRIPTOR -->
+    <p class="appear appear-3" style="
+      font-family:'Jost',sans-serif;
+      font-weight:300;
+      font-size:13px;
+      letter-spacing:0.15em;
+      text-transform:uppercase;
+      color:var(--muted);
+      text-align:center;
+      max-width:460px;
+      line-height:2;
+    ">
+      Certificates &nbsp;·&nbsp; Meetings &nbsp;·&nbsp; Governance
+    </p>
+
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 2 — DARK VARIANTS
+═══════════════════════════════════════════════ -->
+<section class="dark-section">
+  <div class="dark-inner">
+    <p class="section-eyebrow light">Dark Variant</p>
+
+    <div class="dark-row">
+
+      <!-- Horizontal lockup, dark -->
+      <div class="lockup-h dark">
+        <svg class="mark-svg-lg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45"
+                  fill="none" stroke="#C49A3C" stroke-width="0.65"/>
+          <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9"
+                fill="none" stroke="#FFFFFF" stroke-width="5.2" stroke-linecap="round"/>
+          <circle cx="86" cy="50" r="5" fill="#C49A3C"/>
+        </svg>
+        <div class="wordmark-block">
+          <div class="wordmark">Convene</div>
+          <div class="tagline">Strata Governance Platform</div>
+        </div>
+      </div>
+
+      <div class="dark-divider"></div>
+
+      <!-- Stacked lockup, dark -->
+      <div class="lockup-v dark">
+        <svg style="width:58px;height:58px" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45"
+                  fill="none" stroke="#C49A3C" stroke-width="0.7"/>
+          <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9"
+                fill="none" stroke="#FFFFFF" stroke-width="5.2" stroke-linecap="round"/>
+          <circle cx="86" cy="50" r="5" fill="#C49A3C"/>
+        </svg>
+        <div class="wordmark-block" style="align-items:center">
+          <div class="wordmark" style="font-size:24px;letter-spacing:0.42em">Convene</div>
+          <div class="tagline">Strata Governance Platform</div>
+        </div>
+      </div>
+
+    </div><!-- /dark-row -->
+
+    <!-- SCALE STRIP — mark only -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:24px;">
+      <p class="section-eyebrow light" style="margin-bottom:8px;">Mark at Scale</p>
+      <div class="scale-strip">
+
+        <div class="scale-item">
+          <svg style="width:72px;height:72px" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="0.7"/>
+            <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFF" stroke-width="5.2" stroke-linecap="round"/>
+            <circle cx="86" cy="50" r="5" fill="#C49A3C"/>
+          </svg>
+          <span class="scale-label">72 px</span>
+        </div>
+
+        <div class="scale-item">
+          <svg style="width:48px;height:48px" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="0.8"/>
+            <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFF" stroke-width="5.5" stroke-linecap="round"/>
+            <circle cx="86" cy="50" r="5.5" fill="#C49A3C"/>
+          </svg>
+          <span class="scale-label">48 px</span>
+        </div>
+
+        <div class="scale-item">
+          <svg style="width:32px;height:32px" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="1"/>
+            <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFF" stroke-width="6" stroke-linecap="round"/>
+            <circle cx="86" cy="50" r="6" fill="#C49A3C"/>
+          </svg>
+          <span class="scale-label">32 px</span>
+        </div>
+
+        <div class="scale-item">
+          <svg style="width:20px;height:20px" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="1.2"/>
+            <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFF" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="86" cy="50" r="7" fill="#C49A3C"/>
+          </svg>
+          <span class="scale-label">20 px</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 3 — COLOUR SYSTEM
+═══════════════════════════════════════════════ -->
+<section class="palette-section">
+  <p class="section-eyebrow">Colour System</p>
+
+  <div class="palette-row">
+
+    <div class="swatch" style="background:#0D1B2A;">
+      <span class="swatch-name" style="color:rgba(255,255,255,0.5)">Midnight</span>
+      <span class="swatch-hex" style="color:rgba(255,255,255,0.35)">#0D1B2A</span>
+    </div>
+
+    <div class="swatch" style="background:#C49A3C;">
+      <span class="swatch-name" style="color:rgba(13,27,42,0.7)">Gold</span>
+      <span class="swatch-hex" style="color:rgba(13,27,42,0.55)">#C49A3C</span>
+    </div>
+
+    <div class="swatch" style="background:#4A7255;">
+      <span class="swatch-name" style="color:rgba(255,255,255,0.55)">Sage</span>
+      <span class="swatch-hex" style="color:rgba(255,255,255,0.4)">#4A7255</span>
+    </div>
+
+    <div class="swatch" style="background:#F6F0E4; border:1px solid #E0D8C8;">
+      <span class="swatch-name" style="color:rgba(13,27,42,0.45)">Cream</span>
+      <span class="swatch-hex" style="color:rgba(13,27,42,0.35)">#F6F0E4</span>
+    </div>
+
+    <div class="swatch" style="background:#8A8A7A;">
+      <span class="swatch-name" style="color:rgba(255,255,255,0.55)">Muted</span>
+      <span class="swatch-hex" style="color:rgba(255,255,255,0.4)">#8A8A7A</span>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 4 — TYPOGRAPHY
+═══════════════════════════════════════════════ -->
+<section class="type-section">
+  <p class="section-eyebrow">Typography</p>
+
+  <div class="type-inner">
+
+    <div class="type-display">Convene</div>
+    <div class="type-display-italic">Governance, simplified.</div>
+    <div class="type-divider"></div>
+
+    <div class="type-meta">Cormorant Garamond — Display / Wordmark</div>
+    <p class="type-body">
+      Cormorant Garamond brings centuries of typographic refinement to the Convene
+      brand — authoritative in headlines, elegant at any weight. Its subtle contrast
+      between thick and thin strokes echoes the precision of legal and governance documents.
+    </p>
+
+    <div class="type-meta">Jost — Interface / Supporting Text</div>
+    <p class="type-body" style="font-size:14px;line-height:1.8;letter-spacing:0.04em;">
+      Jost provides the clean geometric counterpoint — equally at home as a navigation label,
+      a form hint, or a data caption. Its near-perfect circular geometry complements
+      the mark's own arc construction.
+    </p>
+
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 5 — PRODUCT APPLICATIONS
+═══════════════════════════════════════════════ -->
+<section class="app-section">
+
+  <!-- Large watermark C in background -->
+  <svg class="bg-watermark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9"
+          fill="none" stroke="#C49A3C" stroke-width="4" stroke-linecap="round"/>
+  </svg>
+
+  <div class="app-inner">
+    <p class="section-eyebrow light">Product Suite</p>
+
+    <div class="app-cards">
+
+      <!-- Card 1: Certificates -->
+      <div class="app-card">
+        <svg class="card-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="0.8"/>
+          <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+          <circle cx="86" cy="50" r="5.5" fill="#C49A3C"/>
+        </svg>
+        <div class="card-product">Convene</div>
+        <div class="card-name">Certificates</div>
+        <div class="card-rule"></div>
+        <p class="card-desc">
+          Online ordering portal for Owner Corporation certificates, registers,
+          insurance documents, keys and fobs — with Stripe, PayID and bank transfer.
+        </p>
+      </div>
+
+      <!-- Card 2: Meetings -->
+      <div class="app-card">
+        <svg class="card-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="0.8"/>
+          <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+          <circle cx="86" cy="50" r="5.5" fill="#C49A3C"/>
+        </svg>
+        <div class="card-product">Convene</div>
+        <div class="card-name">Meetings</div>
+        <div class="card-rule"></div>
+        <p class="card-desc">
+          Digital AGM platform for strata schemes — online voting, motion management,
+          proxy handling and quorum tracking for annual general meetings.
+        </p>
+      </div>
+
+      <!-- Card 3: Platform badge -->
+      <div class="app-card" style="justify-content:space-between;">
+        <svg class="card-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="0.8"/>
+          <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+          <circle cx="86" cy="50" r="5.5" fill="#C49A3C"/>
+        </svg>
+        <div>
+          <div class="card-product">Convene</div>
+          <div class="card-name">Platform</div>
+          <div class="card-rule"></div>
+          <p class="card-desc">
+            The unified strata governance suite — white-labelled for any strata
+            management company. One platform. Every scheme. Complete governance.
+          </p>
+        </div>
+        <div style="
+          margin-top:24px;
+          font-family:'Jost',sans-serif;
+          font-size:9px;
+          letter-spacing:0.25em;
+          text-transform:uppercase;
+          color:var(--gold);
+          border:1px solid rgba(196,154,60,0.3);
+          padding:8px 14px;
+          text-align:center;
+        ">White-label Ready</div>
+      </div>
+
+    </div><!-- /app-cards -->
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════
+     FOOTER
+═══════════════════════════════════════════════ -->
+<footer class="footer">
+  <svg class="footer-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="45" fill="none" stroke="#C49A3C" stroke-width="0.8"/>
+    <path d="M 76.9,23.1 A 38,38 0 1 0 76.9,76.9" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+    <circle cx="86" cy="50" r="5.5" fill="#C49A3C"/>
+  </svg>
+  <span class="footer-text">Convene — Strata Governance Platform</span>
+  <span class="footer-text">Brand Identity 2026</span>
+</footer>
+
+</body>
+</html>
