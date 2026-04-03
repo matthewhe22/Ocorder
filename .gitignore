@@ -1,5 +1,9 @@
+package-lock.json
 node_modules/
-OCOrder/node_modules/
-OCOrder/dist/
 .worktrees/
+.claude/settings.local.json
+.DS_Store
+dist/
+uploads/
+test-results/
 .vercel

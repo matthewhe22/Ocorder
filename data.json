@@ -108,12 +108,1296 @@
           "price": 0,
           "turnaround": "2 business days",
           "perOC": false
+        },
+        {
+          "id": "K_E2E_1",
+          "name": "E2E Building Entry Key",
+          "description": "Test key for E2E",
+          "price": 0,
+          "turnaround": "2-3 business days",
+          "perOC": false,
+          "category": "keys"
         }
       ],
       "active": true
     }
   ],
   "orders": [
+    {
+      "id": "TOCS-MNDNOKB8-KDM",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:44:01.364Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNOKB8-KDM-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:44:01.372Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNOGZJ-AO8",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 2,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:43:57.055Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNOGZJ-AO8-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:43:57.064Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNOGY6-VZG",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:43:57.006Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNOGY6-VZG-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:43:57.014Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNOF5K-9K7",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Cancelled",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:43:54.680Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNOF5K-9K7-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:43:54.688Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        },
+        {
+          "ts": "2026-03-30T20:43:56.260Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
+        }
+      ],
+      "cancelReason": "E2E test cancellation reason"
+    },
+    {
+      "id": "TOCS-MNDNOEPF-DRP",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:43:54.099Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNOEPF-DRP-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:43:54.106Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNMSTI-PIT",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:42:39.078Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNMSTI-PIT-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:42:39.089Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNMPUD-DSN",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:42:35.221Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNMPUD-DSN-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:42:35.233Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNMPHF-YUD",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 2,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:42:34.755Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNMPHF-YUD-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:42:34.764Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNMNNR-JS7",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Cancelled",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:42:32.391Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNMNNR-JS7-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:42:32.399Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        },
+        {
+          "ts": "2026-03-30T20:42:34.276Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
+        }
+      ],
+      "cancelReason": "E2E test cancellation reason"
+    },
+    {
+      "id": "TOCS-MNDNMNKX-LHT",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:42:32.289Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNMNKX-LHT-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:42:32.298Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNL43T-0DX",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:41:20.393Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNL43T-0DX-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:41:20.404Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNIQVP-9VV",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:39:29.941Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNIQVP-9VV-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:39:29.951Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNIB44-BZK",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:39:09.508Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNIB44-BZK-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:39:09.518Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNGWEW-SA8",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:38:03.800Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNGWEW-SA8-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:38:03.807Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNGFCV-DY8",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 2,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:37:41.695Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNGFCV-DY8-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:37:41.704Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNGD0E-RPI",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:37:38.654Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNGD0E-RPI-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:37:38.663Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNFZJX-5EQ",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Cancelled",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:37:21.213Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNFZJX-5EQ-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:37:21.220Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        },
+        {
+          "ts": "2026-03-30T20:37:22.975Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
+        }
+      ],
+      "cancelReason": "E2E test cancellation reason"
+    },
+    {
+      "id": "TOCS-MNDNFZFF-9C0",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:37:21.051Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNFZFF-9C0-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:37:21.057Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNF5QU-YQ4",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:36:42.582Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNF5QU-YQ4-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:36:42.590Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNEOQ4-7NS",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 2,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:36:20.524Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNEOQ4-7NS-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:36:20.533Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNEMJF-7ND",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:36:17.691Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNEMJF-7ND-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:36:17.700Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNE943-175",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Cancelled",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:36:00.291Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNE943-175-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:36:00.303Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        },
+        {
+          "ts": "2026-03-30T20:36:01.911Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
+        }
+      ],
+      "cancelReason": "E2E test cancellation reason"
+    },
+    {
+      "id": "TOCS-MNDNE92Y-SWK",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:36:00.250Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNE92Y-SWK-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:36:00.259Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNCEEK-96R",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:34:33.836Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNCEEK-96R-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:34:33.846Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNBZ2H-OXQ",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:34:13.961Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNBZ2H-OXQ-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:34:13.971Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNBDHN-HJI",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:33:45.995Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNBDHN-HJI-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:33:46.004Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNAWGP-58W",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 2,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:33:23.929Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNAWGP-58W-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:33:23.937Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNAW99-QMA",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "payid",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:33:23.661Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNAW99-QMA-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:33:23.670Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
+    {
+      "id": "TOCS-MNDNAGPN-CHD",
+      "planId": "SP12345",
+      "orderCategory": "keys",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testkeys@example.com",
+        "phone": "0498 765 432",
+        "companyName": ""
+      },
+      "status": "Cancelled",
+      "payment": "invoice",
+      "items": [
+        {
+          "productId": "K_E2E_1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "",
+          "productName": "E2E Building Entry Key",
+          "ocId": null,
+          "qty": 1,
+          "price": 0
+        }
+      ],
+      "date": "2026-03-30T20:33:03.515Z",
+      "total": 0,
+      "lotAuthorityFile": "TOCS-MNDNAGPN-CHD-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:33:03.522Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        },
+        {
+          "ts": "2026-03-30T20:33:05.272Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
+        }
+      ],
+      "cancelReason": "E2E test cancellation reason"
+    },
+    {
+      "id": "TOCS-MNDNAGND-BCW",
+      "planId": "SP12345",
+      "orderCategory": "oc",
+      "contactInfo": {
+        "name": "Test User",
+        "email": "testuser@example.com",
+        "phone": "0412 345 678",
+        "companyName": ""
+      },
+      "status": "Pending Payment",
+      "payment": "bank",
+      "items": [
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 1",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-A",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "productId": "P1",
+          "lotId": null,
+          "lotNumber": "Lot 1",
+          "planName": "Avant",
+          "ocName": "Owner Corporation 2",
+          "productName": "OC Certificate — Standard",
+          "ocId": "OC-B",
+          "qty": 1,
+          "price": 150
+        }
+      ],
+      "date": "2026-03-30T20:33:03.433Z",
+      "total": 370,
+      "lotAuthorityFile": "TOCS-MNDNAGND-BCW-lot-authority.pdf",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:33:03.444Z",
+          "action": "Order created",
+          "note": "Customer: Test User"
+        }
+      ]
+    },
     {
       "id": "TOCS-MN1GGYU8-LNX",
       "date": "2026-03-22T07:48:55.520Z",
@@ -191,7 +1475,7 @@
         "requiresAddress": true
       },
       "payment": "bank",
-      "status": "Awaiting Payment",
+      "status": "Cancelled",
       "lotAuthFileName": "order test_sample.pdf",
       "orderCategory": "oc",
       "lotAuthorityFile": "TOCS-MN1GGYU8-LNX-lot-authority.pdf",
@@ -200,8 +1484,14 @@
           "ts": "2026-03-22T07:48:55.641Z",
           "action": "Order created",
           "note": "Customer: dsaf"
+        },
+        {
+          "ts": "2026-03-30T14:03:37.878Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
         }
-      ]
+      ],
+      "cancelReason": "E2E test cancellation reason"
     },
     {
       "id": "TOCS-MN1B05SD-0U1",
@@ -251,7 +1541,7 @@
         "cost": 20
       },
       "payment": "stripe",
-      "status": "Awaiting Stripe Payment",
+      "status": "Cancelled",
       "lotAuthFileName": "order test_sample.pdf",
       "orderCategory": "oc",
       "lotAuthorityFile": "TOCS-MN1B05SD-0U1-lot-authority.pdf",
@@ -260,14 +1550,20 @@
           "ts": "2026-03-22T05:15:53.395Z",
           "action": "Order created",
           "note": "Customer: xa"
+        },
+        {
+          "ts": "2026-03-30T14:03:59.565Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
         }
-      ]
+      ],
+      "cancelReason": "E2E test cancellation reason"
     },
     {
       "id": "GHOST-TEST-LOCAL",
       "payment": "stripe",
       "total": 55,
-      "status": "Awaiting Stripe Payment",
+      "status": "Cancelled",
       "items": [
         {
           "productName": "Test",
@@ -282,13 +1578,19 @@
           "ts": "2026-03-19T21:03:58.397Z",
           "action": "Order created",
           "note": "Customer: Ghost"
+        },
+        {
+          "ts": "2026-03-30T14:07:42.968Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
         }
-      ]
+      ],
+      "cancelReason": "E2E test cancellation reason"
     },
     {
       "id": "TOCS-TEST-SP02",
       "date": "2026-03-19T12:00:00.000Z",
-      "status": "Pending",
+      "status": "Cancelled",
       "payment": "bank",
       "orderCategory": "oc-certificates",
       "total": 220,
@@ -315,9 +1617,15 @@
           "ts": "2026-03-19T11:21:14.988Z",
           "action": "Order created",
           "note": "Customer: SP Test"
+        },
+        {
+          "ts": "2026-03-30T14:10:39.957Z",
+          "action": "Status changed to Cancelled",
+          "note": "E2E test cancellation reason"
         }
       ],
-      "lotAuthorityFile": "TOCS-TEST-SP02-lot-authority.pdf"
+      "lotAuthorityFile": "TOCS-TEST-SP02-lot-authority.pdf",
+      "cancelReason": "E2E test cancellation reason"
     },
     {
       "id": "TOCS-TEST-SP01",
@@ -499,7 +1807,13 @@
       ],
       "total": 605,
       "payment": "bank",
-      "status": "Awaiting Payment"
+      "status": "Paid",
+      "auditLog": [
+        {
+          "ts": "2026-03-30T20:43:58.225Z",
+          "action": "Status changed to Paid"
+        }
+      ]
     }
   ]
 }
