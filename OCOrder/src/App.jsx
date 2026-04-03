@@ -2892,16 +2892,62 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               </button>
             </div>
           </div>
+          {selectedPlanIds.size > 0 && (
+            <div style={{ marginBottom: "8px" }}>
+              <button className="btn" style={{ padding:"7px 14px", fontSize:"0.75rem", background:"#fef2f2", color:"#dc2626", border:"1px solid #fca5a5" }}
+                onClick={() => confirmDeletePlans([...selectedPlanIds])}>
+                <Ic n="trash" s={13}/> Delete Selected ({selectedPlanIds.size})
+              </button>
+            </div>
+          )}
           <table className="tbl">
-            <thead><tr><th>Plan ID</th><th>Name</th><th>Address</th><th>Lots</th><th>Products</th><th>Shipping</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 32 }}>
+                  <input type="checkbox"
+                    checked={sortedPlans.length > 0 && sortedPlans.every(p => selectedPlanIds.has(p.id))}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedPlanIds(new Set(sortedPlans.map(p => p.id)));
+                      else setSelectedPlanIds(new Set());
+                    }}
+                  />
+                </th>
+                {[["id","Plan ID"],["name","Name"]].map(([col, label]) => (
+                  <th key={col} style={{ cursor:"pointer", userSelect:"none" }}
+                    onClick={() => setPlanSort(s => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }))}>
+                    {label} {planSort.col === col ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                ))}
+                <th>Address</th>
+                <th style={{ cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setPlanSort(s => ({ col:"lots", dir: s.col === "lots" && s.dir === "asc" ? "desc" : "asc" }))}>
+                  Lots {planSort.col === "lots" ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th style={{ cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setPlanSort(s => ({ col:"products", dir: s.col === "products" && s.dir === "asc" ? "desc" : "asc" }))}>
+                  Products {planSort.col === "products" ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th>Shipping</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {data.strataPlans.map(p => (
+              {sortedPlans.map(p => (
                 <tr key={p.id}>
+                  <td>
+                    <input type="checkbox" checked={selectedPlanIds.has(p.id)}
+                      onChange={e => setSelectedPlanIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p.id); else next.delete(p.id);
+                        return next;
+                      })}
+                    />
+                  </td>
                   <td><strong style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{p.id}</strong></td>
                   <td>{p.name}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)", maxWidth: 180 }}>{p.address}</td>
-                  <td>{p.lots.length}</td>
-                  <td>{p.products.length}</td>
+                  <td>{(p.lots || []).length}</td>
+                  <td>{(p.products || []).length}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{(p.shippingOptions || []).length} option{(p.shippingOptions || []).length !== 1 ? "s" : ""}</td>
                   <td style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     <button className="tbl-act-btn" onClick={() => openEditPlan(p)}><Ic n="edit" s={13}/> Edit</button>
