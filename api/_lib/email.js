@@ -184,6 +184,85 @@ export function buildCustomerEmailHtml(order, cfg) {
 }
 
 /**
+ * Admin notification email sent when PIQ confirms payment of a special levy.
+ * Triggered by both the hourly cron poll and the manual "Check Now" button.
+ *
+ * @param {object} order            - the order object from Redis
+ * @param {string|null} paymentDate - ISO date string from PIQ receipt transaction
+ * @param {string|null} paymentRef  - reference number from PIQ receipt transaction
+ * @param {number} paymentAmount    - amount paid (from levy.totalPaid)
+ */
+export function buildPiqPaymentEmailHtml(order, paymentDate, paymentRef, paymentAmount) {
+  const contact = order.contactInfo || {};
+  const items   = order.items || [];
+
+  // Format payment date for display
+  let dateStr = "—";
+  if (paymentDate) {
+    try {
+      dateStr = new Date(paymentDate).toLocaleDateString("en-AU", {
+        timeZone: "Australia/Sydney",
+        day: "2-digit", month: "short", year: "numeric",
+      });
+    } catch { dateStr = paymentDate; }
+  }
+
+  const amountStr = paymentAmount != null ? `$${Number(paymentAmount).toFixed(2)} AUD` : "—";
+  const planName  = items[0]?.planName  || "—";
+  const lotNumber = items[0]?.lotNumber || "—";
+
+  const itemRows = items.map(item =>
+    `<tr>
+      <td style="${CELL}">${esc(item.productName) || "—"}</td>
+      <td style="${CELL}text-align:right;">${item.qty > 1 ? `×${item.qty}  ` : ""}$${(item.price || 0).toFixed(2)}</td>
+    </tr>`
+  ).join("");
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="${WRAPPER}">
+    <div style="background:#1c6e3f;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1>
+      <p style="color:#a8d5b8;margin:4px 0 0;font-size:0.85rem;">Payment Received — PropertyIQ Confirmation</p>
+    </div>
+    <div style="padding:32px;">
+      <div style="background:#e8f5ee;border:2px solid #2e6b42;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <div style="font-size:1rem;font-weight:700;color:#1c6e3f;margin-bottom:4px;">✅ PAYMENT RECEIVED</div>
+        <div style="font-size:0.82rem;color:#2e6b42;">Payment confirmed via PropertyIQ for Keys/Fob order <strong>${esc(order.id)}</strong></div>
+      </div>
+
+      <h3 style="${HEADING}">Payment Details</h3>
+      <table style="${TBL}">
+        <tr><td style="${LABEL_W}">Order ID</td><td style="${VAL}font-weight:700;font-family:monospace;">${esc(order.id)}</td></tr>
+        <tr><td style="${LABEL}">Payment Date</td><td style="${VAL}font-weight:600;">${esc(dateStr)}</td></tr>
+        <tr><td style="${LABEL}">PIQ Reference</td><td style="${VAL}font-weight:600;font-family:monospace;">${esc(paymentRef || "—")}</td></tr>
+        <tr><td style="${LABEL}">Amount Paid</td><td style="${VAL}font-weight:700;color:#1c6e3f;font-size:1.05rem;">${esc(amountStr)}</td></tr>
+        <tr><td style="${LABEL}">Confirmed via</td><td style="${VAL}">PropertyIQ</td></tr>
+      </table>
+
+      <h3 style="${HEADING}">Customer</h3>
+      <table style="${TBL}">
+        <tr><td style="${LABEL_W}">Name</td><td style="${VAL}">${esc(contact.name) || "—"}</td></tr>
+        <tr><td style="${LABEL}">Email</td><td style="${VAL}"><a href="mailto:${esc(contact.email || "")}" style="color:#2e6b42;">${esc(contact.email) || "—"}</a></td></tr>
+        <tr><td style="${LABEL}">Phone</td><td style="${VAL}">${esc(contact.phone) || "—"}</td></tr>
+        <tr><td style="${LABEL}">Building</td><td style="${VAL}">${esc(planName)}</td></tr>
+        <tr><td style="${LABEL}">Lot</td><td style="${VAL}">${esc(lotNumber)}</td></tr>
+      </table>
+
+      <h3 style="${HEADING}">Items</h3>
+      <table style="${TBL}">
+        <tr style="background:#f5f7f5;"><th style="${TH_LEFT}">Product</th><th style="${TH_RIGHT}">Price</th></tr>
+        ${itemRows}
+        <tr style="background:#f5f7f5;"><td style="padding:8px 12px;font-weight:700;">Total</td><td style="padding:8px 12px;text-align:right;font-weight:700;">${esc(amountStr)}</td></tr>
+      </table>
+
+      <p style="font-size:0.78rem;color:#aaa;margin-top:24px;">This notification was generated automatically when PropertyIQ confirmed receipt of the special levy payment.</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+/**
  * Creates a nodemailer transporter with the correct timeout settings.
  * IMPORTANT: Do NOT add greetingTimeout — it caused silent failures with SMTP2GO (2026-03-19).
  * connectionTimeout: 8000ms, socketTimeout: 10000ms are required.

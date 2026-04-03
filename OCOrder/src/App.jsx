@@ -2173,7 +2173,102 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [sendCertModal, setSendCertModal] = useState(null); // { orderId, order }
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
+  const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
   const [adminToast, setAdminToast] = useState(null);
+
+  // ── PIQ Sync: fetch preview data from PIQ for a given plan ──────────────────
+  const openPiqSync = async (planId) => {
+    setPiqSyncModal({ planId, loading: true, result: null, error: null });
+    try {
+      const r = await fetch(`/api/config/settings?action=sync-piq`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ planId }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setPiqSyncModal({ planId, loading: false, result: null, error: d.error || "PIQ sync failed." });
+      } else {
+        setPiqSyncModal({ planId, loading: false, result: d, error: null });
+      }
+    } catch (e) {
+      setPiqSyncModal({ planId, loading: false, result: null, error: "Unable to connect to server." });
+    }
+  };
+
+  // ── PIQ Sync: confirm import — merge PIQ data into existing plan ─────────────
+  const confirmPiqSync = async () => {
+    const { planId, result } = piqSyncModal || {};
+    if (!result) return;
+    try {
+      // Find existing plan
+      const plan = data.strataPlans.find(p => p.id === planId);
+      if (!plan) return;
+
+      // Update piqBuildingId on plan
+      plan.piqBuildingId = result.piqBuildingId;
+
+      // Merge schedules → ownerCorps (non-destructive: existing OCs preserved)
+      const existingOCs = plan.ownerCorps || {};
+      for (const s of (result.schedules || [])) {
+        // Find existing OC by piqScheduleId or name match
+        const existingKey = Object.keys(existingOCs).find(k =>
+          existingOCs[k].piqScheduleId === s.piqScheduleId ||
+          existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase()
+        );
+        if (existingKey) {
+          existingOCs[existingKey].piqScheduleId = s.piqScheduleId;
+        } else {
+          // Add new OC
+          const newKey = `OC-${s.piqScheduleId}`;
+          existingOCs[newKey] = { name: s.name, levy: 0, piqScheduleId: s.piqScheduleId };
+        }
+      }
+      plan.ownerCorps = existingOCs;
+
+      // Merge lots (non-destructive: existing lots preserved; piqLotId + unitNumber added)
+      const existingLots = plan.lots || [];
+      for (const l of (result.lots || [])) {
+        const existingIdx = existingLots.findIndex(el =>
+          el.piqLotId === l.piqLotId ||
+          el.number?.toLowerCase() === l.lotNumber?.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          existingLots[existingIdx].piqLotId   = l.piqLotId;
+          existingLots[existingIdx].unitNumber  = l.unitNumber || existingLots[existingIdx].unitNumber || "";
+        } else {
+          existingLots.push({
+            id:         `piq-${l.piqLotId}`,
+            number:     l.lotNumber,
+            unitNumber: l.unitNumber || "",
+            level:      "",
+            type:       "",
+            ownerCorps: [],
+            piqLotId:   l.piqLotId,
+          });
+        }
+      }
+      plan.lots = existingLots;
+
+      // Save via existing POST /api/plans
+      const r = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ plans: data.strataPlans }),
+      });
+      if (r.ok) {
+        setData(p => ({ ...p, strataPlans: data.strataPlans }));
+        setPiqSyncModal(null);
+        setAdminToast({ msg: `PIQ sync complete: ${result.schedules?.length || 0} OC(s), ${result.lots?.length || 0} lot(s) imported.`, ok: true });
+        setTimeout(() => setAdminToast(null), 4000);
+      } else {
+        const d = await r.json();
+        setPiqSyncModal(s => ({ ...s, error: d.error || "Save failed." }));
+      }
+    } catch (e) {
+      setPiqSyncModal(s => ({ ...s, error: "Unable to save: " + e.message }));
+    }
+  };
 
   const filteredOrders = useMemo(() => (data.orders || []).filter(o => {
     const statusOk = !orderFilter.status || o.status === orderFilter.status;
@@ -2609,9 +2704,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                   <td>{p.lots.length}</td>
                   <td>{p.products.length}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{(p.shippingOptions || []).length} option{(p.shippingOptions || []).length !== 1 ? "s" : ""}</td>
-                  <td style={{ display: "flex", gap: "6px" }}>
+                  <td style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     <button className="tbl-act-btn" onClick={() => openEditPlan(p)}><Ic n="edit" s={13}/> Edit</button>
                     <button className="tbl-act-btn" onClick={() => openManageShipping(p)}><Ic n="truck" s={13}/> Shipping</button>
+                    <button className="tbl-act-btn" style={{ background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={() => openPiqSync(p.id)}><Ic n="cloud" s={13}/> Sync from PIQ</button>
                     <button className="tbl-act-btn danger" onClick={() => deletePlan(p.id)}><Ic n="trash" s={13}/> Delete</button>
                   </td>
                 </tr>
@@ -2998,6 +3094,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                               </div>
                             </div>
                           )}
+                          {/* PIQ Payment Tracking — keys orders only */}
+                          {o.orderCategory === "keys" && o.payment === "invoice" && (
+                            <PiqPaymentPanel order={o} adminToken={adminToken} onPaid={(updatedOrder) => {
+                              setData(p => ({ ...p, orders: p.orders.map(ord => ord.id !== updatedOrder.id ? ord : updatedOrder) }));
+                            }}/>
+                          )}
                           {/* Audit Log */}
                           {o.auditLog && o.auditLog.length > 0 && (
                             <div>
@@ -3028,6 +3130,84 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         </div>
         );
       })()}
+
+      {/* PIQ Sync Preview Modal */}
+      {piqSyncModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", maxWidth:"640px", width:"100%", maxHeight:"80vh", overflow:"auto", boxShadow:"0 8px 40px rgba(0,0,0,0.18)" }}>
+            <div style={{ background:"#1c3326", padding:"20px 24px", borderRadius:"10px 10px 0 0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Sync from PropertyIQ — {piqSyncModal.planId}</span>
+              <button onClick={() => setPiqSyncModal(null)} style={{ background:"none", border:"none", color:"#a8c5b0", cursor:"pointer", fontSize:"1.2rem" }}>✕</button>
+            </div>
+            <div style={{ padding:"24px" }}>
+              {piqSyncModal.loading && (
+                <div style={{ textAlign:"center", padding:"2rem", color:"var(--muted)" }}>
+                  <div style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"3px solid rgba(0,0,0,0.1)", borderTop:"3px solid #1c3326", borderRadius:"50%", width:28, height:28, marginBottom:"12px" }}/>
+                  <div>Fetching data from PropertyIQ…</div>
+                </div>
+              )}
+              {piqSyncModal.error && (
+                <div className="alert alert-err" style={{ marginBottom:"1rem" }}>{piqSyncModal.error}</div>
+              )}
+              {piqSyncModal.result && !piqSyncModal.loading && (
+                <>
+                  <div style={{ background:"#f0f7f3", border:"1px solid #b0d9c2", borderRadius:"6px", padding:"12px 16px", marginBottom:"16px", fontSize:"0.82rem" }}>
+                    <strong>Building found:</strong> {piqSyncModal.result.buildingName} (PIQ ID: {piqSyncModal.result.piqBuildingId})
+                  </div>
+                  <div style={{ marginBottom:"16px" }}>
+                    <div style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:"6px" }}>
+                      Owner Corporations / Schedules ({piqSyncModal.result.schedules?.length || 0})
+                    </div>
+                    {(piqSyncModal.result.schedules || []).length === 0
+                      ? <div style={{ fontSize:"0.82rem", color:"var(--muted)" }}>No schedules found.</div>
+                      : <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                          <thead><tr style={{ background:"var(--cream)" }}><th style={{ padding:"6px 10px", textAlign:"left" }}>PIQ Schedule ID</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Name</th></tr></thead>
+                          <tbody>{(piqSyncModal.result.schedules || []).map(s => (
+                            <tr key={s.piqScheduleId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                              <td style={{ padding:"5px 10px", fontFamily:"monospace", color:"var(--muted)" }}>{s.piqScheduleId}</td>
+                              <td style={{ padding:"5px 10px" }}>{s.name}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                    }
+                  </div>
+                  <div style={{ marginBottom:"20px" }}>
+                    <div style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:"6px" }}>
+                      Lots ({piqSyncModal.result.lots?.length || 0})
+                    </div>
+                    {(piqSyncModal.result.lots || []).length === 0
+                      ? <div style={{ fontSize:"0.82rem", color:"var(--muted)" }}>No lots found.</div>
+                      : <div style={{ maxHeight:"200px", overflow:"auto", border:"1px solid var(--border)", borderRadius:"4px" }}>
+                          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                            <thead style={{ position:"sticky", top:0, background:"var(--cream)" }}>
+                              <tr><th style={{ padding:"6px 10px", textAlign:"left" }}>PIQ Lot ID</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Lot No.</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Unit</th></tr>
+                            </thead>
+                            <tbody>{(piqSyncModal.result.lots || []).map(l => (
+                              <tr key={l.piqLotId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                                <td style={{ padding:"5px 10px", fontFamily:"monospace", color:"var(--muted)" }}>{l.piqLotId}</td>
+                                <td style={{ padding:"5px 10px" }}>{l.lotNumber}</td>
+                                <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.unitNumber || "—"}</td>
+                              </tr>
+                            ))}</tbody>
+                          </table>
+                        </div>
+                    }
+                  </div>
+                  <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"6px", padding:"10px 14px", fontSize:"0.78rem", marginBottom:"16px" }}>
+                    ℹ️ Importing will add/update Owner Corporations and Lots in plan <strong>{piqSyncModal.planId}</strong>. Existing data will not be deleted. Lot-to-OC assignments can be edited in the Lots tab afterwards.
+                  </div>
+                  <div style={{ display:"flex", gap:"10px" }}>
+                    <button className="btn btn-blk" style={{ flex:1 }} onClick={confirmPiqSync}>
+                      <Ic n="check" s={15}/> Import {piqSyncModal.result.schedules?.length || 0} OC(s) + {piqSyncModal.result.lots?.length || 0} Lot(s)
+                    </button>
+                    <button className="btn btn-out" onClick={() => setPiqSyncModal(null)}>Cancel</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Send Certificate Modal */}
       {sendCertModal && (
@@ -4218,9 +4398,124 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
   );
 }
 
+// ─── PIQ PAYMENT PANEL ────────────────────────────────────────────────────────
+// Shown inside the expanded order row for keys/invoice orders.
+// Displays the PIQ levy status and allows admin to trigger a manual payment check.
+function PiqPaymentPanel({ order, adminToken, onPaid }) {
+  const [checking, setChecking] = React.useState(false);
+  const [checkResult, setCheckResult] = React.useState(null);
+
+  const checkNow = async () => {
+    setChecking(true); setCheckResult(null);
+    try {
+      const r = await fetch(`/api/orders/${order.id}/check-piq-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+      });
+      const d = await r.json();
+      setCheckResult(d);
+      if (d.ok && d.paid && onPaid) {
+        // Refresh the order in parent state
+        onPaid({ ...order, status: "Paid", piqPaymentDate: d.paymentDate, piqPaymentReference: d.paymentReference, piqLevyFound: true, piqLevyTotalNett: 0 });
+      }
+    } catch { setCheckResult({ ok: false, error: "Unable to connect." }); }
+    setChecking(false);
+  };
+
+  // Determine display state from order fields + latest check result
+  const piqLotId    = order.piqLotId;
+  const levyFound   = checkResult?.levyFound ?? order.piqLevyFound;
+  const paid        = checkResult?.paid ?? (order.status === "Paid" && order.piqPaymentDate);
+  const totalNett   = checkResult?.totalNett   ?? order.piqLevyTotalNett;
+  const totalDue    = checkResult?.totalDue    ?? order.piqLevyTotalDue;
+  const payDate     = checkResult?.paymentDate      ?? order.piqPaymentDate;
+  const payRef      = checkResult?.paymentReference ?? order.piqPaymentReference;
+  const lastPolled  = checkResult?.lastPolled ?? order.piqLastPolled;
+
+  const fmt = (n) => n != null ? `$${Number(n).toFixed(2)}` : "—";
+  const fmtDate = (d) => { try { return new Date(d).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" }); } catch { return d; } };
+  const timeAgo = (iso) => {
+    if (!iso) return null;
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.round(mins/60)}h ago`;
+  };
+
+  const panelStyle = { background:"#f8faff", border:"1px solid #c8ddf5", borderRadius:"6px", padding:"12px 16px", marginBottom:"1rem", fontSize:"0.82rem" };
+  const labelSt    = { color:"#666", minWidth:"120px", display:"inline-block" };
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ fontWeight:700, fontSize:"0.72rem", textTransform:"uppercase", letterSpacing:"0.1em", color:"#1a5fa8", marginBottom:"10px" }}>
+        PropertyIQ Payment Tracking
+      </div>
+      {!piqLotId ? (
+        <div style={{ color:"var(--muted)", fontSize:"0.82rem" }}>
+          ⚠ PIQ lot not linked — sync this plan from PIQ first (Plans tab → Sync from PIQ).
+        </div>
+      ) : (
+        <>
+          <div style={{ marginBottom:"10px" }}>
+            <span style={labelSt}>PIQ Lot ID</span>
+            <span style={{ fontFamily:"monospace" }}>{piqLotId}</span>
+          </div>
+          <div style={{ background:"#e8f4ff", border:"1px solid #b0d4f5", borderRadius:"4px", padding:"10px 14px", marginBottom:"12px" }}>
+            <div style={{ fontSize:"0.78rem", color:"#1a5fa8", fontWeight:600, marginBottom:"6px" }}>
+              📋 When creating the Special Levy in PropertyIQ, include this order reference in the levy description:
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+              <code style={{ background:"#fff", border:"1px solid #b0d4f5", borderRadius:"4px", padding:"4px 10px", fontFamily:"monospace", fontSize:"0.88rem", fontWeight:700, color:"#1c3326", flex:1 }}>{order.id}</code>
+              <button className="tbl-act-btn" style={{ whiteSpace:"nowrap" }} onClick={() => navigator.clipboard?.writeText(order.id)}>Copy</button>
+            </div>
+          </div>
+
+          {/* Payment status */}
+          {paid ? (
+            <div style={{ background:"#e8f5ee", border:"1px solid #a0d4b2", borderRadius:"4px", padding:"10px 14px", marginBottom:"10px" }}>
+              <div style={{ color:"#1c6e3f", fontWeight:700, marginBottom:"6px" }}>✅ Payment confirmed via PropertyIQ</div>
+              <table style={{ fontSize:"0.8rem", borderCollapse:"collapse" }}>
+                <tbody>
+                  <tr><td style={{ ...labelSt, paddingBottom:"3px" }}>Payment Date</td><td style={{ paddingBottom:"3px", fontWeight:600 }}>{payDate ? fmtDate(payDate) : "—"}</td></tr>
+                  <tr><td style={{ ...labelSt, paddingBottom:"3px" }}>PIQ Reference</td><td style={{ paddingBottom:"3px", fontFamily:"monospace", fontWeight:600 }}>{payRef || "—"}</td></tr>
+                  {totalDue != null && <tr><td style={labelSt}>Amount</td><td style={{ fontWeight:600, color:"#1c6e3f" }}>{fmt(totalDue)}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          ) : levyFound ? (
+            <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"4px", padding:"8px 14px", marginBottom:"10px", color:"#92400e" }}>
+              📋 Levy found — <strong>{fmt(totalNett)}</strong> outstanding{totalDue ? ` of ${fmt(totalDue)}` : ""}
+            </div>
+          ) : (
+            <div style={{ color:"var(--muted)", marginBottom:"10px", fontSize:"0.82rem" }}>
+              ⏳ Awaiting levy / payment — no matching levy found in PIQ yet
+            </div>
+          )}
+
+          {checkResult?.error && (
+            <div className="alert alert-err" style={{ marginBottom:"8px", fontSize:"0.78rem" }}>⚠ {checkResult.error}</div>
+          )}
+
+          <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+            <button className="btn btn-out" style={{ fontSize:"0.78rem" }} onClick={checkNow} disabled={checking}>
+              {checking
+                ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
+                : <><Ic n="refresh" s={13}/> Check Now</>
+              }
+            </button>
+            {lastPolled && <span style={{ fontSize:"0.72rem", color:"var(--muted)" }}>Last checked: {timeAgo(lastPolled)}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── STORAGE TAB ──────────────────────────────────────────────────────────────
 function StorageTab({ adminToken }) {
-  const DEF_SP = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
+  const DEF_SP  = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
+  const DEF_PIQ = { baseUrl: "https://tocs.propertyiq.com.au", clientId: "", clientSecret: "" };
+
   const [sp, setSp] = useState(DEF_SP);
   const [showSecret, setShowSecret] = useState(false);
   const [secretPlaceholder, setSecretPlaceholder] = useState(false); // true when server returned "••••••••"
@@ -4230,6 +4525,15 @@ function StorageTab({ adminToken }) {
   const [spTesting, setSpTesting] = useState(false);
   const [spTestResult, setSpTestResult] = useState(null);
 
+  // PIQ integration state
+  const [piqCfg, setPiqCfg] = useState(DEF_PIQ);
+  const [piqSecretPlaceholder, setPiqSecretPlaceholder] = useState(false);
+  const [showPiqSecret, setShowPiqSecret] = useState(false);
+  const [piqSaved, setPiqSaved] = useState(false);
+  const [piqErr, setPiqErr] = useState("");
+  const [piqTesting, setPiqTesting] = useState(false);
+  const [piqTestResult, setPiqTestResult] = useState(null);
+
   useEffect(() => {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
       .then(r => r.json())
@@ -4238,10 +4542,45 @@ function StorageTab({ adminToken }) {
         const masked = s.clientSecret === "••••••••";
         setSecretPlaceholder(masked);
         setSp({ ...DEF_SP, ...s, clientSecret: masked ? "" : (s.clientSecret || "") });
+        // Load PIQ config
+        const p = d.piq || DEF_PIQ;
+        const piqMasked = p.clientSecret === "••••••••";
+        setPiqSecretPlaceholder(piqMasked);
+        setPiqCfg({ ...DEF_PIQ, ...p, clientSecret: piqMasked ? "" : (p.clientSecret || "") });
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const updPiq = (k, v) => { setPiqCfg(p => ({ ...p, [k]: v })); setPiqSaved(false); setPiqErr(""); if (k === "clientSecret") setPiqSecretPlaceholder(false); };
+
+  const savePiq = async () => {
+    setPiqErr(""); setPiqTestResult(null);
+    try {
+      const payload = { ...piqCfg };
+      if (!payload.clientSecret && piqSecretPlaceholder) delete payload.clientSecret;
+      const r = await fetch("/api/config/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ piq: payload }),
+      });
+      if (r.ok) { setPiqSaved(true); setTimeout(() => setPiqSaved(false), 3500); }
+      else { const d = await r.json(); setPiqErr(d.error || "Save failed."); }
+    } catch { setPiqErr("Unable to connect to server."); }
+  };
+
+  const testPiq = async () => {
+    setPiqTesting(true); setPiqTestResult(null);
+    try {
+      const r = await fetch("/api/config/settings?action=test-piq", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+      });
+      const d = await r.json();
+      setPiqTestResult(d);
+    } catch { setPiqTestResult({ ok: false, error: "Unable to connect to server." }); }
+    setPiqTesting(false);
+  };
 
   const updSp = (k, v) => { setSp(p => ({ ...p, [k]: v })); setSaved(false); setErr(""); if (k === "clientSecret") setSecretPlaceholder(false); };
 
@@ -4353,6 +4692,50 @@ function StorageTab({ adminToken }) {
           ))}
         </div>
       )}
+
+      {/* ── PropertyIQ Integration ── */}
+      <div className="panel" style={{ marginTop: "1.25rem" }}>
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>PropertyIQ Integration</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
+          Connect to PropertyIQ to sync lots and Owner Corporations, and automatically detect Keys/Fob payment via special levy.
+          After saving credentials, use <strong>Sync from PIQ</strong> in the Plans tab to import data.
+        </p>
+        <div className="form-row">
+          <label className="f-label">Base URL</label>
+          <input className="f-input" type="text" placeholder="https://tocs.propertyiq.com.au" value={piqCfg.baseUrl} onChange={e => updPiq("baseUrl", e.target.value)}/>
+        </div>
+        <div className="form-row">
+          <label className="f-label">Client ID</label>
+          <input className="f-input" type="text" placeholder="29571834.yourcompany" value={piqCfg.clientId} onChange={e => updPiq("clientId", e.target.value)}/>
+        </div>
+        <div className="form-row" style={{ marginBottom: 0 }}>
+          <label className="f-label">Client Secret</label>
+          <div className="pw-wrap">
+            <input className="f-input" type={showPiqSecret ? "text" : "password"}
+              placeholder={piqSecretPlaceholder ? "Saved — enter new value to change" : "OAuth2 client secret"}
+              value={piqCfg.clientSecret} onChange={e => updPiq("clientSecret", e.target.value)} style={{ paddingRight: "42px" }}/>
+            <button className="pw-toggle" type="button" onClick={() => setShowPiqSecret(p => !p)}>
+              <Ic n={showPiqSecret ? "eyeOff" : "eye"} s={16}/>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {piqErr  && <div className="alert alert-err">{piqErr}</div>}
+      {piqSaved && <div className="alert alert-ok">PropertyIQ settings saved.</div>}
+      {piqTestResult?.ok === true  && <div className="alert alert-ok">{piqTestResult.message}</div>}
+      {piqTestResult?.ok === false && <div className="alert alert-err">PIQ connection failed: {piqTestResult.error}</div>}
+
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button className="btn btn-blk" style={{ flex: 1 }} onClick={savePiq}>
+          <Ic n="check" s={15}/> Save PIQ Settings
+        </button>
+        <button className="btn btn-out" style={{ flex: 1 }} onClick={testPiq} disabled={piqTesting || (!piqCfg.clientId && !piqSecretPlaceholder)}>
+          {piqTesting
+            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            : <><Ic n="cloud" s={15}/> Test PIQ Connection</>}
+        </button>
+      </div>
     </div>
   );
 }
