@@ -83,7 +83,17 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); plans=d.get\\(''''strataPlans'''',[]\\); [print\\(f\"\"Plan: {p[''''name'''']}\\\\nshippingOptions: {json.dumps\\(p.get\\(''''shippingOptions'''',[]\\), indent=2\\)}\\\\nkeysShipping: {p.get\\(''''keysShipping''''\\)}\\\\n\"\"\\) for p in plans]\")",
       "Bash(curl -v \"https://occorder.tocs.co/api/data\")",
       "WebFetch(domain:occorder.vercel.app)",
-      "Bash(grep -c \"requiresAddress\" /Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/dist/*.js)"
+      "Bash(grep -c \"requiresAddress\" /Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/dist/*.js)",
+      "Bash(node -e \"require\\(''''pptxgenjs''''\\)\")",
+      "Bash(export PATH=/Users/matthewhe/.nvm/versions/node/v24.14.0/bin:$PATH)",
+      "Bash(node make_deck.js)",
+      "Bash(node make_deck.js --input-type=commonjs)",
+      "Bash(node make_deck.cjs)",
+      "Bash(python scripts/office/soffice.py --headless --convert-to pdf TOCS_Marketing_Deck.pptx)",
+      "Bash(python3 /Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/scripts/office/soffice.py --headless --convert-to pdf /Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/TOCS_Marketing_Deck.pptx)",
+      "Bash(python3 -m markitdown /Users/matthewhe/Documents/ClaudeProject/OCC_Order/tocs-deploy/TOCS_Marketing_Deck.pptx)",
+      "Bash(pip3 install:*)",
+      "Bash(pip3 show:*)"
     ]
   }
 }
