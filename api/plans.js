@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   // ── Import lots for a plan ────────────────────────────────────────────────
   if (body.action === "import-lots") {
-    const { planId, lots } = body;
+    const { planId, lots, ownerCorps: incomingOCs } = body;
     if (!planId || !Array.isArray(lots)) return res.status(400).json({ error: "Invalid import data." });
     if (lots.length === 0) return res.status(400).json({ error: "Import file contains no valid lots. The existing lots were not changed." });
 
@@ -24,11 +24,40 @@ export default async function handler(req, res) {
     const idx = data.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return res.status(404).json({ error: "Plan not found." });
 
-    const previousCount = data.strataPlans[idx].lots?.length || 0;
-    data.strataPlans[idx].lots = lots;
-    console.log(`[plans] import-lots: Plan ${planId}: replaced ${previousCount} lots with ${lots.length} lots`);
+    // ── Merge ownerCorps (non-destructive: add new OCs, keep existing) ──────────
+    if (incomingOCs && typeof incomingOCs === "object") {
+      const existing = data.strataPlans[idx].ownerCorps || {};
+      for (const [id, oc] of Object.entries(incomingOCs)) {
+        if (!existing[id]) existing[id] = oc; // add only if not already present
+      }
+      data.strataPlans[idx].ownerCorps = existing;
+    }
+
+    // ── Merge lots (non-destructive: update existing by lot number, add new) ────
+    const existingLots = data.strataPlans[idx].lots || [];
+    const norm = s => String(s).trim().toLowerCase();
+    let added = 0, updated = 0;
+
+    for (const incoming of lots) {
+      const existIdx = existingLots.findIndex(el => norm(el.number) === norm(incoming.number));
+      if (existIdx >= 0) {
+        // Update mutable fields; preserve id, piqLotId, unitNumber
+        existingLots[existIdx].level      = incoming.level      || existingLots[existIdx].level;
+        existingLots[existIdx].type       = incoming.type       || existingLots[existIdx].type;
+        existingLots[existIdx].ownerCorps = incoming.ownerCorps?.length
+          ? incoming.ownerCorps
+          : existingLots[existIdx].ownerCorps;
+        updated++;
+      } else {
+        existingLots.push(incoming);
+        added++;
+      }
+    }
+
+    data.strataPlans[idx].lots = existingLots;
+    console.log(`[plans] import-lots: Plan ${planId}: +${added} new, ${updated} updated (total ${existingLots.length})`);
     await writeData(data);
-    return res.status(200).json({ ok: true, count: lots.length });
+    return res.status(200).json({ ok: true, count: existingLots.length, added, updated });
   }
 
   // ── Save / replace full strataPlans array ─────────────────────────────────

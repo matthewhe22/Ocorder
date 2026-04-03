@@ -2534,7 +2534,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
-  const markPaid      = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
+  const markPaid        = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
+  const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nThis indicates the customer will pay directly (not via the Send Invoice flow).`)) updateOrderStatus(oid, "Pending Payment"); };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
@@ -2627,7 +2628,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ? "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
           Object.entries(newOwnerCorps).map(([id, oc]) => "• " + id + ": " + oc.name).join("\n")
         : "";
-      const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nThis will REPLACE all existing lots for this plan.${ocMsg}`);
+      const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nExisting lots will be updated (matched by lot number). New lots will be added. No lots will be deleted.${ocMsg}`);
       if (!confirmed) return;
 
       const payload = { action: "import-lots", planId: targetPlanId, lots };
@@ -2639,17 +2640,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         body: JSON.stringify(payload),
       });
       if (r.ok) {
-        setData(p => ({
-          ...p,
-          strataPlans: p.strataPlans.map(pl => {
-            if (pl.id !== targetPlanId) return pl;
-            const updated = { ...pl, lots };
-            if (newOwnerCorps) updated.ownerCorps = newOwnerCorps;
-            return updated;
-          }),
-        }));
-        const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporations created." : "";
-        alert(`✅ ${lots.length} lots imported successfully.${ocSuccessMsg}`);
+        const rj = await r.json();
+        // Reload fresh data from server so local state matches what was persisted
+        const fresh = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } }).then(x => x.json());
+        if (fresh?.strataPlans) setData(p => ({ ...p, strataPlans: fresh.strataPlans }));
+        const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) created/updated." : "";
+        const summary = rj.added != null ? ` (${rj.added} new, ${rj.updated} updated)` : "";
+        alert(`✅ Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}`);
       } else {
         const d = await r.json();
         alert("Import failed: " + (d.error || "Unknown error"));
@@ -2974,6 +2971,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
+                        )}
+                        {o.status === "Invoice to be issued" && o.orderCategory === "keys" && (
+                          <button className="tbl-act-btn" style={{ background:"#f1f5f9",color:"#475569",border:"1px solid #cbd5e1" }} title="Mark as Pending Payment without sending invoice" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending</button>
                         )}
                         {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
