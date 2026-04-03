@@ -169,14 +169,14 @@ export default async function handler(req, res) {
         cfg.sharepoint = cfg.sharepoint || {};
         if (sharepoint.tenantId   !== undefined) cfg.sharepoint.tenantId   = sharepoint.tenantId;
         if (sharepoint.clientId   !== undefined) cfg.sharepoint.clientId   = sharepoint.clientId;
-        // Only update clientSecret if a real value is provided (not the masked placeholder)
-        if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
+        // Only update clientSecret if a real non-empty value is provided (not masked or blank)
+        if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••" && sharepoint.clientSecret !== "") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
         if (sharepoint.siteId      !== undefined) cfg.sharepoint.siteId     = sharepoint.siteId;
         if (sharepoint.folderPath  !== undefined) cfg.sharepoint.folderPath = sharepoint.folderPath;
       }
       if (stripe && typeof stripe === "object") {
         cfg.stripe = cfg.stripe || {};
-        if (stripe.secretKey !== undefined && stripe.secretKey !== "••••••••") {
+        if (stripe.secretKey !== undefined && stripe.secretKey !== "••••••••" && stripe.secretKey !== "") {
           cfg.stripe.secretKey = stripe.secretKey;
         }
         if (stripe.publishableKey !== undefined) {
@@ -187,8 +187,8 @@ export default async function handler(req, res) {
         cfg.piq = cfg.piq || {};
         if (piq.baseUrl      !== undefined) cfg.piq.baseUrl      = piq.baseUrl;
         if (piq.clientId     !== undefined) cfg.piq.clientId     = piq.clientId;
-        // Only update clientSecret if a real value is provided (not the masked placeholder)
-        if (piq.clientSecret !== undefined && piq.clientSecret !== "••••••••") {
+        // Only update clientSecret if a real non-empty value is provided (not masked or blank)
+        if (piq.clientSecret !== undefined && piq.clientSecret !== "••••••••" && piq.clientSecret !== "") {
           cfg.piq.clientSecret = piq.clientSecret;
         }
       }
