@@ -1,4 +1,5 @@
 import { readConfig, writeConfig, validToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
+import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots } from "../_lib/piq.js";
 import Stripe from "stripe";
 
 export default async function handler(req, res) {
@@ -44,6 +45,11 @@ export default async function handler(req, res) {
           secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
           publishableKey: cfg.stripe?.publishableKey || "",
         },
+        piq: {
+          baseUrl:      cfg.piq?.baseUrl      || "https://tocs.propertyiq.com.au",
+          clientId:     cfg.piq?.clientId     || "",
+          clientSecret: cfg.piq?.clientSecret ? "••••••••" : "",
+        },
         paymentMethods: {
           bankEnabled:  pm.bankEnabled  !== false,
           payidEnabled: pm.payidEnabled !== false,
@@ -72,9 +78,70 @@ export default async function handler(req, res) {
     }
   }
 
+  // POST /api/config/settings?action=test-piq  ← verify PIQ OAuth credentials
+  if (req.method === "POST" && req.query?.action === "test-piq") {
+    try {
+      const cfg = await readConfig();
+      const { access_token, baseUrl } = await getPiqToken(cfg);
+      // Light check: fetch 1 building to confirm the token works
+      const resp = await fetch(`${baseUrl}/api/buildings?number=1`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) return res.status(200).json({ ok: false, error: `PIQ API returned ${resp.status}` });
+      const data = await resp.json();
+      const count = Array.isArray(data) ? data.length : (data?.data?.length ?? 0);
+      return res.status(200).json({ ok: true, message: `Connected — ${count} building(s) visible` });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
+  // POST /api/config/settings?action=sync-piq  ← fetch building+schedules+lots for preview
+  // Body: { planId: "SP12345" }
+  // Returns preview data for admin to review before saving.
+  // Does NOT auto-save — admin confirms via existing POST /api/plans.
+  if (req.method === "POST" && req.query?.action === "sync-piq") {
+    try {
+      const { planId } = req.body || {};
+      if (!planId) return res.status(400).json({ error: "planId is required." });
+
+      const cfg = await readConfig();
+
+      // Step 1: Find PIQ building by splan
+      const building = await getPiqBuilding(cfg, planId);
+      if (!building) return res.status(404).json({ error: `No PIQ building found for splan "${planId}".` });
+      const piqBuildingId = building.id;
+
+      // Step 2: Fetch schedules (Owner Corporations)
+      const rawSchedules = await getPiqSchedules(cfg, piqBuildingId);
+
+      // Step 3: Fetch all lots (paginated)
+      const rawLots = await getPiqLots(cfg, piqBuildingId);
+
+      // Map PIQ schedules → platform ownerCorp format
+      const schedules = rawSchedules.map(s => ({
+        piqScheduleId: s.id,
+        name:          s.name || `Schedule ${s.id}`,
+      }));
+
+      // Map PIQ lots → platform lot format
+      const lots = rawLots.map(l => ({
+        piqLotId:   l.id,
+        lotNumber:  l.lotNumber  || l.number || String(l.id),
+        unitNumber: l.unitNumber || "",
+        ownerName:  l.ownerContact?.name || l.name || "",
+      }));
+
+      return res.status(200).json({ ok: true, piqBuildingId, buildingName: building.buildingName || building.name, schedules, lots });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
   if (req.method === "POST") {
     try {
-      const { orderEmail, logo, smtp, paymentDetails, paymentMethods, emailTemplate, sharepoint, stripe } = req.body || {};
+      const { orderEmail, logo, smtp, paymentDetails, paymentMethods, emailTemplate, sharepoint, stripe, piq } = req.body || {};
       const cfg = await readConfig();
       if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
       if (logo !== undefined) {
@@ -114,6 +181,15 @@ export default async function handler(req, res) {
         }
         if (stripe.publishableKey !== undefined) {
           cfg.stripe.publishableKey = stripe.publishableKey;
+        }
+      }
+      if (piq && typeof piq === "object") {
+        cfg.piq = cfg.piq || {};
+        if (piq.baseUrl      !== undefined) cfg.piq.baseUrl      = piq.baseUrl;
+        if (piq.clientId     !== undefined) cfg.piq.clientId     = piq.clientId;
+        // Only update clientSecret if a real value is provided (not the masked placeholder)
+        if (piq.clientSecret !== undefined && piq.clientSecret !== "••••••••") {
+          cfg.piq.clientSecret = piq.clientSecret;
         }
       }
       await writeConfig(cfg);

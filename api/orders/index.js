@@ -1,8 +1,10 @@
 // POST /api/orders — Customer places an order (public)
+// GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
 import { readData, writeData, readConfig, cors, writeAuthority, KV_AVAILABLE } from "../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
-import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../_lib/email.js";
+import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
+import { detectPiqPayment } from "../_lib/piq.js";
 import Stripe from "stripe";
 
 async function sendMail(smtp, mailOpts) {
@@ -10,9 +12,106 @@ async function sendMail(smtp, mailOpts) {
   await transporter.sendMail(mailOpts);
 }
 
+// ── Helper: apply a PIQ payment result to an order and persist ────────────────
+async function applyPiqPayment(order, result, cfg, data) {
+  const now = new Date().toISOString();
+  order.piqLastPolled      = now;
+  order.piqLevyFound       = result.levyFound;
+  order.piqLevyTotalDue    = result.totalDue    ?? order.piqLevyTotalDue    ?? null;
+  order.piqLevyTotalNett   = result.totalNett   ?? (result.paid ? 0 : null);
+  if (result.paid) {
+    order.piqPaymentDate      = result.paymentDate      || null;
+    order.piqPaymentReference = result.paymentReference || null;
+    order.status              = "Paid";
+    const dateStr = result.paymentDate
+      ? new Date(result.paymentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" })
+      : "—";
+    order.auditLog = [...(order.auditLog || []), {
+      ts:     now,
+      action: "Payment confirmed via PropertyIQ",
+      note:   `Date: ${dateStr} | Ref: ${result.paymentReference || "—"} | Amount: $${(result.totalPaid || 0).toFixed(2)}`,
+    }];
+    // Send payment notification email to admin (non-fatal)
+    try {
+      const smtp = cfg.smtp || {};
+      if (smtp.host && smtp.user && smtp.pass) {
+        const toEmail     = cfg.orderEmail || "Orders@tocs.co";
+        const transporter = createTransporter(smtp);
+        const lotNumber   = order.items?.[0]?.lotNumber || "";
+        const planName    = order.items?.[0]?.planName  || "";
+        await transporter.sendMail({
+          from:    `"TOCS Order Portal" <${toEmail}>`,
+          to:      toEmail,
+          subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
+          html:    buildPiqPaymentEmailHtml(order, result.paymentDate, result.paymentReference, result.totalPaid),
+        });
+        console.log(`PIQ payment notification sent for order ${order.id}`);
+      }
+    } catch (emailErr) {
+      console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
+      order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
+    }
+  }
+}
+
 export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // ── GET /api/orders?action=poll-piq  (called by Vercel cron hourly) ─────────
+  // Also accepts admin Bearer token for manual triggers.
+  // Scans all keys orders awaiting payment and polls their PIQ lot ledgers.
+  if (req.method === "GET" && req.query?.action === "poll-piq") {
+    // Allow either: Vercel cron (no auth needed from internal scheduler)
+    // or admin Bearer token (for manual trigger via admin UI)
+    const cronSecret = process.env.CRON_SECRET;
+    const reqSecret  = req.headers["x-cron-secret"];
+    const token      = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    const isAdmin = await validToken(token);
+    const isCron  = cronSecret ? reqSecret === cronSecret : true; // if no CRON_SECRET set, allow
+    if (!isAdmin && !isCron) return res.status(401).json({ error: "Not authenticated." });
+
+    try {
+      const cfg  = await readConfig();
+      const data = await readData();
+
+      // Find all keys orders that: have piqLotId, are invoice-payment type, and aren't already resolved
+      const candidates = data.orders.filter(o =>
+        o.orderCategory === "keys" &&
+        o.piqLotId &&
+        o.payment === "invoice" &&
+        !["Paid", "Issued", "Cancelled"].includes(o.status)
+      );
+
+      let checked = 0, confirmed = 0;
+      const errors = [];
+
+      for (const order of candidates) {
+        try {
+          const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+          await applyPiqPayment(order, result, cfg, data);
+          checked++;
+          if (result.paid) confirmed++;
+        } catch (err) {
+          console.error(`poll-piq: failed for order ${order.id}:`, err.message);
+          errors.push({ orderId: order.id, error: err.message?.substring(0, 120) });
+          // Still update lastPolled even on error
+          order.piqLastPolled = new Date().toISOString();
+        }
+      }
+
+      if (checked > 0 || confirmed > 0) {
+        await writeData(data);
+      }
+
+      return res.status(200).json({ ok: true, checked, confirmed, errors: errors.length ? errors : undefined });
+    } catch (err) {
+      console.error("poll-piq error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const body = req.body || {};
@@ -54,6 +153,27 @@ export default async function handler(req, res) {
       order.status = "Invoice to be issued";
     } else {
       order.status = "Pending Payment";
+    }
+
+    // Auto-populate piqLotId for keys orders (enables PIQ payment polling)
+    // Look up the lot in the plan's lots array by lot number and copy its piqLotId.
+    if (order.orderCategory === "keys" && order.payment === "invoice") {
+      try {
+        const planData  = await readData();
+        const lotNumber = order.items?.[0]?.lotNumber || "";
+        const planId    = order.items?.[0]?.planId    || "";
+        const plan      = planData.strataPlans?.find(p => p.id === planId);
+        const lot       = plan?.lots?.find(l =>
+          l.number?.toLowerCase() === lotNumber.toLowerCase() ||
+          l.piqLotId != null && String(l.piqLotId) === String(order.items?.[0]?.lotId)
+        );
+        if (lot?.piqLotId) {
+          order.piqLotId = lot.piqLotId;
+          console.log(`[orders] piqLotId ${lot.piqLotId} auto-set for keys order`);
+        }
+      } catch (e) {
+        console.warn("[orders] piqLotId lookup failed:", e.message);
+      }
     }
 
     // MED-11: Validate items fields
