@@ -46,7 +46,7 @@ export async function getPiqToken(cfg) {
     grant_type:    "client_credentials",
     client_id:     clientId,
     client_secret: clientSecret,
-    scope:         "buildings lots",
+    // No scope param — PIQ tenant applies default scopes automatically
   });
 
   const resp = await fetch(`${baseUrl}/oauth/access_token`, {
