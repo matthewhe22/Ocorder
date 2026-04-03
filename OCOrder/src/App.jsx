@@ -2829,7 +2829,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     <button className="tbl-act-btn" onClick={() => openEditPlan(p)}><Ic n="edit" s={13}/> Edit</button>
                     <button className="tbl-act-btn" onClick={() => openManageShipping(p)}><Ic n="truck" s={13}/> Shipping</button>
                     <button className="tbl-act-btn" style={{ background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={() => openPiqSync(p.id)}><Ic n="cloud" s={13}/> Sync from PIQ</button>
-                    <button className="tbl-act-btn danger" onClick={() => deletePlan(p.id)}><Ic n="trash" s={13}/> Delete</button>
+                    <button className="tbl-act-btn danger" onClick={() => confirmDeletePlans([p.id])}><Ic n="trash" s={13}/> Delete</button>
                   </td>
                 </tr>
               ))}
