@@ -1,5 +1,5 @@
 import { readConfig, writeConfig, validToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
-import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots } from "../_lib/piq.js";
+import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots, getAllPiqBuildings } from "../_lib/piq.js";
 import Stripe from "stripe";
 
 export default async function handler(req, res) {
@@ -92,6 +92,18 @@ export default async function handler(req, res) {
       const data = await resp.json();
       const count = Array.isArray(data) ? data.length : (data?.data?.length ?? 0);
       return res.status(200).json({ ok: true, message: `Connected — ${count} building(s) visible` });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
+  // POST /api/config/settings?action=list-piq-buildings
+  // Returns all PIQ buildings (single page, max 100) for building discovery.
+  if (req.method === "POST" && req.query?.action === "list-piq-buildings") {
+    try {
+      const cfg = await readConfig();
+      const { buildings, warning } = await getAllPiqBuildings(cfg);
+      return res.status(200).json({ ok: true, buildings, ...(warning ? { warning } : {}) });
     } catch (err) {
       return res.status(200).json({ ok: false, error: err.message });
     }
