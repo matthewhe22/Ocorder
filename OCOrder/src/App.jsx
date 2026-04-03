@@ -2282,56 +2282,134 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
 
-  // ── PIQ Sync All: sync every plan from PIQ in sequence, then save ────────────
-  const syncAllFromPiq = async () => {
-    const plans = data.strataPlans;
-    const rows = plans.map(p => ({ planId: p.id, planName: p.name, status: "pending", ocs: 0, lots: 0, err: null }));
-    setPiqSyncAllModal({ running: true, rows, done: false });
+  // ── PIQ Sync All: open the template-selection modal ──────────────────────────
+  const syncAllFromPiq = () => {
+    setPiqSyncAllModal({ phase: "select", templatePlanId: null, rows: [], warning: null, error: null, saveErr: null });
+  };
 
-    // Work on a mutable copy of strataPlans
-    const updatedPlans = plans.map(p => ({ ...p }));
+  // ── PIQ Sync All: run sync after admin selects template + clicks Start ────────
+  const startSyncAllFromPiq = async () => {
+    const templatePlanId = piqSyncAllModal?.templatePlanId;
+    const templatePlan   = (data.strataPlans || []).find(p => p.id === templatePlanId) || {};
 
-    for (let i = 0; i < plans.length; i++) {
-      const plan = plans[i];
-      // Update row status to running
+    // Phase: syncing
+    setPiqSyncAllModal(m => ({ ...m, phase: "syncing", rows: [] }));
+
+    // Step 1: Discover all PIQ buildings
+    let allBuildings = [], discoveryWarning = null;
+    try {
+      const r = await fetch("/api/config/settings?action=list-piq-buildings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || "Building discovery failed.");
+      allBuildings     = d.buildings || [];
+      discoveryWarning = d.warning   || null;
+    } catch (err) {
+      setPiqSyncAllModal(m => ({ ...m, phase: "done", error: err.message }));
+      return;
+    }
+
+    // Step 2: Diff — find buildings not yet in strataPlans
+    const existingPlans = data.strataPlans || [];
+    const matchBuilding = (plan, b) =>
+      (plan.piqBuildingId != null && plan.piqBuildingId === b.piqBuildingId) ||
+      (b.splan && plan.id.toLowerCase() === b.splan.trim().toLowerCase());
+
+    const newBuildings = allBuildings.filter(b => !existingPlans.some(p => matchBuilding(p, b)));
+
+    // Step 3: Build stubs for new buildings
+    const assignId = (candidate, piqBuildingId, taken) => {
+      if (!taken.has(candidate)) return candidate;
+      const fallback = `piq-${piqBuildingId}`;
+      if (!taken.has(fallback)) return fallback;
+      return `${fallback}-dup`;
+    };
+    const takenIds = new Set(existingPlans.map(p => p.id));
+    const stubs = newBuildings.map(b => {
+      const candidate = b.splan?.trim() || `piq-${b.piqBuildingId}`;
+      const id = assignId(candidate, b.piqBuildingId, takenIds);
+      takenIds.add(id);
+      return {
+        id,
+        name:            b.name,
+        piqBuildingId:   b.piqBuildingId,
+        active:          true,
+        address:         "",
+        ownerCorps:      {},
+        lots:            [],
+        products:        JSON.parse(JSON.stringify(templatePlan.products        || [])),
+        shippingOptions: JSON.parse(JSON.stringify(templatePlan.shippingOptions || [])),
+        keysShipping:    JSON.parse(JSON.stringify(templatePlan.keysShipping    || { deliveryCost: 0, expressCost: 0 })),
+      };
+    });
+
+    // Step 4: Build updatedPlans and rows (existing first, then stubs)
+    const updatedPlans = [...existingPlans.map(p => ({ ...p })), ...stubs];
+    const rows = updatedPlans.map((p, i) => ({
+      planId:        p.id,
+      planName:      p.name,
+      piqBuildingId: p.piqBuildingId || null,
+      isNew:         i >= existingPlans.length,
+      status:        "pending",
+      ocs:           0,
+      lots:          0,
+      err:           null,
+    }));
+    setPiqSyncAllModal(m => ({ ...m, rows, warning: discoveryWarning }));
+
+    // Step 5: Sync loop
+    const norm = s => String(s || "").trim().toLowerCase();
+    for (let i = 0; i < updatedPlans.length; i++) {
+      const row = rows[i];
       setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "running" } : r) }));
       try {
+        const body = row.isNew && row.piqBuildingId != null
+          ? { piqBuildingId: row.piqBuildingId }
+          : { planId: updatedPlans[i].id };
         const r = await fetch("/api/config/settings?action=sync-piq", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-          body: JSON.stringify({ planId: plan.id }),
+          body: JSON.stringify(body),
         });
         const d = await r.json();
         if (!r.ok || !d.ok) throw new Error(d.error || "PIQ sync failed");
 
         // Merge OCs
-        const existing = updatedPlans[i];
-        existing.piqBuildingId = d.piqBuildingId;
-        const existingOCs = existing.ownerCorps || {};
+        const plan = updatedPlans[i];
+        plan.piqBuildingId = d.piqBuildingId;
+        const existingOCs = plan.ownerCorps || {};
         for (const s of (d.schedules || [])) {
-          const key = Object.keys(existingOCs).find(k => existingOCs[k].piqScheduleId === s.piqScheduleId || existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase());
+          const key = Object.keys(existingOCs).find(k =>
+            existingOCs[k].piqScheduleId === s.piqScheduleId ||
+            existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase()
+          );
           if (key) { existingOCs[key].piqScheduleId = s.piqScheduleId; }
           else { existingOCs[`OC-${s.piqScheduleId}`] = { name: s.name, levy: 0, piqScheduleId: s.piqScheduleId }; }
         }
-        existing.ownerCorps = existingOCs;
+        plan.ownerCorps = existingOCs;
         const ocKeys = Object.keys(existingOCs);
         const autoOC = ocKeys.length === 1 ? ocKeys : null;
 
         // Merge lots
-        const existingLots = existing.lots || [];
-        const norm = s => String(s).trim().toLowerCase();
+        const existingLots = plan.lots || [];
         for (const l of (d.lots || [])) {
-          const ei = existingLots.findIndex(el => el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber));
+          const ei = existingLots.findIndex(el =>
+            el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber)
+          );
           if (ei >= 0) {
-            existingLots[ei].piqLotId = l.piqLotId;
+            existingLots[ei].piqLotId  = l.piqLotId;
             existingLots[ei].unitNumber = l.unitNumber || existingLots[ei].unitNumber || "";
-            if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0)) existingLots[ei].ownerCorps = autoOC;
+            if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0))
+              existingLots[ei].ownerCorps = autoOC;
           } else {
             existingLots.push({ id: `piq-${l.piqLotId}`, number: l.lotNumber, unitNumber: l.unitNumber || "", type: "", ownerCorps: autoOC || [], piqLotId: l.piqLotId });
           }
         }
-        existing.lots = existingLots;
-        updatedPlans[i] = existing;
+        plan.lots = existingLots;
+        updatedPlans[i] = plan;
 
         setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "ok", ocs: d.schedules?.length || 0, lots: d.lots?.length || 0 } : r) }));
       } catch (err) {
@@ -2339,7 +2417,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       }
     }
 
-    // Save all plans
+    // Step 6: Save
     try {
       const sr = await fetch("/api/plans", {
         method: "POST",
@@ -2348,13 +2426,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       });
       if (sr.ok) {
         setData(p => ({ ...p, strataPlans: updatedPlans }));
-        setPiqSyncAllModal(m => ({ ...m, running: false, done: true }));
+        setPiqSyncAllModal(m => ({ ...m, phase: "done" }));
       } else {
-        const e = await sr.json();
-        setPiqSyncAllModal(m => ({ ...m, running: false, done: true, saveErr: e.error || "Save failed." }));
+        const e = await sr.json().catch(() => ({}));
+        setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.error || "Save failed." }));
       }
     } catch (e) {
-      setPiqSyncAllModal(m => ({ ...m, running: false, done: true, saveErr: e.message }));
+      setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.message }));
     }
   };
 
