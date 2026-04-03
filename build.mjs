@@ -51,7 +51,7 @@ const ctx = await esbuild.context({
   outfile: resolve(__dirname, "dist/bundle.js"),
   minify: !isWatch,
   sourcemap: isWatch,
-  target: ["es2020", "chrome90", "firefox90", "safari14"],
+
   define: {
     "process.env.NODE_ENV": isWatch ? '"development"' : '"production"'
   },
