@@ -1,4 +1,10 @@
-// test/stripe-mock.js — Stub the Stripe SDK without making real API calls.
+// test/stripe-mock.js
+// Stubs the Stripe SDK so unit/integration tests never make real API calls.
+//
+// Usage:
+//   import { mockStripe } from "../../test/stripe-mock.js";
+//   mockStripe({ sessionUrl: "https://checkout.stripe.com/test", paymentStatus: "paid" });
+
 import { vi } from "vitest";
 
 export function mockStripe({ sessionUrl = "https://checkout.stripe.com/test", paymentStatus = "paid", metadata = {} } = {}) {

@@ -1,6 +1,7 @@
-// test/request-factory.js — Mock req/res factory for Vercel serverless handlers
-// All Vercel handlers are plain async function handler(req, res).
-// This factory creates minimal mock objects that implement the subset used by the app.
+// test/request-factory.js
+// Creates mock req/res objects for testing Vercel serverless handlers.
+// Implements the minimal subset of the Node.js http.IncomingMessage /
+// http.ServerResponse API that the app's handlers actually use.
 
 export function makeReq({ method = "GET", body = {}, headers = {}, query = {} } = {}) {
   return { method, body, headers, query };

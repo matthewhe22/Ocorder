@@ -132,6 +132,11 @@ export const DEFAULT_CONFIG = {
     secretKey:      "",
     publishableKey: "",
   },
+  piq: {
+    baseUrl:      "https://tocs.propertyiq.com.au",
+    clientId:     "",
+    clientSecret: "",
+  },
 };
 
 // ── Demo seed data ────────────────────────────────────────────────────────────
@@ -353,6 +358,7 @@ export async function readConfig() {
     paymentDetails: { ...DEFAULT_CONFIG.paymentDetails, ...(c.paymentDetails || {}) },
     emailTemplate:  { ...DEFAULT_CONFIG.emailTemplate,  ...(c.emailTemplate  || {}) },
     stripe:         { ...DEFAULT_CONFIG.stripe,         ...(c.stripe         || {}) },
+    piq:            { ...DEFAULT_CONFIG.piq,            ...(c.piq            || {}) },
   };
 
   // Critical env-var overrides: if Redis has an empty value, use the env var.

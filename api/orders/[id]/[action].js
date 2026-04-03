@@ -8,8 +8,9 @@
 import Stripe from "stripe";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
-import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../../_lib/email.js";
+import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
+import { detectPiqPayment } from "../../_lib/piq.js";
 
 // ── HTML escape helper ────────────────────────────────────────────────────────
 function esc(str) {
@@ -522,6 +523,91 @@ export default async function handler(req, res) {
     data.orders.splice(idx, 1);
     await writeData(data);
     return res.status(200).json({ ok: true, deleted: id });
+  }
+
+  // ── POST /api/orders/:id/check-piq-payment ──────────────────────────────────
+  // Admin only. Manually polls the PIQ lot ledger for a single keys order.
+  // Returns current levy/payment status and persists results to Redis.
+  if (action === "check-piq-payment" && req.method === "POST") {
+    const token = extractToken(req);
+    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const data  = await readData();
+    const idx   = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+
+    if (!order.piqLotId) {
+      return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first." });
+    }
+
+    const cfg = await readConfig();
+    const now = new Date().toISOString();
+
+    try {
+      const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+
+      // Update order fields
+      order.piqLastPolled    = now;
+      order.piqLevyFound     = result.levyFound;
+      order.piqLevyTotalDue  = result.totalDue  ?? order.piqLevyTotalDue  ?? null;
+      order.piqLevyTotalNett = result.totalNett ?? (result.paid ? 0 : order.piqLevyTotalNett ?? null);
+
+      if (result.paid && order.status !== "Paid") {
+        order.piqPaymentDate      = result.paymentDate      || null;
+        order.piqPaymentReference = result.paymentReference || null;
+        order.status              = "Paid";
+        const dateStr = result.paymentDate
+          ? new Date(result.paymentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" })
+          : "—";
+        order.auditLog = [...(order.auditLog || []), {
+          ts:     now,
+          action: "Payment confirmed via PropertyIQ",
+          note:   `Date: ${dateStr} | Ref: ${result.paymentReference || "—"} | Amount: $${(result.totalPaid || 0).toFixed(2)}`,
+        }];
+
+        // Send payment notification email to admin (non-fatal)
+        try {
+          const smtp = cfg.smtp || {};
+          if (smtp.host && smtp.user && smtp.pass) {
+            const toEmail     = cfg.orderEmail || "Orders@tocs.co";
+            const transporter = createTransporter(smtp);
+            const lotNumber   = order.items?.[0]?.lotNumber || "";
+            const planName    = order.items?.[0]?.planName  || "";
+            await transporter.sendMail({
+              from:    `"TOCS Order Portal" <${toEmail}>`,
+              to:      toEmail,
+              subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
+              html:    buildPiqPaymentEmailHtml(order, result.paymentDate, result.paymentReference, result.totalPaid),
+            });
+          }
+        } catch (emailErr) {
+          console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
+          order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
+        }
+      }
+
+      await writeData(data);
+
+      return res.status(200).json({
+        ok:               true,
+        levyFound:        result.levyFound,
+        paid:             result.paid || false,
+        totalDue:         result.totalDue    ?? null,
+        totalNett:        result.totalNett   ?? null,
+        totalPaid:        result.totalPaid   ?? null,
+        paymentDate:      result.paymentDate      ?? null,
+        paymentReference: result.paymentReference ?? null,
+        lastPolled:       now,
+        orderStatus:      order.status,
+      });
+    } catch (err) {
+      console.error(`check-piq-payment error for ${id}:`, err.message);
+      // Still update lastPolled on error
+      order.piqLastPolled = now;
+      await writeData(data).catch(() => {});
+      return res.status(200).json({ ok: false, error: err.message, lastPolled: now });
+    }
   }
 
   return res.status(404).json({ error: "Unknown action." });

@@ -860,13 +860,25 @@ async function handler(req, res) {
   if (urlPath === "/api/lots/import" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { planId, lots } = await readBody(req, res);
+    const { planId, lots, ownerCorps } = await readBody(req, res);
     if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
     if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
     // Validate each lot has a non-empty id
     for (const lot of lots) {
       if (!lot || typeof lot !== "object" || !lot.id) {
         return json(res, 400, { error: "Each lot must have a non-empty id field." });
+      }
+    }
+    // Validate ownerCorps if provided
+    if (ownerCorps !== undefined) {
+      if (!ownerCorps || typeof ownerCorps !== "object" || Array.isArray(ownerCorps)) {
+        return json(res, 400, { error: "ownerCorps must be a plain object." });
+      }
+      for (const [ocId, oc] of Object.entries(ownerCorps)) {
+        if (!ocId || typeof ocId !== "string") return json(res, 400, { error: "Each ownerCorps key must be a non-empty string." });
+        if (!oc || typeof oc !== "object" || !oc.name || typeof oc.name !== "string") {
+          return json(res, 400, { error: `ownerCorps entry '${ocId}' must have a name string.` });
+        }
       }
     }
     // Deduplicate by lot id (last occurrence wins)
@@ -878,15 +890,54 @@ async function handler(req, res) {
     const idx = d.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return json(res, 404, { error: "Plan not found." });
     d.strataPlans[idx].lots = [...seenLots.values()];
+    const newCount = d.strataPlans[idx].lots.length;
+    if (ownerCorps) d.strataPlans[idx].ownerCorps = ownerCorps;
+    const ocNote = ownerCorps ? `, ${Object.keys(ownerCorps).length} OCs` : "";
+    d.strataPlans[idx].lotsImportLog = [
+      ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)), // keep last 50 entries
+      { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${newCount} lots${ocNote}` },
+    ];
     writeData(d);
-    return json(res, 200, { ok: true, count: d.strataPlans[idx].lots.length });
+    return json(res, 200, { ok: true, count: newCount, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined });
   }
 
   // ── POST /api/plans  (admin — save full plans array) ──────────────────────
   if (urlPath === "/api/plans" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { plans } = await readBody(req, res);
+    const body = await readBody(req, res);
+    // Support import-lots action (mirrors Vercel api/plans.js sub-route)
+    if (body.action === "import-lots") {
+      const { planId, lots, ownerCorps } = body;
+      if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
+      if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
+      // Validate ownerCorps if provided
+      if (ownerCorps !== undefined) {
+        if (!ownerCorps || typeof ownerCorps !== "object" || Array.isArray(ownerCorps)) {
+          return json(res, 400, { error: "ownerCorps must be a plain object." });
+        }
+        for (const [ocId, oc] of Object.entries(ownerCorps)) {
+          if (!ocId || typeof ocId !== "string") return json(res, 400, { error: "Each ownerCorps key must be a non-empty string." });
+          if (!oc || typeof oc !== "object" || !oc.name || typeof oc.name !== "string") {
+            return json(res, 400, { error: `ownerCorps entry '${ocId}' must have a name string.` });
+          }
+        }
+      }
+      const d = readData();
+      const idx = d.strataPlans.findIndex(p => p.id === planId);
+      if (idx === -1) return json(res, 404, { error: "Plan not found." });
+      const prevCount = d.strataPlans[idx].lots?.length || 0;
+      d.strataPlans[idx].lots = lots;
+      if (ownerCorps) d.strataPlans[idx].ownerCorps = ownerCorps;
+      const ocNote = ownerCorps ? `, ${Object.keys(ownerCorps).length} OCs` : "";
+      d.strataPlans[idx].lotsImportLog = [
+        ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)),
+        { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${lots.length} lots${ocNote}` },
+      ];
+      writeData(d);
+      return json(res, 200, { ok: true, count: lots.length, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined });
+    }
+    const { plans } = body;
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });
     if (plans.length === 0) return json(res, 400, { error: "Plans array cannot be empty." });
     // Validate each plan is an object with a non-empty id and name
