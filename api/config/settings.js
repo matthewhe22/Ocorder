@@ -109,26 +109,36 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST /api/config/settings?action=sync-piq  ← fetch building+schedules+lots for preview
-  // Body: { planId: "SP12345" }
-  // Returns preview data for admin to review before saving.
-  // Does NOT auto-save — admin confirms via existing POST /api/plans.
+  // POST /api/config/settings?action=sync-piq
+  // Body: { planId: "SP12345" }  OR  { piqBuildingId: 123 }
+  // planId branch: looks up building by splan, returns buildingName + schedules + lots.
+  // piqBuildingId branch: skips lookup (caller already knows the building), returns schedules + lots only.
   if (req.method === "POST" && req.query?.action === "sync-piq") {
     try {
-      const { planId } = req.body || {};
-      if (!planId) return res.status(400).json({ error: "planId is required." });
+      const { planId, piqBuildingId: bodyBuildingId } = req.body || {};
+      if (!planId && !bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId." });
+      if (planId  &&  bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId, not both." });
 
       const cfg = await readConfig();
 
-      // Step 1: Find PIQ building by splan
-      const building = await getPiqBuilding(cfg, planId);
-      if (!building) return res.status(404).json({ error: `No PIQ building found for splan "${planId}".` });
-      const piqBuildingId = building.id;
+      let piqBuildingId, buildingName;
 
-      // Step 2: Fetch schedules (Owner Corporations)
+      if (planId) {
+        // Original path: find building by splan
+        const building = await getPiqBuilding(cfg, planId);
+        if (!building) return res.status(404).json({ error: `No PIQ building found for splan "${planId}".` });
+        piqBuildingId = building.id;
+        buildingName  = building.buildingName || building.name;
+      } else {
+        // New path: piqBuildingId supplied directly — skip splan lookup
+        piqBuildingId = bodyBuildingId;
+        buildingName  = undefined; // caller already has the name from list-piq-buildings
+      }
+
+      // Fetch schedules (Owner Corporations)
       const rawSchedules = await getPiqSchedules(cfg, piqBuildingId);
 
-      // Step 3: Fetch all lots (paginated)
+      // Fetch all lots (paginated)
       const rawLots = await getPiqLots(cfg, piqBuildingId);
 
       // Map PIQ schedules → platform ownerCorp format
@@ -145,7 +155,9 @@ export default async function handler(req, res) {
         ownerName:  l.ownerContact?.name || l.name || "",
       }));
 
-      return res.status(200).json({ ok: true, piqBuildingId, buildingName: building.buildingName || building.name, schedules, lots });
+      const response = { ok: true, piqBuildingId, schedules, lots };
+      if (buildingName !== undefined) response.buildingName = buildingName;
+      return res.status(200).json(response);
     } catch (err) {
       return res.status(200).json({ ok: false, error: err.message });
     }
