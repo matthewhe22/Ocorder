@@ -2,3 +2,4 @@ node_modules/
 OCOrder/node_modules/
 OCOrder/dist/
 .worktrees/
+.vercel
