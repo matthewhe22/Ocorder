@@ -56,7 +56,7 @@ const PHONE_RE  = /^\+?[\d\s\-().]{7,20}$/;
 const DEFAULT_CONTACT = {
   name: "", email: "", phone: "", companyName: "",
   applicantType: "owner", ownerName: "", ocReference: "",
-  shippingAddress: { street: "", suburb: "", state: "NSW", postcode: "" },
+  shippingAddress: { street: "", suburb: "", state: "VIC", postcode: "" },
 };
 
 // Infer effective applicant type for orders that pre-date the applicantType field
@@ -818,8 +818,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
 
   const filteredPlans = (data.strataPlans || []).filter(p => {
     if (!p.active) return false;
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
+    const trimmed = search.trim();
+    if (!trimmed) return true;
+    if (trimmed.length < 3) return false;
+    const q = trimmed.toLowerCase();
     return p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q);
   });
 
@@ -912,6 +914,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <Ic n="check" s={16} style={{ color: "var(--sage)", flexShrink: 0 }}/>
                 <span className="s1-search-sel">{plan?.name}</span>
                 <button className="s1-search-btn" onClick={() => { setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setCart([]); setOrderCategory(null); setSearch(""); }}>Change</button>
+              </div>
+            )}
+            {!selPlan && search.trim().length > 0 && search.trim().length < 3 && (
+              <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "6px", paddingLeft: "4px" }}>
+                Type at least 3 characters to search…
               </div>
             )}
           </div>
@@ -2725,7 +2732,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
   const markPaid        = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
-  const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nThis indicates the customer will pay directly (not via the Send Invoice flow).`)) updateOrderStatus(oid, "Pending Payment"); };
+  const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nUse this when the invoice has been issued externally (e.g. via PropertyIQ) and you are awaiting the customer's payment. The order status will update to Paid automatically once payment is detected in PIQ, or you can use Mark Paid manually.`)) updateOrderStatus(oid, "Pending Payment"); };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setLotOcErr("");
@@ -3218,7 +3225,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
                         {o.status === "Invoice to be issued" && o.orderCategory === "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"#f1f5f9",color:"#475569",border:"1px solid #cbd5e1" }} title="Mark as Pending Payment without sending invoice" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending</button>
+                          <button className="tbl-act-btn" style={{ background:"#fff7ed",color:"#c2410c",border:"1px solid #fed7aa" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending Payment</button>
                         )}
                         {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
