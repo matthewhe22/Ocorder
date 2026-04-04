@@ -4186,8 +4186,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
       .then(r => r.json())
       .then(d => {
-        const pd = d.paymentDetails || {};
-        const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || "Top Owners Corporation"}\nBSB: ${pd.bsb || "033-065"}\nAccount Number: ${pd.accountNumber || "522011"}\nPayID: ${pd.payid || "accounts@tocs.com.au"}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
+        const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nKind regards,\nTOCS Team`;
         setMessage(defaultMsg);
       })
       .catch(() => setMessage(`Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for order #${order.id}.\n\nKind regards,\nTOCS Team`));
