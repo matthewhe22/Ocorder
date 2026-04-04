@@ -4285,6 +4285,7 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
     footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
     adminNotificationSubject: "New Order — {orderType} #{orderId}",
     adminNotificationIntro:   "A new order has been placed.",
+    keysOrderConfirmation:    "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.",
   };
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
@@ -4435,6 +4436,18 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
           <textarea className="f-input" rows={3} style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
             value={emailTpl.adminNotificationIntro || ""}
             onChange={e => updTpl("adminNotificationIntro", e.target.value)}/>
+        </div>
+
+        {/* Order Confirmation Email (Keys/Fobs) */}
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "20px" }}>Order Confirmation Email (Keys/Fobs)</h3>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
+          First paragraph sent to applicants when a Keys/Fobs order is placed. Use <code style={codeStyle}>{"{orderDesc}"}</code> to insert the building and lot (e.g. <em>for Building X - Lot Y</em>).
+        </p>
+        <div className="form-row">
+          <label className="f-label">Confirmation Paragraph</label>
+          <textarea className="f-input" rows={4} style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+            value={emailTpl.keysOrderConfirmation || ""}
+            onChange={e => updTpl("keysOrderConfirmation", e.target.value)}/>
         </div>
 
         {/* Certificate Email */}
