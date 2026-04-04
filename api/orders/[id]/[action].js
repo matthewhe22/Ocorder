@@ -206,7 +206,7 @@ export default async function handler(req, res) {
       const transporter = createTransporter(smtp);
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
-      const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
+      const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nKind regards,\nTOCS Team`;
       const htmlBody = message ? esc(message).replace(/\n/g, "<br>") : esc(defaultMsg).replace(/\n/g, "<br>");
       const tpl = cfg.emailTemplate || {};
       const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
