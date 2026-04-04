@@ -977,6 +977,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Start typing to find your building.</p>
                 <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Search by address, building name, or Strata Plan number (e.g. SP12345).</p>
               </div>
+            ) : search.trim().length < 3 ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Keep typing…</p>
+                <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Type at least 3 characters to search buildings.</p>
+              </div>
             ) : filteredPlans.length === 0 ? (
               <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
                 <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
@@ -3170,7 +3176,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
-              <option>Paid</option>
               <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
