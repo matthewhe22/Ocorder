@@ -3388,44 +3388,94 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* PIQ Sync All Modal */}
       {piqSyncAllModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
-          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"560px", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"580px", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
             <div style={{ background:"#1a5fa8", borderRadius:"10px 10px 0 0", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Sync All Buildings from PropertyIQ</span>
-              {!piqSyncAllModal.running && <button onClick={() => setPiqSyncAllModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>}
+              {piqSyncAllModal.phase !== "syncing" && (
+                <button onClick={() => setPiqSyncAllModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>
+              )}
             </div>
             <div style={{ padding:"20px" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
-                <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
-                  <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
-                  <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>OCs</th>
-                  <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>Lots</th>
-                  <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Status</th>
-                </tr></thead>
-                <tbody>
-                  {(piqSyncAllModal.rows || []).map(row => (
-                    <tr key={row.planId} style={{ borderBottom:"1px solid var(--border2)" }}>
-                      <td style={{ padding:"7px 8px" }}><strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{row.planId}</strong><br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{row.planName}</span></td>
-                      <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.ocs : "—"}</td>
-                      <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.lots : "—"}</td>
-                      <td style={{ padding:"7px 8px" }}>
-                        {row.status === "pending" && <span style={{ color:"var(--muted)" }}>Waiting…</span>}
-                        {row.status === "running" && <span style={{ color:"#1a5fa8" }}>⟳ Syncing…</span>}
-                        {row.status === "ok" && <span style={{ color:"#16a34a", fontWeight:600 }}>✓ Done</span>}
-                        {row.status === "err" && <span style={{ color:"#dc2626", fontSize:"0.75rem" }} title={row.err}>✗ {row.err?.substring(0,60)}{row.err?.length > 60 ? "…" : ""}</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {piqSyncAllModal.saveErr && <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqSyncAllModal.saveErr}</div>}
-              {piqSyncAllModal.done && !piqSyncAllModal.saveErr && (
-                <div style={{ marginTop:"14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>
-                  ✓ Sync complete. Lots with multiple OCs are highlighted in the Lots tab — assign OCs manually.
+
+              {/* ── Phase: select ── */}
+              {piqSyncAllModal.phase === "select" && (
+                <div>
+                  <p style={{ fontSize:"0.85rem", color:"var(--muted)", marginBottom:"16px" }}>
+                    PIQ will be queried for all buildings. New buildings (not already in Plans) will be imported as plan stubs using the products from the template plan you select below.
+                  </p>
+                  <label className="f-label">Template plan <span style={{ color:"#dc2626" }}>*</span></label>
+                  <select className="f-select" style={{ marginBottom:"16px" }}
+                    value={piqSyncAllModal.templatePlanId || ""}
+                    onChange={e => setPiqSyncAllModal(m => ({ ...m, templatePlanId: e.target.value || null }))}>
+                    <option value="">— select a template —</option>
+                    {[...(data.strataPlans || [])].sort((a,b) => (a.name||"").localeCompare(b.name||"")).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}{(!p.products || p.products.length === 0) ? " (no products)" : ""}</option>
+                    ))}
+                  </select>
+                  <div style={{ display:"flex", gap:"8px", justifyContent:"flex-end" }}>
+                    <button className="btn btn-out" onClick={() => setPiqSyncAllModal(null)}>Cancel</button>
+                    <button className="btn btn-blk" disabled={!piqSyncAllModal.templatePlanId} onClick={startSyncAllFromPiq}>
+                      Start Sync
+                    </button>
+                  </div>
                 </div>
               )}
-              {!piqSyncAllModal.running && (
-                <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
-                  <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
+
+              {/* ── Phase: syncing / done ── */}
+              {(piqSyncAllModal.phase === "syncing" || piqSyncAllModal.phase === "done") && (
+                <div>
+                  {piqSyncAllModal.warning && (
+                    <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"8px 12px", fontSize:"0.8rem", color:"#92400e", marginBottom:"12px" }}>
+                      ⚠ {piqSyncAllModal.warning}
+                    </div>
+                  )}
+                  {piqSyncAllModal.error && (
+                    <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#dc2626", marginBottom:"12px" }}>
+                      ✗ Discovery failed: {piqSyncAllModal.error}
+                    </div>
+                  )}
+                  {(piqSyncAllModal.rows || []).length > 0 && (
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                      <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
+                        <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
+                        <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>OCs</th>
+                        <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>Lots</th>
+                        <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Status</th>
+                      </tr></thead>
+                      <tbody>
+                        {(piqSyncAllModal.rows || []).map(row => (
+                          <tr key={row.planId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                            <td style={{ padding:"7px 8px" }}>
+                              <strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{row.planId}</strong>
+                              {row.isNew && <span style={{ marginLeft:"6px", fontSize:"0.68rem", background:"#dbeafe", color:"#1d4ed8", borderRadius:"3px", padding:"1px 5px" }}>New</span>}
+                              <br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{row.planName}</span>
+                            </td>
+                            <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.ocs : "—"}</td>
+                            <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.lots : "—"}</td>
+                            <td style={{ padding:"7px 8px" }}>
+                              {row.status === "pending" && <span style={{ color:"var(--muted)" }}>Waiting…</span>}
+                              {row.status === "running" && <span style={{ color:"#1a5fa8" }}>⟳ Syncing…</span>}
+                              {row.status === "ok"      && <span style={{ color:"#16a34a", fontWeight:600 }}>✓ Done</span>}
+                              {row.status === "err"     && <span style={{ color:"#dc2626", fontSize:"0.75rem" }} title={row.err}>✗ {row.err?.substring(0,60)}{row.err?.length > 60 ? "…" : ""}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {piqSyncAllModal.saveErr && (
+                    <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqSyncAllModal.saveErr}</div>
+                  )}
+                  {piqSyncAllModal.phase === "done" && !piqSyncAllModal.error && !piqSyncAllModal.saveErr && (
+                    <div style={{ marginTop:"14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>
+                      ✓ Sync complete. New plans are visible in the Plans tab — assign Plan IDs and verify products before going live.
+                    </div>
+                  )}
+                  {piqSyncAllModal.phase === "done" && (
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
+                      <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
