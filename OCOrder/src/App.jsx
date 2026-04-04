@@ -4757,8 +4757,8 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 // Shown inside the expanded order row for keys/invoice orders.
 // Displays the PIQ levy status and allows admin to trigger a manual payment check.
 function PiqPaymentPanel({ order, adminToken, onPaid }) {
-  const [checking, setChecking] = React.useState(false);
-  const [checkResult, setCheckResult] = React.useState(null);
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState(null);
 
   const checkNow = async () => {
     setChecking(true); setCheckResult(null);
