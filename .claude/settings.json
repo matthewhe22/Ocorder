@@ -1,5 +1,23 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node build.mjs)"
+    ]
+  },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd OCOrder && npm install --prefer-offline --no-audit --no-fund && node build.mjs",
+            "timeout": 120,
+            "statusMessage": "Installing dependencies and building frontend…"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
