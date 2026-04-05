@@ -56,7 +56,7 @@ const PHONE_RE  = /^\+?[\d\s\-().]{7,20}$/;
 const DEFAULT_CONTACT = {
   name: "", email: "", phone: "", companyName: "",
   applicantType: "owner", ownerName: "", ocReference: "",
-  shippingAddress: { street: "", suburb: "", state: "NSW", postcode: "" },
+  shippingAddress: { street: "", suburb: "", state: "VIC", postcode: "" },
 };
 
 // Infer effective applicant type for orders that pre-date the applicantType field
@@ -818,8 +818,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
 
   const filteredPlans = (data.strataPlans || []).filter(p => {
     if (!p.active) return false;
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
+    const trimmed = search.trim();
+    if (!trimmed) return true;
+    if (trimmed.length < 3) return false;
+    const q = trimmed.toLowerCase();
     return p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q);
   });
 
@@ -914,6 +916,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <button className="s1-search-btn" onClick={() => { setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setCart([]); setOrderCategory(null); setSearch(""); }}>Change</button>
               </div>
             )}
+            {!selPlan && search.trim().length > 0 && search.trim().length < 3 && (
+              <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "6px", paddingLeft: "4px" }}>
+                Type at least 3 characters to search…
+              </div>
+            )}
           </div>
 
           {/* ── Recent order banner ── */}
@@ -969,6 +976,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🏢</div>
                 <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Start typing to find your building.</p>
                 <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Search by address, building name, or Strata Plan number (e.g. SP12345).</p>
+              </div>
+            ) : search.trim().length < 3 ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Keep typing…</p>
+                <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Type at least 3 characters to search buildings.</p>
               </div>
             ) : filteredPlans.length === 0 ? (
               <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
@@ -2175,7 +2188,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
   const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
-  const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { running, rows:[{planId,status,ocs,lots,err}], done }
+  const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { phase, templatePlanId, rows, warning, error, saveErr }
+  const [planSort, setPlanSort] = useState({ col: null, dir: "asc" });
+  const [selectedPlanIds, setSelectedPlanIds] = useState(new Set());
   const [adminToast, setAdminToast] = useState(null);
 
   // ── PIQ Sync: fetch preview data from PIQ for a given plan ──────────────────
@@ -2280,56 +2295,134 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
 
-  // ── PIQ Sync All: sync every plan from PIQ in sequence, then save ────────────
-  const syncAllFromPiq = async () => {
-    const plans = data.strataPlans;
-    const rows = plans.map(p => ({ planId: p.id, planName: p.name, status: "pending", ocs: 0, lots: 0, err: null }));
-    setPiqSyncAllModal({ running: true, rows, done: false });
+  // ── PIQ Sync All: open the template-selection modal ──────────────────────────
+  const syncAllFromPiq = () => {
+    setPiqSyncAllModal({ phase: "select", templatePlanId: null, rows: [], warning: null, error: null, saveErr: null });
+  };
 
-    // Work on a mutable copy of strataPlans
-    const updatedPlans = plans.map(p => ({ ...p }));
+  // ── PIQ Sync All: run sync after admin selects template + clicks Start ────────
+  const startSyncAllFromPiq = async () => {
+    const templatePlanId = piqSyncAllModal?.templatePlanId;
+    const templatePlan   = (data.strataPlans || []).find(p => p.id === templatePlanId) || {};
 
-    for (let i = 0; i < plans.length; i++) {
-      const plan = plans[i];
-      // Update row status to running
+    // Phase: syncing
+    setPiqSyncAllModal(m => ({ ...m, phase: "syncing", rows: [] }));
+
+    // Step 1: Discover all PIQ buildings
+    let allBuildings = [], discoveryWarning = null;
+    try {
+      const r = await fetch("/api/config/settings?action=list-piq-buildings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || "Building discovery failed.");
+      allBuildings     = d.buildings || [];
+      discoveryWarning = d.warning   || null;
+    } catch (err) {
+      setPiqSyncAllModal(m => ({ ...m, phase: "done", error: err.message }));
+      return;
+    }
+
+    // Step 2: Diff — find buildings not yet in strataPlans
+    const existingPlans = data.strataPlans || [];
+    const matchBuilding = (plan, b) =>
+      (plan.piqBuildingId != null && plan.piqBuildingId === b.piqBuildingId) ||
+      (b.splan && plan.id.toLowerCase() === b.splan.trim().toLowerCase());
+
+    const newBuildings = allBuildings.filter(b => !existingPlans.some(p => matchBuilding(p, b)));
+
+    // Step 3: Build stubs for new buildings
+    const assignId = (candidate, piqBuildingId, taken) => {
+      if (!taken.has(candidate)) return candidate;
+      const fallback = `piq-${piqBuildingId}`;
+      if (!taken.has(fallback)) return fallback;
+      return `${fallback}-dup`;
+    };
+    const takenIds = new Set(existingPlans.map(p => p.id));
+    const stubs = newBuildings.map(b => {
+      const candidate = b.splan?.trim() || `piq-${b.piqBuildingId}`;
+      const id = assignId(candidate, b.piqBuildingId, takenIds);
+      takenIds.add(id);
+      return {
+        id,
+        name:            b.name,
+        piqBuildingId:   b.piqBuildingId,
+        active:          true,
+        address:         "",
+        ownerCorps:      {},
+        lots:            [],
+        products:        JSON.parse(JSON.stringify(templatePlan.products        || [])),
+        shippingOptions: JSON.parse(JSON.stringify(templatePlan.shippingOptions || [])),
+        keysShipping:    JSON.parse(JSON.stringify(templatePlan.keysShipping    || { deliveryCost: 0, expressCost: 0 })),
+      };
+    });
+
+    // Step 4: Build updatedPlans and rows (existing first, then stubs)
+    const updatedPlans = [...existingPlans.map(p => ({ ...p })), ...stubs];
+    const rows = updatedPlans.map((p, i) => ({
+      planId:        p.id,
+      planName:      p.name,
+      piqBuildingId: p.piqBuildingId || null,
+      isNew:         i >= existingPlans.length,
+      status:        "pending",
+      ocs:           0,
+      lots:          0,
+      err:           null,
+    }));
+    setPiqSyncAllModal(m => ({ ...m, rows, warning: discoveryWarning }));
+
+    // Step 5: Sync loop
+    const norm = s => String(s || "").trim().toLowerCase();
+    for (let i = 0; i < updatedPlans.length; i++) {
+      const row = rows[i];
       setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "running" } : r) }));
       try {
+        const body = row.isNew && row.piqBuildingId != null
+          ? { piqBuildingId: row.piqBuildingId }
+          : { planId: updatedPlans[i].id };
         const r = await fetch("/api/config/settings?action=sync-piq", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-          body: JSON.stringify({ planId: plan.id }),
+          body: JSON.stringify(body),
         });
         const d = await r.json();
         if (!r.ok || !d.ok) throw new Error(d.error || "PIQ sync failed");
 
         // Merge OCs
-        const existing = updatedPlans[i];
-        existing.piqBuildingId = d.piqBuildingId;
-        const existingOCs = existing.ownerCorps || {};
+        const plan = updatedPlans[i];
+        plan.piqBuildingId = d.piqBuildingId;
+        const existingOCs = plan.ownerCorps || {};
         for (const s of (d.schedules || [])) {
-          const key = Object.keys(existingOCs).find(k => existingOCs[k].piqScheduleId === s.piqScheduleId || existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase());
+          const key = Object.keys(existingOCs).find(k =>
+            existingOCs[k].piqScheduleId === s.piqScheduleId ||
+            existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase()
+          );
           if (key) { existingOCs[key].piqScheduleId = s.piqScheduleId; }
           else { existingOCs[`OC-${s.piqScheduleId}`] = { name: s.name, levy: 0, piqScheduleId: s.piqScheduleId }; }
         }
-        existing.ownerCorps = existingOCs;
+        plan.ownerCorps = existingOCs;
         const ocKeys = Object.keys(existingOCs);
         const autoOC = ocKeys.length === 1 ? ocKeys : null;
 
         // Merge lots
-        const existingLots = existing.lots || [];
-        const norm = s => String(s).trim().toLowerCase();
+        const existingLots = plan.lots || [];
         for (const l of (d.lots || [])) {
-          const ei = existingLots.findIndex(el => el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber));
+          const ei = existingLots.findIndex(el =>
+            el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber)
+          );
           if (ei >= 0) {
-            existingLots[ei].piqLotId = l.piqLotId;
+            existingLots[ei].piqLotId  = l.piqLotId;
             existingLots[ei].unitNumber = l.unitNumber || existingLots[ei].unitNumber || "";
-            if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0)) existingLots[ei].ownerCorps = autoOC;
+            if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0))
+              existingLots[ei].ownerCorps = autoOC;
           } else {
             existingLots.push({ id: `piq-${l.piqLotId}`, number: l.lotNumber, unitNumber: l.unitNumber || "", type: "", ownerCorps: autoOC || [], piqLotId: l.piqLotId });
           }
         }
-        existing.lots = existingLots;
-        updatedPlans[i] = existing;
+        plan.lots = existingLots;
+        updatedPlans[i] = plan;
 
         setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "ok", ocs: d.schedules?.length || 0, lots: d.lots?.length || 0 } : r) }));
       } catch (err) {
@@ -2337,7 +2430,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       }
     }
 
-    // Save all plans
+    // Step 6: Save
     try {
       const sr = await fetch("/api/plans", {
         method: "POST",
@@ -2346,13 +2439,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       });
       if (sr.ok) {
         setData(p => ({ ...p, strataPlans: updatedPlans }));
-        setPiqSyncAllModal(m => ({ ...m, running: false, done: true }));
+        setPiqSyncAllModal(m => ({ ...m, phase: "done" }));
       } else {
-        const e = await sr.json();
-        setPiqSyncAllModal(m => ({ ...m, running: false, done: true, saveErr: e.error || "Save failed." }));
+        const e = await sr.json().catch(() => ({}));
+        setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.error || "Save failed." }));
       }
     } catch (e) {
-      setPiqSyncAllModal(m => ({ ...m, running: false, done: true, saveErr: e.message }));
+      setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.message }));
     }
   };
 
@@ -2381,6 +2474,20 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const sortedPlans = useMemo(() => {
+    const plans = data.strataPlans || [];
+    if (!planSort.col) return plans;
+    return [...plans].sort((a, b) => {
+      let va, vb;
+      if (planSort.col === "id")       { va = a.id || "";       vb = b.id || ""; }
+      else if (planSort.col === "name"){ va = a.name || "";     vb = b.name || ""; }
+      else if (planSort.col === "lots"){ va = (a.lots || []).length; vb = (b.lots || []).length; }
+      else                             { va = (a.products || []).length; vb = (b.products || []).length; }
+      if (typeof va === "string") return planSort.dir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      return planSort.dir === "asc" ? va - vb : vb - va;
+    });
+  }, [data.strataPlans, planSort]);
+
   const plan = (data.strataPlans || []).find(p => p.id === planId);
 
   const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
@@ -2432,11 +2539,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setModal(null); setForm({}); setEditTarget(null);
   };
 
-  const deletePlan = async (id) => {
-    if (!window.confirm("Delete this strata plan and all its lots, products and Owner Corporations? This cannot be undone.")) return;
-    const plans = data.strataPlans.filter(p => p.id !== id);
+  const confirmDeletePlans = async (ids) => {
+    const idSet = new Set(ids);
+    let msg = `Delete ${ids.length} plan(s)? This cannot be undone.`;
+    const hasOrders = (data.orders || []).some(o =>
+      (o.items || []).some(item => idSet.has(item.planId))
+    );
+    if (hasOrders) msg += "\n\nOne or more of these plans have existing orders. Deleting will not remove orders but they will reference a plan that no longer exists.";
+    if (!window.confirm(msg)) return;
+    const plans = (data.strataPlans || []).filter(p => !idSet.has(p.id));
     await savePlans(plans);
-    if (planId === id) setPlanId(plans[0]?.id || "");
+    setSelectedPlanIds(new Set());
+    if (idSet.has(planId)) setPlanId(plans[0]?.id || "");
   };
 
   // ── Product CRUD ────────────────────────────────────────────────────────────
@@ -2624,7 +2738,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
   const markPaid        = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
-  const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nThis indicates the customer will pay directly (not via the Send Invoice flow).`)) updateOrderStatus(oid, "Pending Payment"); };
+  const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nUse this when the invoice has been issued externally (e.g. via PropertyIQ) and you are awaiting the customer's payment. The order status will update to Paid automatically once payment is detected in PIQ, or you can use Mark Paid manually.`)) updateOrderStatus(oid, "Pending Payment"); };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setLotOcErr("");
@@ -2793,22 +2907,68 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               </button>
             </div>
           </div>
+          {selectedPlanIds.size > 0 && (
+            <div style={{ marginBottom: "8px" }}>
+              <button className="btn" style={{ padding:"7px 14px", fontSize:"0.75rem", background:"#fef2f2", color:"#dc2626", border:"1px solid #fca5a5" }}
+                onClick={() => confirmDeletePlans([...selectedPlanIds])}>
+                <Ic n="trash" s={13}/> Delete Selected ({selectedPlanIds.size})
+              </button>
+            </div>
+          )}
           <table className="tbl">
-            <thead><tr><th>Plan ID</th><th>Name</th><th>Address</th><th>Lots</th><th>Products</th><th>Shipping</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 32 }}>
+                  <input type="checkbox"
+                    ref={el => { if (el) { const some = sortedPlans.some(p => selectedPlanIds.has(p.id)); const all = sortedPlans.length > 0 && sortedPlans.every(p => selectedPlanIds.has(p.id)); el.indeterminate = some && !all; el.checked = all; } }}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedPlanIds(new Set(sortedPlans.map(p => p.id)));
+                      else setSelectedPlanIds(new Set());
+                    }}
+                  />
+                </th>
+                {[["id","Plan ID"],["name","Name"]].map(([col, label]) => (
+                  <th key={col} style={{ cursor:"pointer", userSelect:"none" }}
+                    onClick={() => setPlanSort(s => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }))}>
+                    {label} {planSort.col === col ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                ))}
+                <th>Address</th>
+                <th style={{ cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setPlanSort(s => ({ col:"lots", dir: s.col === "lots" && s.dir === "asc" ? "desc" : "asc" }))}>
+                  Lots {planSort.col === "lots" ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th style={{ cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setPlanSort(s => ({ col:"products", dir: s.col === "products" && s.dir === "asc" ? "desc" : "asc" }))}>
+                  Products {planSort.col === "products" ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th>Shipping</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {data.strataPlans.map(p => (
+              {sortedPlans.map(p => (
                 <tr key={p.id}>
+                  <td>
+                    <input type="checkbox" checked={selectedPlanIds.has(p.id)}
+                      onChange={e => setSelectedPlanIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p.id); else next.delete(p.id);
+                        return next;
+                      })}
+                    />
+                  </td>
                   <td><strong style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{p.id}</strong></td>
                   <td>{p.name}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)", maxWidth: 180 }}>{p.address}</td>
-                  <td>{p.lots.length}</td>
-                  <td>{p.products.length}</td>
+                  <td>{(p.lots || []).length}</td>
+                  <td>{(p.products || []).length}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{(p.shippingOptions || []).length} option{(p.shippingOptions || []).length !== 1 ? "s" : ""}</td>
                   <td style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     <button className="tbl-act-btn" onClick={() => openEditPlan(p)}><Ic n="edit" s={13}/> Edit</button>
                     <button className="tbl-act-btn" onClick={() => openManageShipping(p)}><Ic n="truck" s={13}/> Shipping</button>
                     <button className="tbl-act-btn" style={{ background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={() => openPiqSync(p.id)}><Ic n="cloud" s={13}/> Sync from PIQ</button>
-                    <button className="tbl-act-btn danger" onClick={() => deletePlan(p.id)}><Ic n="trash" s={13}/> Delete</button>
+                    <button className="tbl-act-btn danger" onClick={() => confirmDeletePlans([p.id])}><Ic n="trash" s={13}/> Delete</button>
                   </td>
                 </tr>
               ))}
@@ -3016,7 +3176,6 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
-              <option>Paid</option>
               <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
@@ -3071,7 +3230,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
                         {o.status === "Invoice to be issued" && o.orderCategory === "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"#f1f5f9",color:"#475569",border:"1px solid #cbd5e1" }} title="Mark as Pending Payment without sending invoice" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending</button>
+                          <button className="tbl-act-btn" style={{ background:"#fff7ed",color:"#c2410c",border:"1px solid #fed7aa" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending Payment</button>
                         )}
                         {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
@@ -3241,44 +3400,94 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* PIQ Sync All Modal */}
       {piqSyncAllModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
-          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"560px", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"580px", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
             <div style={{ background:"#1a5fa8", borderRadius:"10px 10px 0 0", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Sync All Buildings from PropertyIQ</span>
-              {!piqSyncAllModal.running && <button onClick={() => setPiqSyncAllModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>}
+              {piqSyncAllModal.phase !== "syncing" && (
+                <button onClick={() => setPiqSyncAllModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>
+              )}
             </div>
             <div style={{ padding:"20px" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
-                <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
-                  <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
-                  <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>OCs</th>
-                  <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>Lots</th>
-                  <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Status</th>
-                </tr></thead>
-                <tbody>
-                  {(piqSyncAllModal.rows || []).map(row => (
-                    <tr key={row.planId} style={{ borderBottom:"1px solid var(--border2)" }}>
-                      <td style={{ padding:"7px 8px" }}><strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{row.planId}</strong><br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{row.planName}</span></td>
-                      <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.ocs : "—"}</td>
-                      <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.lots : "—"}</td>
-                      <td style={{ padding:"7px 8px" }}>
-                        {row.status === "pending" && <span style={{ color:"var(--muted)" }}>Waiting…</span>}
-                        {row.status === "running" && <span style={{ color:"#1a5fa8" }}>⟳ Syncing…</span>}
-                        {row.status === "ok" && <span style={{ color:"#16a34a", fontWeight:600 }}>✓ Done</span>}
-                        {row.status === "err" && <span style={{ color:"#dc2626", fontSize:"0.75rem" }} title={row.err}>✗ {row.err?.substring(0,60)}{row.err?.length > 60 ? "…" : ""}</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {piqSyncAllModal.saveErr && <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqSyncAllModal.saveErr}</div>}
-              {piqSyncAllModal.done && !piqSyncAllModal.saveErr && (
-                <div style={{ marginTop:"14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>
-                  ✓ Sync complete. Lots with multiple OCs are highlighted in the Lots tab — assign OCs manually.
+
+              {/* ── Phase: select ── */}
+              {piqSyncAllModal.phase === "select" && (
+                <div>
+                  <p style={{ fontSize:"0.85rem", color:"var(--muted)", marginBottom:"16px" }}>
+                    PIQ will be queried for all buildings. New buildings (not already in Plans) will be imported as plan stubs using the products from the template plan you select below.
+                  </p>
+                  <label className="f-label">Template plan <span style={{ color:"#dc2626" }}>*</span></label>
+                  <select className="f-select" style={{ marginBottom:"16px" }}
+                    value={piqSyncAllModal.templatePlanId || ""}
+                    onChange={e => setPiqSyncAllModal(m => ({ ...m, templatePlanId: e.target.value || null }))}>
+                    <option value="">— select a template —</option>
+                    {[...(data.strataPlans || [])].sort((a,b) => (a.name||"").localeCompare(b.name||"")).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}{(!p.products || p.products.length === 0) ? " (no products)" : ""}</option>
+                    ))}
+                  </select>
+                  <div style={{ display:"flex", gap:"8px", justifyContent:"flex-end" }}>
+                    <button className="btn btn-out" onClick={() => setPiqSyncAllModal(null)}>Cancel</button>
+                    <button className="btn btn-blk" disabled={!piqSyncAllModal.templatePlanId} onClick={startSyncAllFromPiq}>
+                      Start Sync
+                    </button>
+                  </div>
                 </div>
               )}
-              {!piqSyncAllModal.running && (
-                <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
-                  <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
+
+              {/* ── Phase: syncing / done ── */}
+              {(piqSyncAllModal.phase === "syncing" || piqSyncAllModal.phase === "done") && (
+                <div>
+                  {piqSyncAllModal.warning && (
+                    <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"8px 12px", fontSize:"0.8rem", color:"#92400e", marginBottom:"12px" }}>
+                      ⚠ {piqSyncAllModal.warning}
+                    </div>
+                  )}
+                  {piqSyncAllModal.error && (
+                    <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#dc2626", marginBottom:"12px" }}>
+                      ✗ Discovery failed: {piqSyncAllModal.error}
+                    </div>
+                  )}
+                  {(piqSyncAllModal.rows || []).length > 0 && (
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                      <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
+                        <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
+                        <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>OCs</th>
+                        <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>Lots</th>
+                        <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Status</th>
+                      </tr></thead>
+                      <tbody>
+                        {(piqSyncAllModal.rows || []).map(row => (
+                          <tr key={row.planId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                            <td style={{ padding:"7px 8px" }}>
+                              <strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{row.planId}</strong>
+                              {row.isNew && <span style={{ marginLeft:"6px", fontSize:"0.68rem", background:"#dbeafe", color:"#1d4ed8", borderRadius:"3px", padding:"1px 5px" }}>New</span>}
+                              <br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{row.planName}</span>
+                            </td>
+                            <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.ocs : "—"}</td>
+                            <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.lots : "—"}</td>
+                            <td style={{ padding:"7px 8px" }}>
+                              {row.status === "pending" && <span style={{ color:"var(--muted)" }}>Waiting…</span>}
+                              {row.status === "running" && <span style={{ color:"#1a5fa8" }}>⟳ Syncing…</span>}
+                              {row.status === "ok"      && <span style={{ color:"#16a34a", fontWeight:600 }}>✓ Done</span>}
+                              {row.status === "err"     && <span style={{ color:"#dc2626", fontSize:"0.75rem" }} title={row.err}>✗ {row.err?.substring(0,60)}{row.err?.length > 60 ? "…" : ""}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {piqSyncAllModal.saveErr && (
+                    <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqSyncAllModal.saveErr}</div>
+                  )}
+                  {piqSyncAllModal.phase === "done" && !piqSyncAllModal.error && !piqSyncAllModal.saveErr && (
+                    <div style={{ marginTop:"14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>
+                      ✓ Sync complete. New plans are visible in the Plans tab — assign Plan IDs and verify products before going live.
+                    </div>
+                  )}
+                  {piqSyncAllModal.phase === "done" && (
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
+                      <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3977,8 +4186,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
       .then(r => r.json())
       .then(d => {
-        const pd = d.paymentDetails || {};
-        const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || "Top Owners Corporation"}\nBSB: ${pd.bsb || "033-065"}\nAccount Number: ${pd.accountNumber || "522011"}\nPayID: ${pd.payid || "accounts@tocs.com.au"}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
+        const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nKind regards,\nTOCS Team`;
         setMessage(defaultMsg);
       })
       .catch(() => setMessage(`Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for order #${order.id}.\n\nKind regards,\nTOCS Team`));
@@ -4076,6 +4284,7 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
     footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
     adminNotificationSubject: "New Order — {orderType} #{orderId}",
     adminNotificationIntro:   "A new order has been placed.",
+    keysOrderConfirmation:    "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.",
   };
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
@@ -4226,6 +4435,18 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
           <textarea className="f-input" rows={3} style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
             value={emailTpl.adminNotificationIntro || ""}
             onChange={e => updTpl("adminNotificationIntro", e.target.value)}/>
+        </div>
+
+        {/* Order Confirmation Email (Keys/Fobs) */}
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "20px" }}>Order Confirmation Email (Keys/Fobs)</h3>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
+          First paragraph sent to applicants when a Keys/Fobs order is placed. Use <code style={codeStyle}>{"{orderDesc}"}</code> to insert the building and lot (e.g. <em>for Building X - Lot Y</em>).
+        </p>
+        <div className="form-row">
+          <label className="f-label">Confirmation Paragraph</label>
+          <textarea className="f-input" rows={4} style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+            value={emailTpl.keysOrderConfirmation || ""}
+            onChange={e => updTpl("keysOrderConfirmation", e.target.value)}/>
         </div>
 
         {/* Certificate Email */}
@@ -4560,8 +4781,8 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 // Shown inside the expanded order row for keys/invoice orders.
 // Displays the PIQ levy status and allows admin to trigger a manual payment check.
 function PiqPaymentPanel({ order, adminToken, onPaid }) {
-  const [checking, setChecking] = React.useState(false);
-  const [checkResult, setCheckResult] = React.useState(null);
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState(null);
 
   const checkNow = async () => {
     setChecking(true); setCheckResult(null);

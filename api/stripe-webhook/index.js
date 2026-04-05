@@ -65,9 +65,10 @@ export default async function handler(req, res) {
       // Only remove if not already paid — also verify via Stripe payment_status to guard against
       // race conditions where stripe-confirm ran just before this webhook arrived.
       if (idx !== -1 && data.orders[idx].status !== "Paid" && expiredSession.payment_status !== "paid") {
-        data.orders.splice(idx, 1);
+        data.orders[idx].status = "Cancelled";
+        data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), `Order cancelled — Stripe checkout session expired — ${new Date().toISOString()}`];
         await writeData(data);
-        console.log(`Stripe webhook: removed expired pending order ${expiredOrderId}`);
+        console.log(`Stripe webhook: cancelled expired pending order ${expiredOrderId}`);
       }
     }
     return res.status(200).json({ received: true });

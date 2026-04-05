@@ -206,7 +206,7 @@ export default async function handler(req, res) {
       const transporter = createTransporter(smtp);
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
-      const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
+      const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nKind regards,\nTOCS Team`;
       const htmlBody = message ? esc(message).replace(/\n/g, "<br>") : esc(defaultMsg).replace(/\n/g, "<br>");
       const tpl = cfg.emailTemplate || {};
       const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
@@ -493,14 +493,16 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: "Payment was already completed. Refresh to see your confirmation." });
         }
       } catch (e) {
-        // Stripe API unavailable — proceed with cancellation conservatively
+        // Stripe API unavailable — refuse cancellation; let checkout.session.expired webhook handle it
         console.warn(`stripe-cancel: could not verify session for order ${id}:`, e.message);
+        return res.status(503).json({ error: "Could not verify payment status. Please try again shortly." });
       }
     }
 
-    data.orders.splice(idx, 1);
+    order.status = "Cancelled";
+    order.auditLog = [...(order.auditLog || []), `Order cancelled by customer (Stripe checkout abandoned) — ${new Date().toISOString()}`];
     await writeData(data);
-    console.log(`stripe-cancel: removed pending order ${id}`);
+    console.log(`stripe-cancel: cancelled pending order ${id}`);
     return res.status(200).json({ ok: true });
   }
   // ── END stripe-cancel ──────────────────────────────────────────────────────

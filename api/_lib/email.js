@@ -127,6 +127,10 @@ export function buildCustomerEmailHtml(order, cfg) {
   const items = order.items || [];
   const pd = cfg.paymentDetails || {};
   const isPending = order.payment === "bank" || order.payment === "payid";
+  const orderType = order.orderCategory === "keys" ? "Keys/Fobs order" : "OC Certificate order";
+  const buildingName = items[0]?.planName || "";
+  const lotNumber = items[0]?.lotNumber || "";
+  const orderDesc = buildingName && lotNumber ? ` for ${buildingName} - ${lotNumber}` : buildingName ? ` for ${buildingName}` : "";
   const shippingRow = order.selectedShipping?.name
     ? `<tr><td colspan="2" style="padding:8px 12px;font-size:0.78rem;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;font-size:0.78rem;color:#666;">$${(order.selectedShipping.cost||0).toFixed(2)}</td></tr>`
     : "";
@@ -147,8 +151,10 @@ export function buildCustomerEmailHtml(order, cfg) {
     <div style="padding:32px;">
       <p style="margin-top:0;">Dear ${esc(contact.name)||"Applicant"},</p>
       <p>${isPending
-        ? "Your order has been received and is <strong>awaiting payment</strong>. Certificate processing will begin once payment is confirmed."
-        : "Your payment has been received and your certificate(s) will be processed within the stated turnaround time."
+        ? `Your ${orderType}${orderDesc} has been received and is <strong>awaiting payment</strong>. Processing will begin once payment is confirmed.`
+        : order.orderCategory === "keys"
+          ? esc(cfg?.emailTemplate?.keysOrderConfirmation || "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.").replace("{orderDesc}", orderDesc)
+          : `Your ${orderType}${orderDesc} has been received and your ${orderType} will be processed within the stated turnaround time.`
       }</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;">
         <div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div>

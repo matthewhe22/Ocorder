@@ -127,6 +127,7 @@ export const DEFAULT_CONFIG = {
     footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
     adminNotificationSubject: "New Order — {orderType} #{orderId} — {total}",
     adminNotificationIntro:   "A new order has been placed.",
+    keysOrderConfirmation:    "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.",
   },
   stripe: {
     secretKey:      "",
@@ -249,7 +250,7 @@ async function kvGet(key) {
     return val ? JSON.parse(val) : null;
   } catch (err) {
     console.error("Redis GET error:", err.message);
-    return null;
+    throw err;
   }
 }
 
