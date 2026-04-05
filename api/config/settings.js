@@ -184,7 +184,7 @@ export default async function handler(req, res) {
         if (smtp.host !== undefined) cfg.smtp.host = smtp.host;
         if (smtp.port !== undefined) cfg.smtp.port = Number(smtp.port) || 2525;
         if (smtp.user !== undefined) cfg.smtp.user = smtp.user;
-        if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass;
+        if (smtp.pass !== undefined && smtp.pass !== "••••••••" && smtp.pass !== "") cfg.smtp.pass = smtp.pass;
       }
       if (paymentDetails  && typeof paymentDetails  === "object") cfg.paymentDetails  = { ...cfg.paymentDetails,  ...paymentDetails  };
       if (paymentMethods  && typeof paymentMethods  === "object") cfg.paymentMethods  = { ...cfg.paymentMethods,  ...paymentMethods  };
