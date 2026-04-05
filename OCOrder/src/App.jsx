@@ -2297,7 +2297,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   // ── PIQ Sync All: open the template-selection modal ──────────────────────────
   const syncAllFromPiq = () => {
-    setPiqSyncAllModal({ phase: "select", templatePlanId: null, rows: [], warning: null, error: null, saveErr: null });
+    setPiqSyncAllModal({ phase: "select", templatePlanId: null, skipExisting: false, rows: [], warning: null, error: null, saveErr: null });
   };
 
   // ── PIQ Sync All: run sync after admin selects template + clicks Start ────────
@@ -2360,12 +2360,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     });
 
     // Step 4: Build updatedPlans and rows (existing first, then stubs)
-    const updatedPlans = [...existingPlans.map(p => ({ ...p })), ...stubs];
-    const rows = updatedPlans.map((p, i) => ({
+    const skipExisting = piqSyncAllModal?.skipExisting === true;
+    const plansToSync  = skipExisting ? stubs : [...existingPlans.map(p => ({ ...p })), ...stubs];
+    const updatedPlans = plansToSync;
+    const rows = plansToSync.map((p, i) => ({
       planId:        p.id,
       planName:      p.name,
       piqBuildingId: p.piqBuildingId || null,
-      isNew:         i >= existingPlans.length,
+      isNew:         skipExisting ? true : i >= existingPlans.length,
       status:        "pending",
       ocs:           0,
       lots:          0,
@@ -2431,14 +2433,16 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
 
     // Step 6: Save
+    // When skipExisting, merge new plans on top of the untouched existing plans
+    const finalPlans = skipExisting ? [...existingPlans, ...updatedPlans] : updatedPlans;
     try {
       const sr = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ plans: updatedPlans }),
+        body: JSON.stringify({ plans: finalPlans }),
       });
       if (sr.ok) {
-        setData(p => ({ ...p, strataPlans: updatedPlans }));
+        setData(p => ({ ...p, strataPlans: finalPlans }));
         setPiqSyncAllModal(m => ({ ...m, phase: "done" }));
       } else {
         const e = await sr.json().catch(() => ({}));
@@ -3416,7 +3420,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     PIQ will be queried for all buildings. New buildings (not already in Plans) will be imported as plan stubs using the products from the template plan you select below.
                   </p>
                   <label className="f-label">Template plan <span style={{ color:"#dc2626" }}>*</span></label>
-                  <select className="f-select" style={{ marginBottom:"16px" }}
+                  <select className="f-select" style={{ marginBottom:"12px" }}
                     value={piqSyncAllModal.templatePlanId || ""}
                     onChange={e => setPiqSyncAllModal(m => ({ ...m, templatePlanId: e.target.value || null }))}>
                     <option value="">— select a template —</option>
@@ -3424,6 +3428,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <option key={p.id} value={p.id}>{p.name}{(!p.products || p.products.length === 0) ? " (no products)" : ""}</option>
                     ))}
                   </select>
+                  <label style={{ display:"flex", alignItems:"center", gap:"8px", fontSize:"0.85rem", color:"var(--muted)", marginBottom:"16px", cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!piqSyncAllModal.skipExisting}
+                      onChange={e => setPiqSyncAllModal(m => ({ ...m, skipExisting: e.target.checked }))}
+                      style={{ width:"15px", height:"15px", accentColor:"#1a5fa8", cursor:"pointer" }} />
+                    Skip existing buildings — only import buildings not yet in the portal
+                  </label>
                   <div style={{ display:"flex", gap:"8px", justifyContent:"flex-end" }}>
                     <button className="btn btn-out" onClick={() => setPiqSyncAllModal(null)}>Cancel</button>
                     <button className="btn btn-blk" disabled={!piqSyncAllModal.templatePlanId} onClick={startSyncAllFromPiq}>
