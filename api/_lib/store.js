@@ -250,7 +250,7 @@ async function kvGet(key) {
     return val ? JSON.parse(val) : null;
   } catch (err) {
     console.error("Redis GET error:", err.message);
-    return null;
+    throw err;
   }
 }
 

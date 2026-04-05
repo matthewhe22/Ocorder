@@ -493,14 +493,16 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: "Payment was already completed. Refresh to see your confirmation." });
         }
       } catch (e) {
-        // Stripe API unavailable — proceed with cancellation conservatively
+        // Stripe API unavailable — refuse cancellation; let checkout.session.expired webhook handle it
         console.warn(`stripe-cancel: could not verify session for order ${id}:`, e.message);
+        return res.status(503).json({ error: "Could not verify payment status. Please try again shortly." });
       }
     }
 
-    data.orders.splice(idx, 1);
+    order.status = "Cancelled";
+    order.auditLog = [...(order.auditLog || []), `Order cancelled by customer (Stripe checkout abandoned) — ${new Date().toISOString()}`];
     await writeData(data);
-    console.log(`stripe-cancel: removed pending order ${id}`);
+    console.log(`stripe-cancel: cancelled pending order ${id}`);
     return res.status(200).json({ ok: true });
   }
   // ── END stripe-cancel ──────────────────────────────────────────────────────
