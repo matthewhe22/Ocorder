@@ -4299,6 +4299,7 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
   const [smtp, setSmtp] = useState(DEF_SMTP);
+  const [smtpPassPlaceholder, setSmtpPassPlaceholder] = useState(false);
   const [emailTpl, setEmailTpl] = useState(DEF_TPL);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState("");
@@ -4312,24 +4313,29 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
       .then(r => r.json())
       .then(d => {
         setOrderEmail(d.orderEmail || "Orders@tocs.co");
-        setSmtp({ ...DEF_SMTP, ...(d.smtp || {}) });
+        const s = d.smtp || {};
+        const masked = s.pass === "••••••••";
+        setSmtpPassPlaceholder(masked);
+        setSmtp({ ...DEF_SMTP, ...s, pass: masked ? "" : (s.pass || "") });
         setEmailTpl({ ...DEF_TPL, ...(d.emailTemplate || {}) });
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  const updSmtp = (k, v) => { setSmtp(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
+  const updSmtp = (k, v) => { setSmtp(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); if (k === "pass") setSmtpPassPlaceholder(false); };
   const updTpl  = (k, v) => { setEmailTpl(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
 
   const save = async () => {
     setSaveErr(""); setTestResult(null);
     try {
+      const smtpPayload = { ...smtp };
+      if (!smtpPayload.pass && smtpPassPlaceholder) delete smtpPayload.pass;
       const r = await fetch("/api/config/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({
-          orderEmail, smtp,
+          orderEmail, smtp: smtpPayload,
           emailTemplate: {
             ...emailTpl,
             adminNotificationSubject: (emailTpl.adminNotificationSubject || "").trim(),
@@ -4405,7 +4411,8 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label className="f-label">Password</label>
           <div className="pw-wrap">
-            <input className="f-input" type={showPass ? "text" : "password"} placeholder="App password or account password"
+            <input className="f-input" type={showPass ? "text" : "password"}
+              placeholder={smtpPassPlaceholder ? "leave blank to keep saved password" : "App password or account password"}
               value={smtp.pass} onChange={e => updSmtp("pass", e.target.value)} style={{ paddingRight: "42px" }}/>
             <button className="pw-toggle" type="button" onClick={() => setShowPass(p => !p)}>
               <Ic n={showPass ? "eyeOff" : "eye"} s={16}/>
