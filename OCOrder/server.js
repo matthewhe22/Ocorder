@@ -1289,9 +1289,10 @@ async function handler(req, res) {
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const cfg = readConfig();
     const smtp = cfg.smtp || {};
-    const pd = cfg.paymentDetails || {};
-    const et = cfg.emailTemplate || {};
-    const pm = cfg.paymentMethods || {};
+    const pd   = cfg.paymentDetails || {};
+    const et   = cfg.emailTemplate  || {};
+    const pm   = cfg.paymentMethods || {};
+    const sp   = cfg.sharepoint     || {};
     return json(res, 200, {
       orderEmail: cfg.orderEmail || "Orders@tocs.co",
       logo: cfg.logo || "",
@@ -1305,6 +1306,22 @@ async function handler(req, res) {
         adminNotificationSubject: et.adminNotificationSubject || "New Order — {orderType} #{orderId}",
         adminNotificationIntro:   et.adminNotificationIntro   || "A new order has been placed.",
       },
+      sharepoint: {
+        tenantId:     sp.tenantId     || "",
+        clientId:     sp.clientId     || "",
+        clientSecret: sp.clientSecret ? "••••••••" : "",
+        siteId:       sp.siteId       || "",
+        folderPath:   sp.folderPath   || "Top Owners Corporation Solution/ORDER DATABASE",
+      },
+      stripe: {
+        secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
+        publishableKey: cfg.stripe?.publishableKey || "",
+      },
+      piq: {
+        baseUrl:      cfg.piq?.baseUrl      || "https://tocs.propertyiq.com.au",
+        clientId:     cfg.piq?.clientId     || "",
+        clientSecret: cfg.piq?.clientSecret ? "••••••••" : "",
+      },
     });
   }
 
@@ -1313,7 +1330,7 @@ async function handler(req, res) {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const body2 = await readBody(req, res);
-    const { orderEmail, smtp, paymentDetails, emailTemplate, paymentMethods, logo } = body2;
+    const { orderEmail, smtp, paymentDetails, emailTemplate, paymentMethods, logo, sharepoint, stripe, piq } = body2;
     const cfg = readConfig();
     if (logo !== undefined) {
       if (typeof logo !== "string") return json(res, 400, { error: "logo must be a string." });
@@ -1334,7 +1351,8 @@ async function handler(req, res) {
         cfg.smtp.port = p;
       }
       if (smtp.user !== undefined) cfg.smtp.user = stripCRLF(smtp.user);
-      if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass; // ignore masked placeholder
+      // Guard: never overwrite a saved password with a blank or masked placeholder
+      if (smtp.pass !== undefined && smtp.pass !== "••••••••" && smtp.pass !== "") cfg.smtp.pass = smtp.pass;
     }
     if (paymentDetails && typeof paymentDetails === "object") {
       const sanitised = {};
@@ -1354,6 +1372,25 @@ async function handler(req, res) {
       cfg.paymentMethods = cfg.paymentMethods || {};
       if (typeof paymentMethods.bankEnabled  === "boolean") cfg.paymentMethods.bankEnabled  = paymentMethods.bankEnabled;
       if (typeof paymentMethods.payidEnabled === "boolean") cfg.paymentMethods.payidEnabled = paymentMethods.payidEnabled;
+    }
+    if (sharepoint && typeof sharepoint === "object") {
+      cfg.sharepoint = cfg.sharepoint || {};
+      if (sharepoint.tenantId   !== undefined) cfg.sharepoint.tenantId   = sharepoint.tenantId;
+      if (sharepoint.clientId   !== undefined) cfg.sharepoint.clientId   = sharepoint.clientId;
+      if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••" && sharepoint.clientSecret !== "") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
+      if (sharepoint.siteId      !== undefined) cfg.sharepoint.siteId     = sharepoint.siteId;
+      if (sharepoint.folderPath  !== undefined) cfg.sharepoint.folderPath = sharepoint.folderPath;
+    }
+    if (stripe && typeof stripe === "object") {
+      cfg.stripe = cfg.stripe || {};
+      if (stripe.secretKey      !== undefined && stripe.secretKey      !== "••••••••" && stripe.secretKey      !== "") cfg.stripe.secretKey      = stripe.secretKey;
+      if (stripe.publishableKey !== undefined) cfg.stripe.publishableKey = stripe.publishableKey;
+    }
+    if (piq && typeof piq === "object") {
+      cfg.piq = cfg.piq || {};
+      if (piq.baseUrl      !== undefined) cfg.piq.baseUrl      = piq.baseUrl;
+      if (piq.clientId     !== undefined) cfg.piq.clientId     = piq.clientId;
+      if (piq.clientSecret !== undefined && piq.clientSecret !== "••••••••" && piq.clientSecret !== "") cfg.piq.clientSecret = piq.clientSecret;
     }
     writeConfig(cfg);
     return json(res, 200, { ok: true });
