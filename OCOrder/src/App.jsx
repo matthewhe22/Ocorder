@@ -2184,6 +2184,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [form, setForm] = useState({});
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [orderFilter, setOrderFilter] = useState({ text: "", status: "", category: "", plan: "", lot: "" });
+  const [checkingAllPiq, setCheckingAllPiq] = useState(false);
   const [sendCertModal, setSendCertModal] = useState(null); // { orderId, order }
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
@@ -3130,6 +3131,32 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <h2 className="section-tt">Orders</h2>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <span className="badge bg-b">{filteredOrders.length}/{data.orders.length}</span>
+              <button className="btn btn-out" style={{ padding: "6px 12px", fontSize: "0.72rem" }}
+                disabled={checkingAllPiq}
+                onClick={async () => {
+                  setCheckingAllPiq(true);
+                  try {
+                    const r = await fetch("/api/orders?action=poll-piq", { headers: { "Authorization": "Bearer " + adminToken } });
+                    const d = await r.json();
+                    if (!r.ok) { showAdminToast("err", d.error || "PIQ check failed."); return; }
+                    const msg = d.confirmed > 0
+                      ? `PIQ check done: ${d.checked} order(s) checked, ${d.confirmed} payment(s) confirmed.`
+                      : d.checked > 0
+                        ? `PIQ check done: ${d.checked} order(s) checked, no new payments.`
+                        : "No pending PIQ orders to check.";
+                    showAdminToast("ok", msg);
+                    if (d.confirmed > 0) {
+                      const rd = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } });
+                      if (rd.ok) { const fresh = await rd.json(); setData(fresh); }
+                    }
+                  } catch { showAdminToast("err", "PIQ check failed — network error."); }
+                  finally { setCheckingAllPiq(false); }
+                }}>
+                {checkingAllPiq
+                  ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
+                  : <><Ic n="refresh" s={13}/> Check PIQ</>
+                }
+              </button>
               {data.orders.length > 0 && (
                 <button className="btn btn-out" style={{ padding: "6px 12px", fontSize: "0.72rem" }}
                   onClick={async () => {
