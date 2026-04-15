@@ -225,15 +225,15 @@ export async function detectPiqPayment(cfg, piqLotId, orderId) {
 }
 
 /**
- * List all buildings in the PIQ tenant (single page, max 100).
+ * List all buildings in the PIQ tenant (single page, max 500).
  * Returns { buildings: [{ piqBuildingId, splan, name }], warning? }
  *
  * Single-page only — avoids Vercel 10s timeout with multiple round-trips.
- * If exactly 100 results are returned, a warning is set (list may be incomplete).
+ * If exactly 500 results are returned, a warning is set (list may be incomplete).
  */
 export async function getAllPiqBuildings(cfg) {
   const { access_token, baseUrl } = await getPiqToken(cfg);
-  const result = await piqGet(access_token, baseUrl, "/buildings", { number: 100 });
+  const result = await piqGet(access_token, baseUrl, "/buildings", { number: 500 });
   const list   = Array.isArray(result) ? result : (result?.data || []);
 
   const buildings = list.map(b => ({
@@ -245,8 +245,8 @@ export async function getAllPiqBuildings(cfg) {
   let warning = null;
   if (buildings.length === 0) {
     warning = "No buildings returned from PIQ — verify API access and credentials.";
-  } else if (buildings.length === 100) {
-    warning = "Only the first 100 buildings were returned. If your account has more, some may not appear.";
+  } else if (buildings.length === 500) {
+    warning = "Only the first 500 buildings were returned. If your account has more, some may not appear.";
   }
 
   return { buildings, warning };
