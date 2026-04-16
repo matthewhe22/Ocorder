@@ -107,21 +107,37 @@ export default async function handler(req, res) {
       if (!planId && !bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId." });
 
       const cfg = await readConfig();
-      let building;
+      let building, resolvedId;
 
       if (bodyBuildingId) {
-        building = await getPiqBuildingById(cfg, bodyBuildingId);
+        resolvedId = bodyBuildingId;
+        building   = await getPiqBuildingById(cfg, bodyBuildingId);
       } else {
-        building = await getPiqBuilding(cfg, planId);
+        // List search by splan to get the building ID, then fetch individual record
+        const listBuilding = await getPiqBuilding(cfg, planId);
+        if (!listBuilding) return res.status(200).json({ ok: false, error: `Building not found in PIQ for plan "${planId}".` });
+        resolvedId = listBuilding.id;
+        // Individual endpoint has more detail (e.g. address) than the list endpoint
+        building = await getPiqBuildingById(cfg, resolvedId);
+        if (!building) building = listBuilding; // last-resort fallback to list data
       }
 
       if (!building) return res.status(200).json({ ok: false, error: "Building not found in PIQ." });
 
+      const address = extractPiqAddress(building);
+
+      // Always include _debugKeys so admins can see what fields PIQ returned when address is empty
+      const _debugKeys = Object.entries(building)
+        .filter(([, v]) => v !== null && v !== undefined && typeof v !== "object")
+        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+        .join(", ");
+
       return res.status(200).json({
         ok:            true,
-        piqBuildingId: bodyBuildingId || building.id,
+        piqBuildingId: resolvedId,
         buildingName:  building.buildingName || building.name || "",
-        address:       extractPiqAddress(building),
+        address,
+        _debugKeys,
       });
     } catch (err) {
       return res.status(200).json({ ok: false, error: err.message });

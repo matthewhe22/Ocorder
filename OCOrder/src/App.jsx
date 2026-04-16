@@ -2469,6 +2469,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     const plans = (data.strataPlans || []).map(p => ({ ...p }));
     const updated = [];
     let skipped = 0;
+    let firstSkippedDebug = null;
 
     for (let i = 0; i < plansToFill.length; i++) {
       const plan = plansToFill[i];
@@ -2493,6 +2494,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           }
         } else {
           skipped++;
+          // Capture debug keys from first skipped building to show in modal
+          if (d._debugKeys && !firstSkippedDebug) firstSkippedDebug = { planId: plan.id, keys: d._debugKeys };
         }
       } catch {
         skipped++;
@@ -2500,7 +2503,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
 
     if (updated.length === 0) {
-      setPiqFillModal(m => ({ ...m, phase: "done", skipped }));
+      setPiqFillModal(m => ({ ...m, phase: "done", skipped, debugInfo: firstSkippedDebug }));
       return;
     }
 
@@ -3630,10 +3633,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     </div>
                   )}
                   {!piqFillModal.error && (piqFillModal.updated || []).length === 0 && (
-                    <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#92400e" }}>
-                      {piqFillModal.total === 0
-                        ? "All buildings already have an address — nothing to update."
-                        : `No address data returned from PIQ for ${piqFillModal.skipped || 0} building(s) checked. PIQ may not store a separate address field, or these buildings have no PIQ match.`}
+                    <div>
+                      <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#92400e", marginBottom: piqFillModal.debugInfo ? "10px" : 0 }}>
+                        {piqFillModal.total === 0
+                          ? "All buildings already have an address — nothing to update."
+                          : `No address data returned from PIQ for ${piqFillModal.skipped || 0} building(s) checked. PIQ may not store a separate address field, or these buildings have no PIQ match.`}
+                      </div>
+                      {piqFillModal.debugInfo && (
+                        <div style={{ background:"#f8fafc", border:"1px solid #cbd5e1", borderRadius:"6px", padding:"10px 14px", fontSize:"0.75rem", color:"#475569" }}>
+                          <strong style={{ display:"block", marginBottom:"4px" }}>PIQ fields returned for {piqFillModal.debugInfo.planId}:</strong>
+                          <code style={{ wordBreak:"break-all", whiteSpace:"pre-wrap" }}>{piqFillModal.debugInfo.keys || "(none)"}</code>
+                        </div>
+                      )}
                     </div>
                   )}
                   {!piqFillModal.error && (piqFillModal.updated || []).length > 0 && (

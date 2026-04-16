@@ -266,14 +266,41 @@ export async function getPiqBuildingById(cfg, buildingId) {
 
 /**
  * Extract a normalised address string from a raw PIQ building object.
- * PIQ may return address as a string or as a structured { street, suburb, state, postcode } object.
+ * Tries every plausible field name and structure — the exact shape varies by PIQ tenant version.
  */
 export function extractPiqAddress(building) {
-  const raw = building?.address ?? building?.buildingAddress ?? building?.propertyAddress ?? building?.streetAddress ?? null;
-  if (!raw) return "";
-  if (typeof raw === "string") return raw.trim();
-  if (typeof raw === "object") {
-    return [raw.street, raw.suburb, raw.state, raw.postcode].filter(Boolean).join(", ");
+  if (!building) return "";
+
+  // 1. Try every known top-level address field (string or nested object)
+  const topKeys = [
+    "address", "buildingAddress", "propertyAddress", "streetAddress",
+    "physicalAddress", "mailingAddress", "fullAddress", "location",
+    "propertyDetails",
+  ];
+  for (const key of topKeys) {
+    const val = building[key];
+    if (!val) continue;
+    if (typeof val === "string" && val.trim()) return val.trim();
+    if (typeof val === "object") {
+      // Try every plausible sub-key combination
+      const line1 = val.line1 || val.street || val.streetAddress || val.address1 ||
+        [val.streetNumber || val.houseNumber || "", val.streetName || val.street || ""].filter(Boolean).join(" ") || "";
+      const line2 = val.line2 || val.address2 || val.suburb || val.locality || val.city || val.town || "";
+      const state  = val.state || val.stateCode || val.stateTerritory || "";
+      const post   = val.postcode || val.postalCode || val.zipCode || val.zip || "";
+      const parts  = [line1, line2, state, post].filter(Boolean);
+      if (parts.length) return parts.join(", ");
+    }
   }
-  return "";
+
+  // 2. Try composing from separate top-level scalar fields
+  const streetNum  = building.streetNumber  || building.houseNumber  || "";
+  const streetName = building.streetName    || building.street       || "";
+  const suburb     = building.suburb        || building.city         || building.locality || building.town || "";
+  const state      = building.state         || building.stateCode    || building.stateTerritory || "";
+  const postcode   = building.postcode      || building.postalCode   || building.zipCode || "";
+
+  const street = [streetNum, streetName].filter(Boolean).join(" ");
+  const parts  = [street, suburb, state, postcode].filter(Boolean);
+  return parts.join(", ");
 }
