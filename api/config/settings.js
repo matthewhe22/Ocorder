@@ -121,18 +121,20 @@ export default async function handler(req, res) {
 
       const cfg = await readConfig();
 
-      let piqBuildingId, buildingName;
+      let piqBuildingId, buildingName, buildingAddress;
 
       if (planId) {
         // Original path: find building by splan
         const building = await getPiqBuilding(cfg, planId);
         if (!building) return res.status(404).json({ error: `No PIQ building found for splan "${planId}".` });
-        piqBuildingId = building.id;
-        buildingName  = building.buildingName || building.name;
+        piqBuildingId   = building.id;
+        buildingName    = building.buildingName || building.name;
+        buildingAddress = building.address || building.buildingAddress || building.propertyAddress || null;
       } else {
         // New path: piqBuildingId supplied directly — skip splan lookup
-        piqBuildingId = bodyBuildingId;
-        buildingName  = undefined; // caller already has the name from list-piq-buildings
+        piqBuildingId   = bodyBuildingId;
+        buildingName    = undefined; // caller already has the name from list-piq-buildings
+        buildingAddress = undefined; // caller already has the address from list-piq-buildings
       }
 
       // Fetch schedules (Owner Corporations)
@@ -156,7 +158,8 @@ export default async function handler(req, res) {
       }));
 
       const response = { ok: true, piqBuildingId, schedules, lots };
-      if (buildingName !== undefined) response.buildingName = buildingName;
+      if (buildingName    !== undefined) response.buildingName    = buildingName;
+      if (buildingAddress !== undefined && buildingAddress !== null) response.address = buildingAddress;
       return res.status(200).json(response);
     } catch (err) {
       return res.status(200).json({ ok: false, error: err.message });

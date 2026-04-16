@@ -240,6 +240,7 @@ export async function getAllPiqBuildings(cfg) {
     piqBuildingId: b.id,
     splan:         b.splan || null,
     name:          b.buildingName || b.name || `Building ${b.id}`,
+    address:       b.address || b.buildingAddress || b.propertyAddress || "",
   }));
 
   let warning = null;

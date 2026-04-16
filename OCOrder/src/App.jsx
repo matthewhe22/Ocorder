@@ -2190,6 +2190,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
   const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
   const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { phase, templatePlanId, rows, warning, error, saveErr }
+  const [piqFillModal, setPiqFillModal] = useState(null);       // { phase, updated, error, saveErr }
   const [planSort, setPlanSort] = useState({ col: null, dir: "asc" });
   const [selectedPlanIds, setSelectedPlanIds] = useState(new Set());
   const [adminToast, setAdminToast] = useState(null);
@@ -2351,7 +2352,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         name:            b.name,
         piqBuildingId:   b.piqBuildingId,
         active:          true,
-        address:         "",
+        address:         b.address || "",
         ownerCorps:      {},
         lots:            [],
         products:        JSON.parse(JSON.stringify(templatePlan.products        || [])),
@@ -2396,6 +2397,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         // Merge OCs
         const plan = updatedPlans[i];
         plan.piqBuildingId = d.piqBuildingId;
+        if (d.address) plan.address = d.address;
         const existingOCs = plan.ownerCorps || {};
         for (const s of (d.schedules || [])) {
           const key = Object.keys(existingOCs).find(k =>
@@ -2451,6 +2453,66 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       }
     } catch (e) {
       setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.message }));
+    }
+  };
+
+  // ── Update missing building info: fill address (and any future fields) from PIQ ─
+  const fillMissingBuildingInfo = async () => {
+    setPiqFillModal({ phase: "running", updated: [], error: null, saveErr: null });
+
+    // Fetch all PIQ buildings (with address from the previous fix)
+    let buildings = [];
+    try {
+      const r = await fetch("/api/config/settings?action=list-piq-buildings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || "Failed to fetch buildings from PIQ.");
+      buildings = d.buildings || [];
+    } catch (err) {
+      setPiqFillModal(m => ({ ...m, phase: "done", error: err.message }));
+      return;
+    }
+
+    // Match each plan to a PIQ building and fill any missing fields
+    const plans = (data.strataPlans || []).map(p => ({ ...p }));
+    const updated = [];
+
+    for (const plan of plans) {
+      const match = buildings.find(b =>
+        (plan.piqBuildingId != null && plan.piqBuildingId === b.piqBuildingId) ||
+        (b.splan && plan.id.toLowerCase() === b.splan.trim().toLowerCase())
+      );
+      if (!match) continue;
+
+      let changed = false;
+      if (!plan.address && match.address) { plan.address = match.address; changed = true; }
+
+      if (changed) updated.push({ id: plan.id, name: plan.name, address: plan.address });
+    }
+
+    if (updated.length === 0) {
+      setPiqFillModal(m => ({ ...m, phase: "done" }));
+      return;
+    }
+
+    try {
+      const sr = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ plans }),
+      });
+      if (sr.ok) {
+        setData(p => ({ ...p, strataPlans: plans }));
+        setPiqFillModal(m => ({ ...m, phase: "done", updated }));
+      } else {
+        const e = await sr.json().catch(() => ({}));
+        setPiqFillModal(m => ({ ...m, phase: "done", updated, saveErr: e.error || "Save failed." }));
+      }
+    } catch (e) {
+      setPiqFillModal(m => ({ ...m, phase: "done", updated, saveErr: e.message }));
     }
   };
 
@@ -2906,6 +2968,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <div style={{ display:"flex", gap:"8px" }}>
               <button className="btn btn-out" style={{ padding:"8px 16px", fontSize:"0.72rem", background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={syncAllFromPiq}>
                 <Ic n="cloud" s={13}/> Sync All from PIQ
+              </button>
+              <button className="btn btn-out" style={{ padding:"8px 16px", fontSize:"0.72rem", background:"#f0f9ff", color:"#0369a1", border:"1px solid #7dd3fc" }} onClick={fillMissingBuildingInfo}>
+                <Ic n="building" s={13}/> Update missing building info
               </button>
               <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
                 <Ic n="plus" s={13}/> Add Plan
@@ -3525,6 +3590,69 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIQ Fill Missing Building Info Modal */}
+      {piqFillModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"520px", maxHeight:"80vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ background:"#1a5fa8", borderRadius:"10px 10px 0 0", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Update Missing Building Info</span>
+              {piqFillModal.phase === "done" && (
+                <button onClick={() => setPiqFillModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>
+              )}
+            </div>
+            <div style={{ padding:"20px" }}>
+              {piqFillModal.phase === "running" && (
+                <div style={{ textAlign:"center", color:"var(--muted)", padding:"24px 0" }}>Checking PIQ for missing building addresses…</div>
+              )}
+              {piqFillModal.phase === "done" && (
+                <div>
+                  {piqFillModal.error && (
+                    <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#dc2626", marginBottom:"12px" }}>
+                      ✗ {piqFillModal.error}
+                    </div>
+                  )}
+                  {!piqFillModal.error && (piqFillModal.updated || []).length === 0 && (
+                    <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a" }}>
+                      No missing addresses found — all matched plans already have an address, or no PIQ match was available.
+                    </div>
+                  )}
+                  {!piqFillModal.error && (piqFillModal.updated || []).length > 0 && (
+                    <div>
+                      <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600, marginBottom:"14px" }}>
+                        ✓ Updated address for {piqFillModal.updated.length} plan{piqFillModal.updated.length !== 1 ? "s" : ""}.
+                      </div>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                        <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
+                          <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
+                          <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Address filled in</th>
+                        </tr></thead>
+                        <tbody>
+                          {(piqFillModal.updated || []).map(u => (
+                            <tr key={u.id} style={{ borderBottom:"1px solid var(--border2)" }}>
+                              <td style={{ padding:"7px 8px" }}>
+                                <strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{u.id}</strong>
+                                <br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{u.name}</span>
+                              </td>
+                              <td style={{ padding:"7px 8px", fontSize:"0.78rem" }}>{u.address}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {piqFillModal.saveErr && (
+                    <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqFillModal.saveErr}</div>
+                  )}
+                  <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
+                    <button className="btn btn-blk" onClick={() => setPiqFillModal(null)}>Close</button>
+                  </div>
                 </div>
               )}
             </div>
