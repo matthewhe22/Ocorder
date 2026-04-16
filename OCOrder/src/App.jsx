@@ -2351,7 +2351,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         name:            b.name,
         piqBuildingId:   b.piqBuildingId,
         active:          true,
-        address:         "",
+        address:         b.address || "",
         ownerCorps:      {},
         lots:            [],
         products:        JSON.parse(JSON.stringify(templatePlan.products        || [])),
@@ -2396,6 +2396,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         // Merge OCs
         const plan = updatedPlans[i];
         plan.piqBuildingId = d.piqBuildingId;
+        if (d.address) plan.address = d.address;
         const existingOCs = plan.ownerCorps || {};
         for (const s of (d.schedules || [])) {
           const key = Object.keys(existingOCs).find(k =>
