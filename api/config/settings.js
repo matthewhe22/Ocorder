@@ -1,5 +1,5 @@
 import { readConfig, writeConfig, validToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
-import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots, getAllPiqBuildings } from "../_lib/piq.js";
+import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots, getAllPiqBuildings, getPiqBuildingById, extractPiqAddress } from "../_lib/piq.js";
 import Stripe from "stripe";
 
 export default async function handler(req, res) {
@@ -92,6 +92,37 @@ export default async function handler(req, res) {
       const data = await resp.json();
       const count = Array.isArray(data) ? data.length : (data?.data?.length ?? 0);
       return res.status(200).json({ ok: true, message: `Connected — ${count} building(s) visible` });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
+  // POST /api/config/settings?action=fetch-piq-building-address
+  // Body: { piqBuildingId: 123 }  OR  { planId: "PS726461P" }
+  // Lightweight: fetches only the building record (no schedules, no lots).
+  // Returns: { ok, piqBuildingId, buildingName, address }
+  if (req.method === "POST" && req.query?.action === "fetch-piq-building-address") {
+    try {
+      const { planId, piqBuildingId: bodyBuildingId } = req.body || {};
+      if (!planId && !bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId." });
+
+      const cfg = await readConfig();
+      let building;
+
+      if (bodyBuildingId) {
+        building = await getPiqBuildingById(cfg, bodyBuildingId);
+      } else {
+        building = await getPiqBuilding(cfg, planId);
+      }
+
+      if (!building) return res.status(200).json({ ok: false, error: "Building not found in PIQ." });
+
+      return res.status(200).json({
+        ok:            true,
+        piqBuildingId: bodyBuildingId || building.id,
+        buildingName:  building.buildingName || building.name || "",
+        address:       extractPiqAddress(building),
+      });
     } catch (err) {
       return res.status(200).json({ ok: false, error: err.message });
     }

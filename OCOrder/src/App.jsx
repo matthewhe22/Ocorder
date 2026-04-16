@@ -2456,45 +2456,51 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
 
-  // ── Update missing building info: fill address (and any future fields) from PIQ ─
+  // ── Update missing building info: fetch address per-building from PIQ detail endpoint ─
   const fillMissingBuildingInfo = async () => {
-    setPiqFillModal({ phase: "running", updated: [], error: null, saveErr: null });
-
-    // Fetch all PIQ buildings (with address from the previous fix)
-    let buildings = [];
-    try {
-      const r = await fetch("/api/config/settings?action=list-piq-buildings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({}),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d.error || "Failed to fetch buildings from PIQ.");
-      buildings = d.buildings || [];
-    } catch (err) {
-      setPiqFillModal(m => ({ ...m, phase: "done", error: err.message }));
+    const plansToFill = (data.strataPlans || []).filter(p => !p.address);
+    if (plansToFill.length === 0) {
+      setPiqFillModal({ phase: "done", current: 0, total: 0, updated: [], skipped: 0, error: null, saveErr: null });
       return;
     }
 
-    // Match each plan to a PIQ building and fill any missing fields
+    setPiqFillModal({ phase: "running", current: 0, total: plansToFill.length, updated: [], skipped: 0, error: null, saveErr: null });
+
     const plans = (data.strataPlans || []).map(p => ({ ...p }));
     const updated = [];
+    let skipped = 0;
 
-    for (const plan of plans) {
-      const match = buildings.find(b =>
-        (plan.piqBuildingId != null && plan.piqBuildingId === b.piqBuildingId) ||
-        (b.splan && plan.id.toLowerCase() === b.splan.trim().toLowerCase())
-      );
-      if (!match) continue;
-
-      let changed = false;
-      if (!plan.address && match.address) { plan.address = match.address; changed = true; }
-
-      if (changed) updated.push({ id: plan.id, name: plan.name, address: plan.address });
+    for (let i = 0; i < plansToFill.length; i++) {
+      const plan = plansToFill[i];
+      setPiqFillModal(m => ({ ...m, current: i + 1 }));
+      try {
+        // piqBuildingId enables a direct /buildings/{id} lookup (no splan search needed)
+        const body = plan.piqBuildingId != null
+          ? { piqBuildingId: plan.piqBuildingId }
+          : { planId: plan.id };
+        const r = await fetch("/api/config/settings?action=fetch-piq-building-address", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (d.ok && d.address) {
+          const idx = plans.findIndex(p => p.id === plan.id);
+          if (idx >= 0) {
+            plans[idx].address = d.address;
+            if (d.piqBuildingId && !plans[idx].piqBuildingId) plans[idx].piqBuildingId = d.piqBuildingId;
+            updated.push({ id: plan.id, name: plan.name, address: d.address });
+          }
+        } else {
+          skipped++;
+        }
+      } catch {
+        skipped++;
+      }
     }
 
     if (updated.length === 0) {
-      setPiqFillModal(m => ({ ...m, phase: "done" }));
+      setPiqFillModal(m => ({ ...m, phase: "done", skipped }));
       return;
     }
 
@@ -2506,13 +2512,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       });
       if (sr.ok) {
         setData(p => ({ ...p, strataPlans: plans }));
-        setPiqFillModal(m => ({ ...m, phase: "done", updated }));
+        setPiqFillModal(m => ({ ...m, phase: "done", updated, skipped }));
       } else {
         const e = await sr.json().catch(() => ({}));
-        setPiqFillModal(m => ({ ...m, phase: "done", updated, saveErr: e.error || "Save failed." }));
+        setPiqFillModal(m => ({ ...m, phase: "done", updated, skipped, saveErr: e.error || "Save failed." }));
       }
     } catch (e) {
-      setPiqFillModal(m => ({ ...m, phase: "done", updated, saveErr: e.message }));
+      setPiqFillModal(m => ({ ...m, phase: "done", updated, skipped, saveErr: e.message }));
     }
   };
 
@@ -3609,7 +3615,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             </div>
             <div style={{ padding:"20px" }}>
               {piqFillModal.phase === "running" && (
-                <div style={{ textAlign:"center", color:"var(--muted)", padding:"24px 0" }}>Checking PIQ for missing building addresses…</div>
+                <div style={{ textAlign:"center", color:"var(--muted)", padding:"24px 0" }}>
+                  <div style={{ marginBottom:"8px" }}>Fetching address from PIQ…</div>
+                  <div style={{ fontSize:"0.9rem", fontWeight:600, color:"#1a5fa8" }}>
+                    {piqFillModal.current} / {piqFillModal.total} buildings checked
+                  </div>
+                </div>
               )}
               {piqFillModal.phase === "done" && (
                 <div>
@@ -3619,14 +3630,17 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     </div>
                   )}
                   {!piqFillModal.error && (piqFillModal.updated || []).length === 0 && (
-                    <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a" }}>
-                      No missing addresses found — all matched plans already have an address, or no PIQ match was available.
+                    <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#92400e" }}>
+                      {piqFillModal.total === 0
+                        ? "All buildings already have an address — nothing to update."
+                        : `No address data returned from PIQ for ${piqFillModal.skipped || 0} building(s) checked. PIQ may not store a separate address field, or these buildings have no PIQ match.`}
                     </div>
                   )}
                   {!piqFillModal.error && (piqFillModal.updated || []).length > 0 && (
                     <div>
                       <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600, marginBottom:"14px" }}>
                         ✓ Updated address for {piqFillModal.updated.length} plan{piqFillModal.updated.length !== 1 ? "s" : ""}.
+                        {(piqFillModal.skipped || 0) > 0 && <span style={{ fontWeight:400, marginLeft:"8px", color:"#92400e" }}>{piqFillModal.skipped} could not be matched or had no address in PIQ.</span>}
                       </div>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
                         <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>

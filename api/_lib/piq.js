@@ -231,8 +231,7 @@ export async function detectPiqPayment(cfg, piqLotId, orderId) {
  * Single-page only — avoids Vercel 10s timeout with multiple round-trips.
  * If exactly 500 results are returned, a warning is set (list may be incomplete).
  */
-export async function getAllPiqBuildings(cfg) {
-  const { access_token, baseUrl } = await getPiqToken(cfg);
+export async function getAllPiqBuildings(cfg) {  const { access_token, baseUrl } = await getPiqToken(cfg);
   const result = await piqGet(access_token, baseUrl, "/buildings", { number: 500 });
   const list   = Array.isArray(result) ? result : (result?.data || []);
 
@@ -251,4 +250,30 @@ export async function getAllPiqBuildings(cfg) {
   }
 
   return { buildings, warning };
+}
+
+/**
+ * Fetch a single building by its PIQ building ID.
+ * Uses GET /buildings/{id} — returns the full building object (more fields than the list endpoint).
+ * @returns {object|null} raw building object or null on failure
+ */
+export async function getPiqBuildingById(cfg, buildingId) {
+  const { access_token, baseUrl } = await getPiqToken(cfg);
+  const result = await piqGet(access_token, baseUrl, `/buildings/${buildingId}`);
+  // Individual endpoint wraps in { data: building, links: {} }; some versions return the object directly
+  return result?.data || result || null;
+}
+
+/**
+ * Extract a normalised address string from a raw PIQ building object.
+ * PIQ may return address as a string or as a structured { street, suburb, state, postcode } object.
+ */
+export function extractPiqAddress(building) {
+  const raw = building?.address ?? building?.buildingAddress ?? building?.propertyAddress ?? building?.streetAddress ?? null;
+  if (!raw) return "";
+  if (typeof raw === "string") return raw.trim();
+  if (typeof raw === "object") {
+    return [raw.street, raw.suburb, raw.state, raw.postcode].filter(Boolean).join(", ");
+  }
+  return "";
 }
