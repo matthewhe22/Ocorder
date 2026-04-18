@@ -741,11 +741,22 @@ async function handler(req, res) {
       lotId: raw.lotId,
       orderCategory: orderCategoryNorm,
       contactInfo: {
-        name:        stripCtrl(raw.contactInfo?.name  || ""),
-        email:       stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()),
-        phone:       stripCtrl(raw.contactInfo?.phone || ""),
-        companyName: stripCtrl(raw.contactInfo?.companyName || ""),
-        ocReference: stripCtrl(raw.contactInfo?.ocReference || ""),
+        name:          stripCtrl(raw.contactInfo?.name  || "").slice(0, 200),
+        email:         stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()).slice(0, 200),
+        phone:         stripCtrl(raw.contactInfo?.phone || "").slice(0, 50),
+        companyName:   stripCtrl(raw.contactInfo?.companyName || "").slice(0, 200),
+        ownerName:     stripCtrl(raw.contactInfo?.ownerName   || "").slice(0, 200),
+        ocReference:   stripCtrl(raw.contactInfo?.ocReference || "").slice(0, 100),
+        applicantType: ["agent", "owner"].includes(raw.contactInfo?.applicantType)
+                         ? raw.contactInfo.applicantType : "",
+        ...(raw.contactInfo?.shippingAddress && typeof raw.contactInfo.shippingAddress === "object" ? {
+          shippingAddress: {
+            street:   stripCtrl(String(raw.contactInfo.shippingAddress.street   || "")).slice(0, 200),
+            suburb:   stripCtrl(String(raw.contactInfo.shippingAddress.suburb   || "")).slice(0, 100),
+            state:    stripCtrl(String(raw.contactInfo.shippingAddress.state    || "")).slice(0, 50),
+            postcode: stripCtrl(String(raw.contactInfo.shippingAddress.postcode || "")).slice(0, 10),
+          },
+        } : {}),
       },
       status: raw.payment === "stripe" ? "Awaiting Stripe Payment"
             : raw.payment === "card" ? "Processing"
