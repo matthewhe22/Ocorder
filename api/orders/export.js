@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   ];
 
   const csvEsc = v => {
-    const s = String(v);
+    const s = String(v).replace(/[\r\n]+/g, " ");
     const safe = /^[=+\-@\t]/.test(s) ? `'${s}` : s;
     return `"${safe.replace(/"/g, '""')}"`;
   };

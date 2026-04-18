@@ -30,8 +30,8 @@ export default async function handler(req, res) {
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.warn("STRIPE_WEBHOOK_SECRET is not set — skipping webhook signature verification (graceful no-op).");
-    return res.status(200).json({ received: true, skipped: true });
+    console.error("STRIPE_WEBHOOK_SECRET is not set — rejecting webhook to prevent unauthenticated payment confirmation.");
+    return res.status(403).json({ error: "Webhook secret not configured." });
   }
 
   // Read raw body for Stripe signature verification

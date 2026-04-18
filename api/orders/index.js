@@ -137,7 +137,7 @@ export default async function handler(req, res) {
     // CRIT-2: Sanitise total
     order.total = Math.max(0, Number(order.total) || 0);
 
-    // CRIT-2: Validate contact email
+    // CRIT-2: Validate and whitelist contactInfo fields
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!order.contactInfo?.email) {
       return res.status(400).json({ error: "Contact email is required." });
@@ -145,6 +145,28 @@ export default async function handler(req, res) {
     if (!EMAIL_RE.test(order.contactInfo.email)) {
       return res.status(400).json({ error: "Contact email is invalid." });
     }
+    if (order.contactInfo.applicantType && !["agent", "owner"].includes(order.contactInfo.applicantType)) {
+      return res.status(400).json({ error: "applicantType must be 'agent' or 'owner'." });
+    }
+    // Whitelist contactInfo to prevent arbitrary fields entering the database
+    const ci = order.contactInfo;
+    order.contactInfo = {
+      name:         String(ci.name         || "").slice(0, 200),
+      email:        String(ci.email        || "").slice(0, 200),
+      phone:        String(ci.phone        || "").slice(0, 50),
+      companyName:  String(ci.companyName  || "").slice(0, 200),
+      ownerName:    String(ci.ownerName    || "").slice(0, 200),
+      applicantType: ci.applicantType || "",
+      ocReference:  String(ci.ocReference  || "").slice(0, 100),
+      ...(ci.shippingAddress && typeof ci.shippingAddress === "object" ? {
+        shippingAddress: {
+          street:   String(ci.shippingAddress.street   || "").slice(0, 200),
+          suburb:   String(ci.shippingAddress.suburb   || "").slice(0, 100),
+          state:    String(ci.shippingAddress.state    || "").slice(0, 50),
+          postcode: String(ci.shippingAddress.postcode || "").slice(0, 10),
+        },
+      } : {}),
+    };
 
     // CRIT-2: Set status server-side
     if (order.payment === "stripe") {

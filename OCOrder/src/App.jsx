@@ -571,7 +571,7 @@ export default function App() {
     }
   }, [selPlan]);
 
-  // When lot number changes on an OC order, auto-assign that lot's OCs
+  // When lot number or plan changes on an OC order, auto-assign that lot's OCs
   useEffect(() => {
     if (!plan || orderCategory !== "oc") return;
     const trimmed = lotNumber.trim();
@@ -586,7 +586,7 @@ export default function App() {
       // Lot not found in mapping — keep all OCs selectable
       setSelectedOCs(Object.keys(plan.ownerCorps || {}));
     }
-  }, [lotNumber, orderCategory]);
+  }, [lotNumber, orderCategory, selPlan]);
 
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
 
