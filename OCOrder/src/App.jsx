@@ -2896,12 +2896,21 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         });
         lots = [...byNumber.values()];
       } else {
-        // Single sheet: if the plan has exactly one OC, auto-assign it to all lots
         const ws = wb.Sheets[wb.SheetNames[0]];
         const targetPlan = (data.strataPlans || []).find(p => p.id === targetPlanId);
         const ocIds = Object.keys(targetPlan?.ownerCorps || {});
-        const autoOcId = ocIds.length === 1 ? ocIds[0] : null;
-        lots = parseSheetLots(ws, autoOcId, 0);
+        if (ocIds.length === 1) {
+          // One OC already defined — auto-assign it to all lots
+          lots = parseSheetLots(ws, ocIds[0], 0);
+        } else if (ocIds.length === 0) {
+          // No OCs yet — create one from the sheet name (mirrors multi-sheet behaviour)
+          const ocId = "OC-1";
+          newOwnerCorps = { [ocId]: { name: wb.SheetNames[0].trim(), levy: 0 } };
+          lots = parseSheetLots(ws, ocId, 0);
+        } else {
+          // Multiple OCs — read OC assignment from the Excel column
+          lots = parseSheetLots(ws, null, 0);
+        }
       }
 
       if (!lots.length) { alert("No lots found in the file."); return; }
