@@ -1162,16 +1162,40 @@ async function handler(req, res) {
       const d = readData();
       const idx = d.strataPlans.findIndex(p => p.id === planId);
       if (idx === -1) return json(res, 404, { error: "Plan not found." });
-      const prevCount = d.strataPlans[idx].lots?.length || 0;
-      d.strataPlans[idx].lots = lots;
-      if (ownerCorps) d.strataPlans[idx].ownerCorps = ownerCorps;
+      // Merge ownerCorps non-destructively (add new, keep existing)
+      if (ownerCorps) {
+        const existing = d.strataPlans[idx].ownerCorps || {};
+        for (const [id, oc] of Object.entries(ownerCorps)) {
+          if (!existing[id]) existing[id] = oc;
+        }
+        d.strataPlans[idx].ownerCorps = existing;
+      }
+      // Merge lots by lot number (update existing, add new — never delete)
+      const VALID_TYPES = ["Residential", "Commercial", "Parking"];
+      const normNum = s => String(s || "").trim().toLowerCase();
+      const existingLots = d.strataPlans[idx].lots || [];
+      let added = 0, updated = 0;
+      for (const incoming of lots) {
+        if (!incoming.number) continue;
+        const type = VALID_TYPES.includes(incoming.type) ? incoming.type : (VALID_TYPES.includes(existingLots.find(l => normNum(l.number) === normNum(incoming.number))?.type) ? existingLots.find(l => normNum(l.number) === normNum(incoming.number)).type : "Residential");
+        const existIdx = existingLots.findIndex(l => normNum(l.number) === normNum(incoming.number));
+        if (existIdx >= 0) {
+          existingLots[existIdx].type = VALID_TYPES.includes(incoming.type) ? incoming.type : existingLots[existIdx].type;
+          if (incoming.ownerCorps?.length) existingLots[existIdx].ownerCorps = incoming.ownerCorps;
+          updated++;
+        } else {
+          existingLots.push({ ...incoming, type });
+          added++;
+        }
+      }
+      d.strataPlans[idx].lots = existingLots;
       const ocNote = ownerCorps ? `, ${Object.keys(ownerCorps).length} OCs` : "";
       d.strataPlans[idx].lotsImportLog = [
         ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)),
-        { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${lots.length} lots${ocNote}` },
+        { ts: new Date().toISOString(), action: "Lots imported", note: `+${added} new, ${updated} updated${ocNote}` },
       ];
       writeData(d);
-      return json(res, 200, { ok: true, count: lots.length, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined });
+      return json(res, 200, { ok: true, count: existingLots.length, added, updated, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined });
     }
     const { plans } = body;
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });

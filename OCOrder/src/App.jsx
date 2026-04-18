@@ -2844,6 +2844,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       // Map columns flexibly (case-insensitive, spaces allowed)
       const norm = s => String(s).toLowerCase().replace(/[\s_\-]/g, "");
+      const idBase = Date.now();
       const parseSheetLots = (ws, fixedOcId, baseIdx) => {
         const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
         const parsed = [];
@@ -2863,7 +2864,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             const ocRaw = get("Owner Corp IDs", "Owner Corp", "OC IDs", "OC", "Owner Corporation");
             ownerCorps = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
           }
-          parsed.push({ id: "L" + Date.now() + (baseIdx + idx), number, type: type || "Residential", ownerCorps });
+          const VALID_LOT_TYPES = ["Residential", "Commercial", "Parking"];
+          parsed.push({ id: "L" + idBase + (baseIdx + idx), number, type: VALID_LOT_TYPES.includes(type) ? type : "Residential", ownerCorps });
         });
         return parsed;
       };
@@ -2913,7 +2915,17 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         }
       }
 
-      if (!lots.length) { alert("No lots found in the file."); return; }
+      if (!lots.length) { alert("No lots found in the file. Check that the spreadsheet has a 'Lot Number' column."); return; }
+
+      // Warn if any OC IDs from the Excel column don't exist in the plan
+      const planOcIds = new Set(Object.keys(
+        (data.strataPlans || []).find(p => p.id === targetPlanId)?.ownerCorps || {}
+      ).concat(Object.keys(newOwnerCorps || {})));
+      const unknownOcIds = [...new Set(lots.flatMap(l => l.ownerCorps).filter(id => id && !planOcIds.has(id)))];
+      if (unknownOcIds.length) {
+        const proceed = window.confirm(`⚠ Warning: the following OC IDs in the file don't match any Owner Corporation in this plan:\n\n${unknownOcIds.join(", ")}\n\nThose lots will show "No OC assigned". Continue anyway?`);
+        if (!proceed) return;
+      }
 
       const ocMsg = newOwnerCorps
         ? "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
@@ -2932,9 +2944,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       });
       if (r.ok) {
         const rj = await r.json();
-        // Reload fresh data from server so local state matches what was persisted
-        const fresh = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } }).then(x => x.json());
-        if (fresh?.strataPlans) setData(p => ({ ...p, strataPlans: fresh.strataPlans }));
+        // Reload fresh data — failure here is non-fatal; stale state is better than crashing
+        try {
+          const fresh = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } }).then(x => x.json());
+          if (fresh?.strataPlans) setData(p => ({ ...p, strataPlans: fresh.strataPlans }));
+        } catch { /* UI will reflect server state on next load */ }
         const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) created/updated." : "";
         const summary = rj.added != null ? ` (${rj.added} new, ${rj.updated} updated)` : "";
         alert(`✅ Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}`);

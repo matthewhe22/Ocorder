@@ -24,31 +24,42 @@ export default async function handler(req, res) {
     const idx = data.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return res.status(404).json({ error: "Plan not found." });
 
-    // ── Merge ownerCorps (non-destructive: add new OCs, keep existing) ──────────
-    if (incomingOCs && typeof incomingOCs === "object") {
+    // ── Validate + merge ownerCorps (non-destructive: add new OCs, keep existing) ─
+    if (incomingOCs !== undefined) {
+      if (!incomingOCs || typeof incomingOCs !== "object" || Array.isArray(incomingOCs))
+        return res.status(400).json({ error: "ownerCorps must be a plain object." });
+      for (const [ocId, oc] of Object.entries(incomingOCs)) {
+        if (!ocId || typeof ocId !== "string")
+          return res.status(400).json({ error: "Each ownerCorps key must be a non-empty string." });
+        if (!oc || typeof oc !== "object" || !oc.name || typeof oc.name !== "string")
+          return res.status(400).json({ error: `ownerCorps entry '${ocId}' must have a name string.` });
+      }
       const existing = data.strataPlans[idx].ownerCorps || {};
       for (const [id, oc] of Object.entries(incomingOCs)) {
-        if (!existing[id]) existing[id] = oc; // add only if not already present
+        if (!existing[id]) existing[id] = oc;
       }
       data.strataPlans[idx].ownerCorps = existing;
     }
 
     // ── Merge lots (non-destructive: update existing by lot number, add new) ────
+    const VALID_TYPES = ["Residential", "Commercial", "Parking"];
     const existingLots = data.strataPlans[idx].lots || [];
-    const norm = s => String(s).trim().toLowerCase();
+    const norm = s => String(s || "").trim().toLowerCase();
     let added = 0, updated = 0;
 
     for (const incoming of lots) {
+      if (!incoming.number) continue;
       const existIdx = existingLots.findIndex(el => norm(el.number) === norm(incoming.number));
       if (existIdx >= 0) {
         // Update mutable fields; preserve id, piqLotId, unitNumber
-        existingLots[existIdx].type       = incoming.type       || existingLots[existIdx].type;
-        existingLots[existIdx].ownerCorps = incoming.ownerCorps?.length
-          ? incoming.ownerCorps
-          : existingLots[existIdx].ownerCorps;
+        if (VALID_TYPES.includes(incoming.type)) existingLots[existIdx].type = incoming.type;
+        if (incoming.ownerCorps?.length) existingLots[existIdx].ownerCorps = incoming.ownerCorps;
         updated++;
       } else {
-        existingLots.push(incoming);
+        existingLots.push({
+          ...incoming,
+          type: VALID_TYPES.includes(incoming.type) ? incoming.type : "Residential",
+        });
         added++;
       }
     }
