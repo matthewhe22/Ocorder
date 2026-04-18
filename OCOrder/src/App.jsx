@@ -2896,9 +2896,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         });
         lots = [...byNumber.values()];
       } else {
-        // Single sheet: existing logic (backward compatible)
+        // Single sheet: if the plan has exactly one OC, auto-assign it to all lots
         const ws = wb.Sheets[wb.SheetNames[0]];
-        lots = parseSheetLots(ws, null, 0);
+        const targetPlan = (data.strataPlans || []).find(p => p.id === targetPlanId);
+        const ocIds = Object.keys(targetPlan?.ownerCorps || {});
+        const autoOcId = ocIds.length === 1 ? ocIds[0] : null;
+        lots = parseSheetLots(ws, autoOcId, 0);
       }
 
       if (!lots.length) { alert("No lots found in the file."); return; }
