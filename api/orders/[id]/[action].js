@@ -598,8 +598,8 @@ export default async function handler(req, res) {
 
       if (result.paid) {
         const isNewPayment = order.status !== "Paid";
-        // Use server time as payment date — PIQ ledger does not expose the actual payment date.
-        order.piqPaymentDate      = now;
+        // Use server time as payment date on first confirmation only — never overwrite.
+        if (!order.piqPaymentDate) order.piqPaymentDate = now;
         if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
 
         if (isNewPayment) {
