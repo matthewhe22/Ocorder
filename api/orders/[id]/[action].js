@@ -648,6 +648,7 @@ export default async function handler(req, res) {
         paymentReference: result.paymentReference ?? null,
         lastPolled:       now,
         orderStatus:      order.status,
+        _debug:           result._debug ?? undefined,
       });
     } catch (err) {
       console.error(`check-piq-payment error for ${id}:`, err.message);
