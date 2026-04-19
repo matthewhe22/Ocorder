@@ -136,8 +136,9 @@ export default async function handler(req, res) {
     const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 5).toUpperCase();
     order.id = serverId;
 
-    // CRIT-2: Validate payment method
+    // CRIT-2: Validate payment method and order category
     if (!["bank", "payid", "stripe", "invoice"].includes(order.payment)) return res.status(400).json({ error: "Invalid payment method." });
+    if (!["oc", "keys"].includes(order.orderCategory)) return res.status(400).json({ error: "Invalid orderCategory — must be 'oc' or 'keys'." });
 
     // CRIT-2: Sanitise total
     order.total = Math.max(0, Number(order.total) || 0);

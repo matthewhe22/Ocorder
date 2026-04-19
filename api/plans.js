@@ -100,7 +100,7 @@ export default async function handler(req, res) {
   // sync ran (so the lot had no piqLotId at order-creation time).  Match by
   // lot number (case-insensitive) or internal lot id within the same plan.
   // Normalise: strip common prefixes ("Lot ", "Unit ", "Apt ") so "Lot 5" === "5"
-  const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
+  const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
   let backfilled = 0;
   for (const order of (data.orders || [])) {
     if (order.piqLotId || order.orderCategory !== "keys" || order.payment !== "invoice") continue;
