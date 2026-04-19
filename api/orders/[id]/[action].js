@@ -596,9 +596,13 @@ export default async function handler(req, res) {
       order.piqLevyTotalDue  = result.totalDue  ?? order.piqLevyTotalDue  ?? null;
       order.piqLevyTotalNett = result.totalNett ?? (result.paid ? 0 : order.piqLevyTotalNett ?? null);
 
-      if (result.paid && order.status !== "Paid") {
-        order.piqPaymentDate      = result.paymentDate      || null;
-        order.piqPaymentReference = result.paymentReference || null;
+      if (result.paid) {
+        const isNewPayment = order.status !== "Paid";
+        // Always refresh payment details from latest PIQ data (corrects previously stored incorrect dates)
+        if (result.paymentDate)      order.piqPaymentDate      = result.paymentDate;
+        if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
+
+        if (isNewPayment) {
         order.status              = "Paid";
         const dateStr = result.paymentDate
           ? new Date(result.paymentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" })
@@ -628,6 +632,7 @@ export default async function handler(req, res) {
           console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
           order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
         }
+        } // end isNewPayment
       }
 
       await writeData(data);
