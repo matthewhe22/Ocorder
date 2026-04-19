@@ -101,7 +101,12 @@ export default async function handler(req, res) {
         }
       }
 
-      if (checked > 0 || confirmed > 0) {
+      // Only write back when a payment was actually confirmed.  Writing on every
+      // "no payment found" poll creates a race with send-invoice: the cron reads a
+      // stale snapshot (status = "Invoice to be issued"), then writes it back after
+      // send-invoice has already updated the status to "Pending Payment", silently
+      // reverting the change.
+      if (confirmed > 0) {
         await writeData(data);
       }
 

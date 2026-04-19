@@ -238,6 +238,9 @@ export default async function handler(req, res) {
       await transporter.sendMail(mailOpts);
 
       // Auto-save invoice to SharePoint (best-effort, non-fatal)
+      // Capture the URL separately so we can apply it to fresh data below.
+      let spInvoiceUrl = null;
+      let spAuditEntry = null;
       if (attachment?.data) {
         try {
           const spConfig  = cfg?.sharepoint || {};
@@ -246,24 +249,37 @@ export default async function handler(req, res) {
             const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
             const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
             const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
-            const invoiceUrl = await uploadToSharePoint(
+            const uploadedUrl = await uploadToSharePoint(
               attachment.filename || "invoice.pdf",
               attachment.contentType || "application/pdf",
               attachment.data,
               spConfig,
               spSubFolder
             );
-            if (invoiceUrl) {
-              data.orders[idx].invoiceUrl = invoiceUrl;
-              data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice saved to SharePoint", note: invoiceUrl }];
+            if (uploadedUrl) {
+              spInvoiceUrl = uploadedUrl;
+              spAuditEntry = { ts: new Date().toISOString(), action: "Invoice saved to SharePoint", note: uploadedUrl };
             }
           }
         } catch (e) { console.error("Invoice SharePoint upload failed:", e.message); }
       }
 
-      data.orders[idx].status = "Pending Payment";
-      data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${order.contactInfo.email}` }];
-      await writeData(data);
+      // Re-read fresh data before writing the status update to avoid clobbering
+      // concurrent writes (e.g. the hourly PIQ poll) that ran while the email was
+      // being sent.  The email is already delivered at this point so we must not
+      // let a stale snapshot from earlier in this request overwrite the current state.
+      const freshData = await readData();
+      const freshIdx  = freshData.orders.findIndex(o => o.id === id);
+      if (freshIdx !== -1) {
+        if (spInvoiceUrl) freshData.orders[freshIdx].invoiceUrl = spInvoiceUrl;
+        freshData.orders[freshIdx].status = "Pending Payment";
+        const newAuditEntries = [
+          ...(spAuditEntry ? [spAuditEntry] : []),
+          { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${order.contactInfo.email}` },
+        ];
+        freshData.orders[freshIdx].auditLog = [...(freshData.orders[freshIdx].auditLog || []), ...newAuditEntries];
+        await writeData(freshData);
+      }
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
