@@ -585,6 +585,7 @@ export default async function handler(req, res) {
       const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
       if (lot?.piqLotId) {
         order.piqLotId = lot.piqLotId;
+        if (order.items?.[0]) order.items[0].lotId = lot.id;
         order.auditLog = [...(order.auditLog || []), {
           ts: new Date().toISOString(),
           action: "PIQ lot linked",
