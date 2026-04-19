@@ -598,15 +598,13 @@ export default async function handler(req, res) {
 
       if (result.paid) {
         const isNewPayment = order.status !== "Paid";
-        // Always refresh payment details from latest PIQ data (corrects previously stored incorrect dates)
-        if (result.paymentDate)      order.piqPaymentDate      = result.paymentDate;
+        // Use server time as payment date — PIQ ledger does not expose the actual payment date.
+        order.piqPaymentDate      = now;
         if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
 
         if (isNewPayment) {
-        order.status              = "Paid";
-        const dateStr = result.paymentDate
-          ? new Date(result.paymentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" })
-          : "—";
+        order.status = "Paid";
+        const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
         order.auditLog = [...(order.auditLog || []), {
           ts:     now,
           action: "Payment confirmed via PropertyIQ",
@@ -648,7 +646,6 @@ export default async function handler(req, res) {
         paymentReference: result.paymentReference ?? null,
         lastPolled:       now,
         orderStatus:      order.status,
-        _debug:           result._debug ?? undefined,
       });
     } catch (err) {
       console.error(`check-piq-payment error for ${id}:`, err.message);

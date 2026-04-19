@@ -20,12 +20,11 @@ async function applyPiqPayment(order, result, cfg, data) {
   order.piqLevyTotalDue    = result.totalDue    ?? order.piqLevyTotalDue    ?? null;
   order.piqLevyTotalNett   = result.totalNett   ?? (result.paid ? 0 : null);
   if (result.paid) {
-    order.piqPaymentDate      = result.paymentDate      || null;
+    // Use server time as payment date — PIQ ledger does not expose the actual payment date.
+    order.piqPaymentDate      = now;
     order.piqPaymentReference = result.paymentReference || null;
     order.status              = "Paid";
-    const dateStr = result.paymentDate
-      ? new Date(result.paymentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" })
-      : "—";
+    const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
     order.auditLog = [...(order.auditLog || []), {
       ts:     now,
       action: "Payment confirmed via PropertyIQ",
@@ -140,7 +139,7 @@ export default async function handler(req, res) {
         try {
           const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
           if (result.paid) {
-            if (result.paymentDate)      order.piqPaymentDate      = result.paymentDate;
+            order.piqPaymentDate      = new Date().toISOString();
             if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
             refreshed++;
           }
