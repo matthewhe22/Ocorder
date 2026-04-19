@@ -218,11 +218,17 @@ export async function detectPiqPayment(cfg, piqLotId, orderId) {
     return false;
   });
 
+  // Log raw fields so the correct date/reference field names can be identified from Vercel logs.
+  console.log("[piq] levy fields:", JSON.stringify(levy));
+  console.log("[piq] receipt fields:", receipt ? JSON.stringify(receipt) : "no receipt matched");
+
   // Prefer receipt-level date fields; fall back to levy-level paid date.
   // NOTE: levy.date is the levy due/creation date, NOT the payment date — do not use it.
   const paymentDate =
-    receipt?.datePaid || receipt?.paidDate || receipt?.paymentDate || receipt?.date ||
-    levy.datePaid     || levy.paidDate     || levy.paymentDate     || null;
+    receipt?.effectiveDate   || receipt?.transactionDate || receipt?.bankDate    ||
+    receipt?.receivedDate    || receipt?.datePaid        || receipt?.paidDate    ||
+    receipt?.paymentDate     || receipt?.date            ||
+    levy.datePaid            || levy.paidDate            || levy.paymentDate     || null;
 
   // Try every plausible reference field name across receipt and levy objects.
   const paymentReference =
@@ -238,6 +244,7 @@ export async function detectPiqPayment(cfg, piqLotId, orderId) {
     totalPaid:        totalPaid || totalDue,
     paymentDate,
     paymentReference,
+    _debug: { levy, receipt: receipt || null },
   };
 }
 
