@@ -58,8 +58,23 @@
 
 ### Order status enum (enforced server-side)
 ```
-Pending Payment | Processing | Issued | Cancelled | On Hold | Awaiting Documents | Invoice to be issued
+Pending Payment | Processing | Issued | Cancelled | On Hold | Awaiting Documents | Invoice to be issued | Paid | Awaiting Stripe Payment
 ```
+
+### Vercel-only API endpoints (api/ serverless functions)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/orders/:id/check-piq-payment` | Bearer | Manually poll PIQ ledger for one order; auto-links piqLotId if missing |
+| POST | `/api/orders/:id/send-invoice` | Bearer | Send invoice email + set status to Pending Payment (re-reads fresh data before write) |
+| POST | `/api/orders/:id/send-certificate` | Bearer | Send OC cert email with optional attachment |
+| PUT | `/api/orders/:id/status` | Bearer | Update order status (enum-validated) |
+| GET | `/api/orders/:id/authority` | Bearer/token | Download authority document |
+| POST | `/api/orders/:id/stripe-confirm` | Public | Confirm Stripe payment (verifies session metadata) |
+| POST | `/api/orders/:id/stripe-cancel` | Public | Cancel abandoned Stripe checkout |
+| DELETE | `/api/orders/:id/delete` | Bearer | Delete cancelled order |
+| GET | `/api/orders?action=poll-piq` | Cron/Bearer | Hourly cron: poll PIQ for all pending invoice keys orders |
+| GET | `/api/orders?action=refresh-piq-payments` | Bearer | Re-poll paid PIQ orders to update paymentReference (date never overwritten) |
+| POST | `/api/plans` (action=import-lots) | Bearer | Import lots from PIQ sync; back-fills piqLotId on existing orders |
 
 ---
 
@@ -68,17 +83,29 @@ Pending Payment | Processing | Issued | Cancelled | On Hold | Awaiting Documents
 ### Order
 ```json
 {
-  "id": "OC-2024-XXX-001",
+  "id": "TOCS-XXXXXXXX-XXX",
   "date": "2024-03-25T12:00:00.000Z",
   "status": "Pending Payment",
-  "payment": "bank | payid | stripe | card",
+  "payment": "bank | payid | stripe | invoice",
+  "orderCategory": "oc | keys",
   "total": 220.00,
-  "contactInfo": { "name": "", "email": "", "phone": "", "companyName": "" },
-  "items": [{ "productId": "", "productName": "", "price": 0, "ocName": "", "lotNumber": "" }],
-  "lotAuthorityFile": "OC-2024-XXX-001-lot-authority.pdf",
-  "auditLog": [{ "ts": "", "action": "", "note": "" }]
+  "contactInfo": { "name": "", "email": "", "phone": "", "companyName": "", "ownerName": "", "applicantType": "agent|owner", "ocReference": "", "shippingAddress": {} },
+  "items": [{ "productId": "", "productName": "", "price": 0, "ocName": "", "lotNumber": "", "lotId": "", "planId": "", "planName": "", "qty": 1, "managerAdminCharge": 0 }],
+  "selectedShipping": { "type": "standard|express", "cost": 0 },
+  "lotAuthorityFile": "TOCS-XXX-lot-authority.pdf",
+  "lotAuthorityUrl": "https://sharepoint.../authority.pdf",
+  "auditLog": [{ "ts": "", "action": "", "note": "" }],
+  "piqLotId": 12345,
+  "piqLastPolled": "2026-04-19T...",
+  "piqLevyFound": true,
+  "piqLevyTotalDue": 220.00,
+  "piqLevyTotalNett": 0,
+  "piqPaymentDate": "2026-04-19T...",
+  "piqPaymentReference": "REC-001"
 }
 ```
+
+**PIQ fields note:** `piqPaymentDate` is set to server time on first confirmation only and never overwritten. `piqLotId` is auto-populated at order creation and back-filled when plan is synced from PIQ. Lot IDs in the plan are aligned to `piq-{piqLotId}` format after each PIQ sync.
 
 ### Strata Plan
 ```json
@@ -124,14 +151,13 @@ node server.js
 | No login rate limiting | Medium | Brute-force login possible |
 | Sessions lost on server restart | Low | SESSIONS Map is in-memory only |
 | SMTP password in settings response | Low | Masked in GET but still stored plaintext |
-| No cap on order.items array size | Low | No max items per order |
 | Multiple concurrent sessions per user | Low | No session limit; changing password clears all via SESSIONS.clear() |
 | Token lifetime not renewable | Low | 8h token, no refresh endpoint |
-| Invalid base64 silently accepted for authority upload | Low | Buffer.from() decodes garbage; file is stored but content is meaningless |
-| Lots import missing schema validation | Low | Individual lot objects not schema-validated (no id/number check) |
-| Payment field not whitelisted | Low | Any string accepted for payment method |
 | config.json corruption at startup | Low | readConfig() falls back in-memory but doesn't rewrite the file |
 | No audit trail for plan/lots import | Low | Destructive writes leave no log entry |
+| PIQ payment reference often null | Low | PIQ ledger field name varies by tenant; reference may not be populated |
+| poll-piq writes only on confirmed payment | Low | lastPolled not persisted when no payment found (prevents race, but lastPolled stale) |
+| refresh-piq-payments endpoint still exists | Low | Backend endpoint retained even though UI button removed; harmless but unused |
 
 ---
 
@@ -139,8 +165,8 @@ node server.js
 
 - **No new files** unless absolutely necessary. All frontend changes go in `src/App.jsx`.
 - **Rebuild after every change:** `node build.mjs` — check for `✅  Build complete → dist/`.
-- **Branch for all changes:** `claude/update-order-email-format-5SOU7`
-- **Update `docs/CHANGELOG.md`** after each session with a new dated section.
+- **Branch for all changes:** create a new `claude/` prefixed branch per session.
+- **Update `CLAUDE.md`** after each session with new session history row and any gap/API changes.
 - **Commit messages:** use `fix:`, `feat:`, `chore:` prefixes. Be descriptive.
 - **Email HTML:** Always use `esc()` helper for any user-supplied data inserted into HTML.
 - **Status updates:** Always use the VALID_STATUSES enum in server.js.
@@ -168,3 +194,4 @@ node server.js
 | 2026-03-25 | Admin E2E round 6: admin username CRLF/length, product price type check, managerAdminCharge hidden from public, shipping in total, managerAdminCharge stripped from customer response, qty cap |
 | 2026-03-26 | Admin E2E round 7: paymentMethods/logo config parity, secondaryPrice type validation, product id required, legacy order status migration, same-password rejection |
 | 2026-03-26 | Security & bug fixes: reset-admin-password now clears sessions; CSV injection prefix; items array capped at 50; base64 authority file magic-byte + size validation (10 MB); server-time only for order dates; footer HTML-escaped in cert emails; CORS headers + OPTIONS preflight; login case-insensitive; crypto.randomBytes tokens; lots import audit log; invoice orders start as "Invoice to be issued"; CSV Content-Length header; frontend authority upload size error + hint |
+| 2026-04-19 | PIQ payment race condition fix: send-invoice re-reads fresh Redis data before writing status; poll-piq cron only writes when payment confirmed (prevents stale snapshot overwriting Pending Payment). PIQ lot linkage: back-fill piqLotId on plan save; lot number normalisation (strip "Lot/Unit/Apt" prefix) across all 5 lookup sites; plan lot IDs aligned to piq-{piqLotId} format on sync; order.items[0].lotId updated during back-fill. PIQ payment date: use server time at first confirmation (PIQ ledger has no actual payment date field); payment date locked — never overwritten on subsequent checks. Manual PIQ Lot ID entry UI for orders with no auto-linked lot. Admin "Refresh PIQ Dates" bulk endpoint added (backend retained, UI button removed). |
