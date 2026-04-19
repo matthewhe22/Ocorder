@@ -117,6 +117,47 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/orders?action=refresh-piq-payments  (admin only) ────────────────
+  // Re-polls all already-paid PIQ orders and updates piqPaymentDate/piqPaymentReference
+  // without re-sending emails. Used to correct dates stored before the piq.js bug fix.
+  if (req.method === "GET" && req.query?.action === "refresh-piq-payments") {
+    const token   = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    try {
+      const cfg  = await readConfig();
+      const data = await readData();
+
+      const candidates = data.orders.filter(o =>
+        o.orderCategory === "keys" && o.piqLotId && o.status === "Paid"
+      );
+
+      let refreshed = 0;
+      const errors  = [];
+
+      for (const order of candidates) {
+        try {
+          const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+          if (result.paid) {
+            if (result.paymentDate)      order.piqPaymentDate      = result.paymentDate;
+            if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
+            refreshed++;
+          }
+        } catch (err) {
+          console.error(`refresh-piq-payments: failed for ${order.id}:`, err.message);
+          errors.push({ orderId: order.id, error: err.message?.substring(0, 120) });
+        }
+      }
+
+      if (refreshed > 0) await writeData(data);
+      return res.status(200).json({ ok: true, refreshed, total: candidates.length, errors: errors.length ? errors : undefined });
+    } catch (err) {
+      console.error("refresh-piq-payments error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const body = req.body || {};

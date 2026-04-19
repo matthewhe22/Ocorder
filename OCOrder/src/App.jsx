@@ -2185,6 +2185,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [orderFilter, setOrderFilter] = useState({ text: "", status: "", category: "", plan: "", lot: "" });
   const [checkingAllPiq, setCheckingAllPiq] = useState(false);
+  const [refreshingPiqDates, setRefreshingPiqDates] = useState(false);
   const [sendCertModal, setSendCertModal] = useState(null); // { orderId, order }
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
@@ -3259,6 +3260,31 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 {checkingAllPiq
                   ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
                   : <><Ic n="refresh" s={13}/> Check PIQ</>
+                }
+              </button>
+              <button className="btn btn-out" style={{ padding: "6px 12px", fontSize: "0.72rem" }}
+                disabled={refreshingPiqDates}
+                title="Re-fetch payment date and reference from PIQ for all paid orders"
+                onClick={async () => {
+                  setRefreshingPiqDates(true);
+                  try {
+                    const r = await fetch("/api/orders?action=refresh-piq-payments", { headers: { "Authorization": "Bearer " + adminToken } });
+                    const d = await r.json();
+                    if (!r.ok) { showAdminToast("err", d.error || "Refresh failed."); return; }
+                    const msg = d.refreshed > 0
+                      ? `PIQ dates refreshed: ${d.refreshed} of ${d.total} paid order(s) updated.`
+                      : `No updates — ${d.total} paid PIQ order(s) checked.`;
+                    showAdminToast("ok", msg);
+                    if (d.refreshed > 0) {
+                      const rd = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } });
+                      if (rd.ok) { const fresh = await rd.json(); setData(fresh); }
+                    }
+                  } catch { showAdminToast("err", "Refresh failed — network error."); }
+                  finally { setRefreshingPiqDates(false); }
+                }}>
+                {refreshingPiqDates
+                  ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Refreshing…</>
+                  : <><Ic n="refresh" s={13}/> Refresh PIQ Dates</>
                 }
               </button>
               {data.orders.length > 0 && (
