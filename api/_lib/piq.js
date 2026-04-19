@@ -207,20 +207,37 @@ export async function detectPiqPayment(cfg, piqLotId, orderId) {
     return { levyFound: true, paid: false, totalDue, totalNett };
   }
 
-  // Payment confirmed — find the matching receipt entry for date + reference
-  const receipt = transactions.find(t =>
-    t.type === "receipt" &&
-    t.levyId != null &&
-    t.levyId === levy.levyId
-  );
+  // Payment confirmed — find the matching receipt entry for date + reference.
+  // Try multiple levy-linking field patterns since PIQ API shape varies by tenant.
+  const receipt = transactions.find(t => {
+    if (t.type !== "receipt") return false;
+    if (t.levyId   != null && levy.levyId != null && t.levyId   === levy.levyId) return true;
+    if (t.levyId   != null && levy.id     != null && t.levyId   === levy.id)     return true;
+    if (t.invoiceId != null && levy.id    != null && t.invoiceId === levy.id)    return true;
+    if (t.chargeId  != null && levy.id    != null && t.chargeId  === levy.id)    return true;
+    return false;
+  });
+
+  // Prefer receipt-level date fields; fall back to levy-level paid date.
+  // NOTE: levy.date is the levy due/creation date, NOT the payment date — do not use it.
+  const paymentDate =
+    receipt?.datePaid || receipt?.paidDate || receipt?.paymentDate || receipt?.date ||
+    levy.datePaid     || levy.paidDate     || levy.paymentDate     || null;
+
+  // Try every plausible reference field name across receipt and levy objects.
+  const paymentReference =
+    receipt?.reference           || receipt?.receiptNumber || receipt?.receiptNo ||
+    receipt?.transactionReference || receipt?.transactionRef ||
+    levy.receiptNumber           || levy.paymentReference  || levy.paidReference ||
+    null;
 
   return {
     levyFound:        true,
     paid:             true,
     totalDue,
-    totalPaid:        totalPaid || totalDue, // if totalPaid missing, assume full payment
-    paymentDate:      receipt?.date      || levy.date  || null,
-    paymentReference: receipt?.reference || null,
+    totalPaid:        totalPaid || totalDue,
+    paymentDate,
+    paymentReference,
   };
 }
 
