@@ -2251,11 +2251,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       const autoAssignOC = ocKeys.length === 1 ? ocKeys : null; // [key] or null
 
       // Merge lots (non-destructive: existing lots preserved; piqLotId + unitNumber added)
+      // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
+      const normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
       const existingLots = plan.lots || [];
       for (const l of (result.lots || [])) {
         const existingIdx = existingLots.findIndex(el =>
           el.piqLotId === l.piqLotId ||
-          el.number?.toLowerCase() === l.lotNumber?.toLowerCase()
+          normLot(el.number) === normLot(l.lotNumber)
         );
         if (existingIdx >= 0) {
           existingLots[existingIdx].piqLotId   = l.piqLotId;
@@ -2378,7 +2380,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setPiqSyncAllModal(m => ({ ...m, rows, warning: discoveryWarning }));
 
     // Step 5: Sync loop
-    const norm = s => String(s || "").trim().toLowerCase();
+    const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
     for (let i = 0; i < updatedPlans.length; i++) {
       const row = rows[i];
       setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "running" } : r) }));
@@ -5027,13 +5029,18 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
   // Determine display state from order fields + latest check result.
   // Fall back to looking up piqLotId from plan data for orders placed before
   // the plan was synced from PIQ (order.piqLotId not yet persisted).
-  const _normLot = s => String(s || "").trim().toLowerCase();
+  // Normalise: strip common prefixes ("Lot ", "Unit ", "Apt ") so "Lot 5" === "5".
+  const _normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
   const piqLotId = order.piqLotId ?? (() => {
-    const plan = (strataPlans || []).find(p => p.id === order.items?.[0]?.planId);
-    return plan?.lots?.find(l =>
-      (order.items?.[0]?.lotNumber && _normLot(l.number) === _normLot(order.items[0].lotNumber)) ||
-      (order.items?.[0]?.lotId     && l.id === order.items[0].lotId)
-    )?.piqLotId ?? null;
+    const plan     = (strataPlans || []).find(p => p.id === order.items?.[0]?.planId);
+    const lots     = plan?.lots || [];
+    const lotNum   = order.items?.[0]?.lotNumber || "";
+    const lotId    = order.items?.[0]?.lotId     || "";
+    const matches  = (l) =>
+      (lotNum && _normLot(l.number) === _normLot(lotNum)) ||
+      (lotId  && l.id === lotId);
+    // Prefer a lot that already has piqLotId (avoids matching the un-linked duplicate)
+    return (lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches))?.piqLotId ?? null;
   })();
   const levyFound   = checkResult?.levyFound ?? order.piqLevyFound;
   const paid        = checkResult?.paid ?? (order.status === "Paid" && order.piqPaymentDate);

@@ -557,16 +557,19 @@ export default async function handler(req, res) {
 
     // Auto-link piqLotId from plan lots for orders placed before the plan was
     // synced from PIQ (piqLotId was missing at order-creation time).
+    // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
     if (!order.piqLotId) {
-      const normStr = s => String(s || "").trim().toLowerCase();
+      const normStr = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
       const lotNumber = order.items?.[0]?.lotNumber || "";
       const lotId     = order.items?.[0]?.lotId     || "";
       const planId    = order.items?.[0]?.planId    || "";
       const plan      = data.strataPlans?.find(p => p.id === planId);
-      const lot       = plan?.lots?.find(l =>
+      const lots      = plan?.lots || [];
+      const matches   = l =>
         (lotNumber && normStr(l.number) === normStr(lotNumber)) ||
-        (lotId     && l.id === lotId)
-      );
+        (lotId     && l.id === lotId);
+      // Prefer a lot that already has piqLotId to avoid matching the un-linked duplicate
+      const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
       if (lot?.piqLotId) {
         order.piqLotId = lot.piqLotId;
         order.auditLog = [...(order.auditLog || []), {
