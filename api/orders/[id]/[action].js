@@ -555,9 +555,19 @@ export default async function handler(req, res) {
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
     const order = data.orders[idx];
 
-    // Auto-link piqLotId from plan lots for orders placed before the plan was
-    // synced from PIQ (piqLotId was missing at order-creation time).
-    // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
+    // 1. Admin-supplied piqLotId (manual link from the UI) takes top priority.
+    const manualPiqLotId = req.body?.piqLotId ? Number(req.body.piqLotId) : null;
+    if (manualPiqLotId && Number.isFinite(manualPiqLotId)) {
+      order.piqLotId = manualPiqLotId;
+      order.auditLog = [...(order.auditLog || []), {
+        ts:     new Date().toISOString(),
+        action: "PIQ lot linked",
+        note:   `piqLotId ${manualPiqLotId} manually set by admin`,
+      }];
+    }
+
+    // 2. Auto-link from plan lots for orders placed before the plan was synced.
+    //    Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
     if (!order.piqLotId) {
       const normStr = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
       const lotNumber = order.items?.[0]?.lotNumber || "";
@@ -568,7 +578,6 @@ export default async function handler(req, res) {
       const matches   = l =>
         (lotNumber && normStr(l.number) === normStr(lotNumber)) ||
         (lotId     && l.id === lotId);
-      // Prefer a lot that already has piqLotId to avoid matching the un-linked duplicate
       const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
       if (lot?.piqLotId) {
         order.piqLotId = lot.piqLotId;
@@ -581,7 +590,7 @@ export default async function handler(req, res) {
     }
 
     if (!order.piqLotId) {
-      return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first." });
+      return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first, or enter the PIQ Lot ID manually." });
     }
 
     const cfg = await readConfig();

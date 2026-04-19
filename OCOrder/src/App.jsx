@@ -5008,13 +5008,17 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
+  const [manualLotId, setManualLotId] = useState("");
+  const [linkErr, setLinkErr] = useState("");
 
-  const checkNow = async () => {
-    setChecking(true); setCheckResult(null);
+  const checkNow = async (overridePiqLotId) => {
+    setChecking(true); setCheckResult(null); setLinkErr("");
     try {
+      const body = overridePiqLotId ? { piqLotId: overridePiqLotId } : {};
       const r = await fetch(`/api/orders/${order.id}/check-piq-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       setCheckResult(d);
@@ -5069,8 +5073,28 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
         PropertyIQ Payment Tracking
       </div>
       {!piqLotId ? (
-        <div style={{ color:"var(--muted)", fontSize:"0.82rem" }}>
-          ⚠ PIQ lot not linked — sync this plan from PIQ first (Plans tab → Sync from PIQ).
+        <div>
+          <div style={{ color:"#b45309", fontSize:"0.82rem", marginBottom:"10px" }}>
+            ⚠ PIQ lot not linked. Enter the PIQ Lot ID from the PropertyIQ portal, or sync the plan first (Plans tab → Sync from PIQ).
+          </div>
+          <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+            <input
+              type="number" min="1" placeholder="PIQ Lot ID (e.g. 12345)"
+              value={manualLotId} onChange={e => { setManualLotId(e.target.value); setLinkErr(""); }}
+              style={{ flex:1, padding:"5px 8px", border:"1px solid var(--border)", borderRadius:"4px", fontSize:"0.82rem" }}
+            />
+            <button className="btn btn-out" style={{ fontSize:"0.78rem", whiteSpace:"nowrap" }}
+              disabled={!manualLotId || checking}
+              onClick={async () => {
+                const lid = parseInt(manualLotId, 10);
+                if (!lid) { setLinkErr("Enter a valid numeric PIQ Lot ID."); return; }
+                await checkNow(lid);
+              }}>
+              {checking ? "Linking…" : "Link & Check PIQ"}
+            </button>
+          </div>
+          {linkErr && <div style={{ color:"var(--red)", fontSize:"0.78rem", marginTop:"4px" }}>{linkErr}</div>}
+          {checkResult && !checkResult.ok && <div style={{ color:"var(--red)", fontSize:"0.78rem", marginTop:"4px" }}>{checkResult.error}</div>}
         </div>
       ) : (
         <>
