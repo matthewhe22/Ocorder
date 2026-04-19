@@ -2261,6 +2261,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         );
         if (existingIdx >= 0) {
           existingLots[existingIdx].piqLotId   = l.piqLotId;
+          existingLots[existingIdx].id          = `piq-${l.piqLotId}`;
           existingLots[existingIdx].unitNumber  = l.unitNumber || existingLots[existingIdx].unitNumber || "";
           // Auto-assign OC if the lot currently has none and there is only one OC
           if (autoAssignOC && (!existingLots[existingIdx].ownerCorps || existingLots[existingIdx].ownerCorps.length === 0)) {
@@ -2421,6 +2422,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           );
           if (ei >= 0) {
             existingLots[ei].piqLotId  = l.piqLotId;
+            existingLots[ei].id        = `piq-${l.piqLotId}`;
             existingLots[ei].unitNumber = l.unitNumber || existingLots[ei].unitNumber || "";
             if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0))
               existingLots[ei].ownerCorps = autoOC;
