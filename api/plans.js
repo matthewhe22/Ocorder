@@ -99,7 +99,8 @@ export default async function handler(req, res) {
   // Back-fill piqLotId on keys/invoice orders that were placed before the PIQ
   // sync ran (so the lot had no piqLotId at order-creation time).  Match by
   // lot number (case-insensitive) or internal lot id within the same plan.
-  const norm = s => String(s || "").trim().toLowerCase();
+  // Normalise: strip common prefixes ("Lot ", "Unit ", "Apt ") so "Lot 5" === "5"
+  const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
   let backfilled = 0;
   for (const order of (data.orders || [])) {
     if (order.piqLotId || order.orderCategory !== "keys" || order.payment !== "invoice") continue;
@@ -108,10 +109,12 @@ export default async function handler(req, res) {
     const planId    = order.items?.[0]?.planId    || "";
     const plan      = plans.find(p => p.id === planId);
     if (!plan) continue;
-    const lot = plan.lots?.find(l =>
+    const lots    = plan.lots || [];
+    const matches = l =>
       (lotNumber && norm(l.number) === norm(lotNumber)) ||
-      (lotId     && l.id === lotId)
-    );
+      (lotId     && l.id === lotId);
+    // Prefer lots that already have piqLotId (avoids the un-linked duplicate lot)
+    const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
     if (lot?.piqLotId) {
       order.piqLotId = lot.piqLotId;
       order.auditLog = [...(order.auditLog || []), {
