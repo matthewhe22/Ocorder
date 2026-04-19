@@ -5151,26 +5151,6 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
             </button>
             {lastPolled && <span style={{ fontSize:"0.72rem", color:"var(--muted)" }}>Last checked: {timeAgo(lastPolled)}</span>}
           </div>
-          {checkResult?._debug && (
-            <details style={{ marginTop:"10px", fontSize:"0.72rem" }}>
-              <summary style={{ cursor:"pointer", color:"#888", userSelect:"none" }}>PIQ raw transaction fields (debug)</summary>
-              <div style={{ marginTop:"6px", display:"flex", gap:"10px", flexWrap:"wrap" }}>
-                {["levy","receipt"].map(key => checkResult._debug[key] && (
-                  <div key={key} style={{ background:"#f5f5f5", border:"1px solid #ddd", borderRadius:"4px", padding:"8px", flex:1, minWidth:"220px" }}>
-                    <div style={{ fontWeight:700, marginBottom:"4px", textTransform:"uppercase", fontSize:"0.68rem", color:"#555" }}>{key}</div>
-                    <table style={{ borderCollapse:"collapse", width:"100%" }}>
-                      {Object.entries(checkResult._debug[key]).map(([k,v]) => (
-                        <tr key={k}>
-                          <td style={{ paddingRight:"8px", color:"#666", whiteSpace:"nowrap", paddingBottom:"2px" }}>{k}</td>
-                          <td style={{ fontFamily:"monospace", color:"#222", wordBreak:"break-all", paddingBottom:"2px" }}>{JSON.stringify(v)}</td>
-                        </tr>
-                      ))}
-                    </table>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
         </>
       )}
     </div>
