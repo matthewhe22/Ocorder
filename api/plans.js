@@ -95,6 +95,34 @@ export default async function handler(req, res) {
 
   const data = await readData();
   data.strataPlans = plans;
+
+  // Back-fill piqLotId on keys/invoice orders that were placed before the PIQ
+  // sync ran (so the lot had no piqLotId at order-creation time).  Match by
+  // lot number (case-insensitive) or internal lot id within the same plan.
+  const norm = s => String(s || "").trim().toLowerCase();
+  let backfilled = 0;
+  for (const order of (data.orders || [])) {
+    if (order.piqLotId || order.orderCategory !== "keys" || order.payment !== "invoice") continue;
+    const lotNumber = order.items?.[0]?.lotNumber || "";
+    const lotId     = order.items?.[0]?.lotId     || "";
+    const planId    = order.items?.[0]?.planId    || "";
+    const plan      = plans.find(p => p.id === planId);
+    if (!plan) continue;
+    const lot = plan.lots?.find(l =>
+      (lotNumber && norm(l.number) === norm(lotNumber)) ||
+      (lotId     && l.id === lotId)
+    );
+    if (lot?.piqLotId) {
+      order.piqLotId = lot.piqLotId;
+      order.auditLog = [...(order.auditLog || []), {
+        ts: new Date().toISOString(),
+        action: "PIQ lot linked",
+        note: `piqLotId ${lot.piqLotId} back-filled after plan sync`,
+      }];
+      backfilled++;
+    }
+  }
+
   await writeData(data);
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, ...(backfilled > 0 ? { backfilled } : {}) });
 }
