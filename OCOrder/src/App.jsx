@@ -3493,7 +3493,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                           )}
                           {/* PIQ Payment Tracking — keys orders only */}
                           {o.orderCategory === "keys" && o.payment === "invoice" && (
-                            <PiqPaymentPanel order={o} adminToken={adminToken} onPaid={(updatedOrder) => {
+                            <PiqPaymentPanel order={o} adminToken={adminToken} strataPlans={data.strataPlans} onPaid={(updatedOrder) => {
                               setData(p => ({ ...p, orders: p.orders.map(ord => ord.id !== updatedOrder.id ? ord : updatedOrder) }));
                             }}/>
                           )}
@@ -5003,7 +5003,7 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 // ─── PIQ PAYMENT PANEL ────────────────────────────────────────────────────────
 // Shown inside the expanded order row for keys/invoice orders.
 // Displays the PIQ levy status and allows admin to trigger a manual payment check.
-function PiqPaymentPanel({ order, adminToken, onPaid }) {
+function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
 
@@ -5024,8 +5024,17 @@ function PiqPaymentPanel({ order, adminToken, onPaid }) {
     setChecking(false);
   };
 
-  // Determine display state from order fields + latest check result
-  const piqLotId    = order.piqLotId;
+  // Determine display state from order fields + latest check result.
+  // Fall back to looking up piqLotId from plan data for orders placed before
+  // the plan was synced from PIQ (order.piqLotId not yet persisted).
+  const _normLot = s => String(s || "").trim().toLowerCase();
+  const piqLotId = order.piqLotId ?? (() => {
+    const plan = (strataPlans || []).find(p => p.id === order.items?.[0]?.planId);
+    return plan?.lots?.find(l =>
+      (order.items?.[0]?.lotNumber && _normLot(l.number) === _normLot(order.items[0].lotNumber)) ||
+      (order.items?.[0]?.lotId     && l.id === order.items[0].lotId)
+    )?.piqLotId ?? null;
+  })();
   const levyFound   = checkResult?.levyFound ?? order.piqLevyFound;
   const paid        = checkResult?.paid ?? (order.status === "Paid" && order.piqPaymentDate);
   const totalNett   = checkResult?.totalNett   ?? order.piqLevyTotalNett;

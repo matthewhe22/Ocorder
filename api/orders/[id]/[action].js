@@ -555,6 +555,28 @@ export default async function handler(req, res) {
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
     const order = data.orders[idx];
 
+    // Auto-link piqLotId from plan lots for orders placed before the plan was
+    // synced from PIQ (piqLotId was missing at order-creation time).
+    if (!order.piqLotId) {
+      const normStr = s => String(s || "").trim().toLowerCase();
+      const lotNumber = order.items?.[0]?.lotNumber || "";
+      const lotId     = order.items?.[0]?.lotId     || "";
+      const planId    = order.items?.[0]?.planId    || "";
+      const plan      = data.strataPlans?.find(p => p.id === planId);
+      const lot       = plan?.lots?.find(l =>
+        (lotNumber && normStr(l.number) === normStr(lotNumber)) ||
+        (lotId     && l.id === lotId)
+      );
+      if (lot?.piqLotId) {
+        order.piqLotId = lot.piqLotId;
+        order.auditLog = [...(order.auditLog || []), {
+          ts: new Date().toISOString(),
+          action: "PIQ lot linked",
+          note: `piqLotId ${lot.piqLotId} auto-linked from plan on first check`,
+        }];
+      }
+    }
+
     if (!order.piqLotId) {
       return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first." });
     }
