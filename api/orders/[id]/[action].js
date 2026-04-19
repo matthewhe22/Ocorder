@@ -176,9 +176,16 @@ export default async function handler(req, res) {
         } catch (e) { console.error("Certificate SharePoint upload failed:", e.message); }
       }
 
-      data.orders[idx].status = "Issued";
-      data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` }];
-      await writeData(data);
+      // Re-read fresh data before writing to avoid clobbering concurrent writes
+      // (same pattern as send-invoice — email takes ~7s during which poll-piq may write).
+      const freshDataCert = await readData();
+      const freshIdxCert  = freshDataCert.orders.findIndex(o => o.id === id);
+      if (freshIdxCert !== -1) {
+        if (data.orders[idx].certificateUrl) freshDataCert.orders[freshIdxCert].certificateUrl = data.orders[idx].certificateUrl;
+        freshDataCert.orders[freshIdxCert].status = "Issued";
+        freshDataCert.orders[freshIdxCert].auditLog = [...(freshDataCert.orders[freshIdxCert].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` }];
+        await writeData(freshDataCert);
+      }
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -516,7 +523,7 @@ export default async function handler(req, res) {
     }
 
     order.status = "Cancelled";
-    order.auditLog = [...(order.auditLog || []), `Order cancelled by customer (Stripe checkout abandoned) — ${new Date().toISOString()}`];
+    order.auditLog = [...(order.auditLog || []), { ts: new Date().toISOString(), action: "Order cancelled", note: "Stripe checkout abandoned by customer" }];
     await writeData(data);
     console.log(`stripe-cancel: cancelled pending order ${id}`);
     return res.status(200).json({ ok: true });
@@ -555,11 +562,17 @@ export default async function handler(req, res) {
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
     const order = data.orders[idx];
 
+    // Allow admin to reset the locked payment date so a corrected date can be recorded.
+    if (req.body?.resetPaymentDate === true && order.status === "Paid") {
+      order.piqPaymentDate = null;
+      order.auditLog = [...(order.auditLog || []), { ts: new Date().toISOString(), action: "PIQ payment date reset", note: "Reset by admin to allow re-confirmation" }];
+    }
+
     // Auto-link piqLotId from plan lots for orders placed before the plan was
     // synced from PIQ (piqLotId was missing at order-creation time).
     // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
     if (!order.piqLotId) {
-      const normStr = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
+      const normStr = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
       const lotNumber = order.items?.[0]?.lotNumber || "";
       const lotId     = order.items?.[0]?.lotId     || "";
       const planId    = order.items?.[0]?.planId    || "";

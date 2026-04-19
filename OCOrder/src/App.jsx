@@ -2252,7 +2252,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       // Merge lots (non-destructive: existing lots preserved; piqLotId + unitNumber added)
       // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
-      const normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
+      const normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
       const existingLots = plan.lots || [];
       for (const l of (result.lots || [])) {
         const existingIdx = existingLots.findIndex(el =>
@@ -2381,7 +2381,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setPiqSyncAllModal(m => ({ ...m, rows, warning: discoveryWarning }));
 
     // Step 5: Sync loop
-    const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
+    const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
     for (let i = 0; i < updatedPlans.length; i++) {
       const row = rows[i];
       setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "running" } : r) }));
@@ -3249,7 +3249,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         ? `PIQ check done: ${d.checked} order(s) checked, no new payments.`
                         : "No pending PIQ orders to check.";
                     showAdminToast("ok", msg);
-                    if (d.confirmed > 0) {
+                    if (d.checked > 0 || d.confirmed > 0) {
                       const rd = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } });
                       if (rd.ok) { const fresh = await rd.json(); setData(fresh); }
                     }
@@ -5011,18 +5011,20 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
 
-  const checkNow = async () => {
+  const checkNow = async (opts = {}) => {
     setChecking(true); setCheckResult(null);
     try {
+      const body = {};
+      if (opts.resetDate) body.resetPaymentDate = true;
       const r = await fetch(`/api/orders/${order.id}/check-piq-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       setCheckResult(d);
-      if (d.ok && d.paid && onPaid) {
-        // Refresh the order in parent state
-        onPaid({ ...order, status: "Paid", piqPaymentDate: d.paymentDate, piqPaymentReference: d.paymentReference, piqLevyFound: true, piqLevyTotalNett: 0 });
+      if (d.ok && onPaid) {
+        onPaid({ ...order, status: d.orderStatus || order.status, piqPaymentDate: d.paymentDate || order.piqPaymentDate, piqPaymentReference: d.paymentReference || order.piqPaymentReference, piqLevyFound: d.levyFound ?? order.piqLevyFound, piqLevyTotalNett: d.totalNett ?? order.piqLevyTotalNett });
       }
     } catch { setCheckResult({ ok: false, error: "Unable to connect." }); }
     setChecking(false);
@@ -5032,7 +5034,7 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
   // Fall back to looking up piqLotId from plan data for orders placed before
   // the plan was synced from PIQ (order.piqLotId not yet persisted).
   // Normalise: strip common prefixes ("Lot ", "Unit ", "Apt ") so "Lot 5" === "5".
-  const _normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment)\s+/i, "").trim();
+  const _normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
   const piqLotId = order.piqLotId ?? (() => {
     const plan     = (strataPlans || []).find(p => p.id === order.items?.[0]?.planId);
     const lots     = plan?.lots || [];
@@ -5093,7 +5095,10 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
           {/* Payment status */}
           {paid ? (
             <div style={{ background:"#e8f5ee", border:"1px solid #a0d4b2", borderRadius:"4px", padding:"10px 14px", marginBottom:"10px" }}>
-              <div style={{ color:"#1c6e3f", fontWeight:700, marginBottom:"6px" }}>✅ Payment confirmed via PropertyIQ</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" }}>
+                <span style={{ color:"#1c6e3f", fontWeight:700 }}>✅ Payment confirmed via PropertyIQ</span>
+                <button className="tbl-act-btn" style={{ fontSize:"0.7rem", color:"#666" }} title="Reset payment date and re-confirm from PIQ" onClick={() => { if (window.confirm("Reset the stored payment date so it can be re-confirmed on next check?")) checkNow({ resetDate: true }); }}>Reset date</button>
+              </div>
               <table style={{ fontSize:"0.8rem", borderCollapse:"collapse" }}>
                 <tbody>
                   <tr><td style={{ ...labelSt, paddingBottom:"3px" }}>Payment Date</td><td style={{ paddingBottom:"3px", fontWeight:600 }}>{payDate ? fmtDate(payDate) : "—"}</td></tr>
