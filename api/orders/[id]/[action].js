@@ -684,7 +684,7 @@ export default async function handler(req, res) {
       planName: firstItem.planName || "",
       lotNumber: firstItem.lotNumber || "",
       total: order.total,
-      itemCount: (order.items || []).length,
+      items: (order.items || []).map(({ productName, qty, price, ocName }) => ({ productName, qty, price, ocName })),
     });
   }
 

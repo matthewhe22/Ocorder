@@ -1019,14 +1019,13 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             {trackError && <div className="track-error">{trackError}</div>}
             {trackResult && (
               <div className="track-result">
-                <div className="track-result-id">Order {trackResult.id}</div>
-                <div className="track-result-row">
+                <div className="track-result-row" style={{ marginBottom:"10px" }}>
                   <div>
-                    <div style={{ fontWeight:600, fontSize:"0.88rem", color:"var(--ink)", marginBottom:"3px" }}>
+                    <div style={{ fontWeight:600, fontSize:"0.88rem", color:"var(--ink)", marginBottom:"2px" }}>
                       {trackResult.planName || "—"}{trackResult.lotNumber ? ` · ${trackResult.lotNumber}` : ""}
                     </div>
-                    <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>
-                      {trackResult.itemCount} item{trackResult.itemCount !== 1 ? "s" : ""} &nbsp;·&nbsp; {fmt(trackResult.total)} &nbsp;·&nbsp; {new Date(trackResult.date).toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })}
+                    <div style={{ fontSize:"0.7rem", color:"var(--muted)" }}>
+                      {trackResult.id} &nbsp;·&nbsp; {new Date(trackResult.date).toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })}
                     </div>
                   </div>
                   <span className="track-status-badge" style={({
@@ -1040,6 +1039,21 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                   }[trackResult.status] || { background:"#f3f4f6", color:"#374151" })}>
                     {trackResult.status}
                   </span>
+                </div>
+                <div style={{ borderTop:"1px solid var(--border)", paddingTop:"10px", display:"flex", flexDirection:"column", gap:"6px" }}>
+                  {(trackResult.items || []).map((item, i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px" }}>
+                      <div>
+                        <div style={{ fontSize:"0.82rem", color:"var(--ink)", fontWeight:500 }}>{item.productName || "—"}</div>
+                        {item.ocName && <div style={{ fontSize:"0.68rem", color:"var(--muted)" }}>{item.ocName}{item.qty > 1 ? ` × ${item.qty}` : ""}</div>}
+                      </div>
+                      <div style={{ fontSize:"0.82rem", color:"var(--ink)", fontWeight:600, whiteSpace:"nowrap" }}>{fmt(item.price)}</div>
+                    </div>
+                  ))}
+                  <div style={{ borderTop:"1px solid var(--border)", paddingTop:"7px", display:"flex", justifyContent:"space-between", fontSize:"0.82rem" }}>
+                    <span style={{ color:"var(--muted)", fontWeight:600 }}>Total</span>
+                    <span style={{ color:"var(--ink)", fontWeight:700 }}>{fmt(trackResult.total)}</span>
+                  </div>
                 </div>
               </div>
             )}
