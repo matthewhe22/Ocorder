@@ -1007,7 +1007,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             <div className="track-row">
               <input
                 className="track-input"
-                placeholder="Enter order reference number (e.g. OC-2024-001-001)"
+                placeholder="Enter Order Reference Number (e.g. TOCS-XXXXXXXX-XXX)"
                 value={trackRef}
                 onChange={e => { setTrackRef(e.target.value); setTrackResult(null); setTrackError(""); }}
                 onKeyDown={e => e.key === "Enter" && handleTrackOrder()}

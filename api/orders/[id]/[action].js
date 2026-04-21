@@ -670,5 +670,23 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/orders/:id/track  (public — applicant order status lookup) ──────
+  if (action === "track" && req.method === "GET") {
+    const data = await readData();
+    const order = data.orders.find(o => o.id.toUpperCase() === id.toUpperCase());
+    if (!order) return res.status(404).json({ error: "Order not found. Please check your reference number." });
+    const firstItem = order.items?.[0] || {};
+    return res.status(200).json({
+      id: order.id,
+      status: order.status,
+      date: order.date,
+      orderCategory: order.orderCategory,
+      planName: firstItem.planName || "",
+      lotNumber: firstItem.lotNumber || "",
+      total: order.total,
+      itemCount: (order.items || []).length,
+    });
+  }
+
   return res.status(404).json({ error: "Unknown action." });
 }
