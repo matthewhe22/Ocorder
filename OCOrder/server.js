@@ -940,6 +940,26 @@ async function handler(req, res) {
     return json(res, 201, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
   }
 
+  // ── GET /api/orders/:id/track  (public — applicant order status lookup) ──────
+  const trackMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/track$/);
+  if (trackMatch && method === "GET") {
+    const d = readData();
+    const rawId = trackMatch[1];
+    const order = d.orders.find(o => o.id.toUpperCase() === rawId.toUpperCase());
+    if (!order) return json(res, 404, { error: "Order not found. Please check your reference number." });
+    const firstItem = order.items?.[0] || {};
+    return json(res, 200, {
+      id: order.id,
+      status: order.status,
+      date: order.date,
+      orderCategory: order.orderCategory,
+      planName: firstItem.planName || "",
+      lotNumber: firstItem.lotNumber || "",
+      total: order.total,
+      itemCount: (order.items || []).length,
+    });
+  }
+
   // ── DELETE /api/orders/:id/delete  (admin — permanently remove a cancelled order) ─
   const deleteMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/delete$/);
   if (deleteMatch && method === "DELETE") {
@@ -1439,6 +1459,7 @@ async function handler(req, res) {
       [/^\/api\/data$/, ["GET"]],
       [/^\/api\/orders$/, ["POST"]],
       [/^\/api\/orders\/export$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/track$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/delete$/, ["DELETE"]],
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],

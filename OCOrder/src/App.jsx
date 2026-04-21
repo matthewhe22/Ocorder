@@ -387,6 +387,19 @@ const CSS = `
   .hiw-cell.hiw-act .hiw-name { color:white; }
   .hiw-desc { font-size:0.64rem; color:var(--muted); line-height:1.5; position:relative; z-index:1; }
   .hiw-cell.hiw-act .hiw-desc { color:rgba(255,255,255,0.55); }
+  /* Order tracking section */
+  .track-section { border:1.5px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:14px; background:white; }
+  .track-row { display:flex; gap:10px; align-items:center; }
+  .track-input { flex:1; padding:10px 14px; border:1.5px solid var(--border); border-radius:7px; font-family:'Inter',sans-serif; font-size:0.88rem; color:var(--ink); background:white; transition:border-color 0.15s; }
+  .track-input:focus { border-color:var(--forest); outline:none; box-shadow:0 0 0 3px rgba(28,51,38,0.08); }
+  .track-btn { padding:10px 18px; background:var(--forest); color:white; border:none; border-radius:7px; font-family:'Inter',sans-serif; font-size:0.85rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:background 0.15s; }
+  .track-btn:hover:not(:disabled) { background:var(--forest3); }
+  .track-btn:disabled { opacity:0.55; cursor:not-allowed; }
+  .track-result { margin-top:14px; padding:14px 16px; border:1.5px solid var(--border); border-radius:9px; background:#fafafa; }
+  .track-result-id { font-size:0.65rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .track-result-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .track-status-badge { font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
+  .track-error { margin-top:10px; font-size:0.82rem; color:var(--red); }
   /* Selected building card */
   .bsel { border:2px solid var(--forest); border-radius:14px; overflow:hidden; box-shadow:0 4px 20px rgba(28,51,38,0.12); margin-bottom:14px; background:white; }
   .bsel-hdr { background:var(--forest); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; }
@@ -816,6 +829,25 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
     } catch { return null; }
   });
 
+  const [trackRef, setTrackRef] = useState("");
+  const [trackResult, setTrackResult] = useState(null);
+  const [trackLoading, setTrackLoading] = useState(false);
+  const [trackError, setTrackError] = useState("");
+  const handleTrackOrder = async () => {
+    const ref = trackRef.trim().toUpperCase();
+    if (!ref) return;
+    setTrackLoading(true);
+    setTrackError("");
+    setTrackResult(null);
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(ref)}/track`);
+      const data = await r.json();
+      if (!r.ok) setTrackError(data.error || "Order not found. Please check your reference number.");
+      else setTrackResult(data);
+    } catch { setTrackError("Unable to connect. Please try again."); }
+    finally { setTrackLoading(false); }
+  };
+
   const filteredPlans = (data.strataPlans || []).filter(p => {
     if (!p.active) return false;
     const trimmed = search.trim();
@@ -967,6 +999,50 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               <div className="hiw-name">Pay your way</div>
               <div className="hiw-desc">{[pubConfig?.bankEnabled !== false && "Bank", pubConfig?.payidEnabled !== false && "PayID", pubConfig?.stripeEnabled && "Card"].filter(Boolean).join(" · ")}</div>
             </div>
+          </div>
+
+          {/* ── Order Tracking ── */}
+          <div className="track-section">
+            <div style={{ fontSize:"0.6rem", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:"var(--muted)", marginBottom:"10px" }}>Track Your Order</div>
+            <div className="track-row">
+              <input
+                className="track-input"
+                placeholder="Enter order reference number (e.g. OC-2024-001-001)"
+                value={trackRef}
+                onChange={e => { setTrackRef(e.target.value); setTrackResult(null); setTrackError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleTrackOrder()}
+              />
+              <button className="track-btn" onClick={handleTrackOrder} disabled={!trackRef.trim() || trackLoading}>
+                {trackLoading ? "Searching…" : "Track"}
+              </button>
+            </div>
+            {trackError && <div className="track-error">{trackError}</div>}
+            {trackResult && (
+              <div className="track-result">
+                <div className="track-result-id">Order {trackResult.id}</div>
+                <div className="track-result-row">
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:"0.88rem", color:"var(--ink)", marginBottom:"3px" }}>
+                      {trackResult.planName || "—"}{trackResult.lotNumber ? ` · ${trackResult.lotNumber}` : ""}
+                    </div>
+                    <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>
+                      {trackResult.itemCount} item{trackResult.itemCount !== 1 ? "s" : ""} &nbsp;·&nbsp; {fmt(trackResult.total)} &nbsp;·&nbsp; {new Date(trackResult.date).toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })}
+                    </div>
+                  </div>
+                  <span className="track-status-badge" style={({
+                    "Pending Payment":        { background:"#fef3c7", color:"#92400e" },
+                    "Processing":             { background:"#dbeafe", color:"#1e40af" },
+                    "Issued":                 { background:"#dcfce7", color:"#166534" },
+                    "Cancelled":              { background:"#fee2e2", color:"#991b1b" },
+                    "On Hold":                { background:"#ffedd5", color:"#9a3412" },
+                    "Awaiting Documents":     { background:"#fef3c7", color:"#92400e" },
+                    "Invoice to be issued":   { background:"#ede9fe", color:"#5b21b6" },
+                  }[trackResult.status] || { background:"#f3f4f6", color:"#374151" })}>
+                    {trackResult.status}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Building search results (no plan selected) ── */}
