@@ -66,12 +66,25 @@ export default async function handler(req, res) {
     // is unset we MUST deny rather than allow — silently allowing cron
     // requests without a secret would let any unauthenticated caller drive
     // the PIQ poll loop and potentially flip order statuses.
+    //
+    // Cron secret may arrive as either:
+    //   - x-cron-secret: <secret>            (custom header from external schedulers)
+    //   - authorization: Bearer <secret>     (Vercel cron's native format)
+    // Both are checked with crypto.timingSafeEqual against CRON_SECRET.
     const cronSecret = process.env.CRON_SECRET;
     const reqSecret  = req.headers["x-cron-secret"];
     const token      = req.headers["authorization"]?.replace("Bearer ", "");
     const { validToken } = await import("../_lib/store.js");
+    const { timingSafeEqual, createHash } = await import("crypto");
+    const tsHashEqual = (a, b) => {
+      const ah = createHash("sha256").update(String(a == null ? "" : a)).digest();
+      const bh = createHash("sha256").update(String(b == null ? "" : b)).digest();
+      return timingSafeEqual(ah, bh);
+    };
     const isAdmin = await validToken(token);
-    const isCron  = !!(cronSecret && reqSecret && reqSecret === cronSecret);
+    const cronViaHeader = !!(cronSecret && reqSecret && tsHashEqual(reqSecret, cronSecret));
+    const cronViaBearer = !!(cronSecret && token && tsHashEqual(token, cronSecret));
+    const isCron = cronViaHeader || cronViaBearer;
     if (!isAdmin && !isCron) {
       if (!cronSecret) {
         console.error("[CRITICAL] CRON_SECRET not set — refusing cron request. Set CRON_SECRET in the deployment environment.");
