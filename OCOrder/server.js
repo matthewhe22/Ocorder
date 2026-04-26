@@ -11,12 +11,15 @@ const DIST        = path.join(__dirname, "dist");
 const DATA_FILE   = path.join(__dirname, process.env.DATA_FILE   || "data.json");
 const CONFIG_FILE = path.join(__dirname, process.env.CONFIG_FILE || "config.json");
 const UPLOADS_DIR = path.join(__dirname, process.env.UPLOADS_DIR || "uploads");
+const BACKUPS_DIR = path.join(__dirname, process.env.BACKUPS_DIR || "backups");
+const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
 const DEMO_MODE   = process.env.DEMO_MODE === "true";
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
-// Ensure uploads directory exists
+// Ensure uploads + backups directories exist
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
 // ── Default seed data ─────────────────────────────────────────────────────────
 const DEFAULT_DATA = {
@@ -145,8 +148,23 @@ const SESSIONS = new Map();
 // Purge expired sessions every 30 minutes to prevent unbounded growth
 setInterval(() => { const now = Date.now(); for (const [t, s] of SESSIONS) if (now > s.exp) SESSIONS.delete(t); }, 30 * 60 * 1000).unref();
 
+// ── Short-lived single-use download tokens  Map<token, { user, exp, orderId, kind }> ──
+// Used for file downloads triggered from <a href> links so the long-lived session
+// token never appears in URLs / browser history / referrer / server logs.
+const DOWNLOAD_TOKENS = new Map();
+const DOWNLOAD_TOKEN_TTL_MS = 60 * 1000; // 60 seconds, single-use
+setInterval(() => { const now = Date.now(); for (const [t, s] of DOWNLOAD_TOKENS) if (now > s.exp) DOWNLOAD_TOKENS.delete(t); }, 5 * 60 * 1000).unref();
+
 function genToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+// Constant-time string comparison via SHA-256 digests so different-length
+// inputs don't leak length, and equal-length digests are compared with
+// crypto.timingSafeEqual.
+function constantTimeStrEqual(a, b) {
+  const ah = crypto.createHash("sha256").update(String(a == null ? "" : a)).digest();
+  const bh = crypto.createHash("sha256").update(String(b == null ? "" : b)).digest();
+  return crypto.timingSafeEqual(ah, bh);
 }
 function validToken(token) {
   if (!token) return false;
@@ -159,6 +177,23 @@ function getSessionUser(token) {
   const s = SESSIONS.get(token);
   return (s && Date.now() <= s.exp) ? s.user : null;
 }
+function mintDownloadToken(user, orderId, kind) {
+  const t = genToken();
+  DOWNLOAD_TOKENS.set(t, { user, orderId, kind, exp: Date.now() + DOWNLOAD_TOKEN_TTL_MS });
+  return t;
+}
+// Consumes (single-use) and validates a download token. Returns the entry or null.
+function consumeDownloadToken(token, expectedKind, expectedOrderId) {
+  if (!token) return null;
+  const s = DOWNLOAD_TOKENS.get(token);
+  if (!s) return null;
+  // Always remove on lookup (single-use; expired/mismatched still gets removed)
+  DOWNLOAD_TOKENS.delete(token);
+  if (Date.now() > s.exp) return null;
+  if (expectedKind && s.kind !== expectedKind) return null;
+  if (expectedOrderId && s.orderId !== expectedOrderId) return null;
+  return s;
+}
 // Returns the admins array from cfg, migrating from legacy cfg.admin if needed.
 function getAdmins(cfg) {
   if (Array.isArray(cfg.admins) && cfg.admins.length > 0) return cfg.admins;
@@ -166,9 +201,41 @@ function getAdmins(cfg) {
 }
 
 // ── File helpers ──────────────────────────────────────────────────────────────
+// Atomic JSON write: write to a sibling temp file in the same directory,
+// fsync, then rename onto the target. POSIX `rename(2)` is atomic on the
+// same filesystem, so the target is never observed half-written even on
+// crash or power loss. We also fsync the directory entry so the rename
+// itself is durable.
+function atomicWriteJson(targetPath, obj) {
+  const dir = path.dirname(targetPath);
+  // Pre-flight: ensure dir exists (handles first-run + custom paths)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.${path.basename(targetPath)}.tmp.${process.pid}.${crypto.randomBytes(6).toString("hex")}`);
+  const payload = JSON.stringify(obj, null, 2);
+  let fd;
+  try {
+    fd = fs.openSync(tmp, "w", 0o600);
+    fs.writeSync(fd, payload);
+    fs.fsyncSync(fd);
+  } finally {
+    if (fd != null) { try { fs.closeSync(fd); } catch {} }
+  }
+  fs.renameSync(tmp, targetPath);
+  // Best-effort dir fsync — on some platforms (Windows) opening a directory
+  // for fsync is not supported and throws EISDIR/EPERM; ignore those.
+  try {
+    const dfd = fs.openSync(dir, "r");
+    try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
+  } catch { /* non-fatal */ }
+}
+
 function readData() {
   try {
-    const d = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    // Reject empty / truncated files so we don't replace good in-memory state
+    // with a parseable-but-empty object on startup after a crashed write.
+    if (!raw.trim()) throw new Error("Data file is empty");
+    const d = JSON.parse(raw);
     if (Array.isArray(d.orders)) {
       d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
     }
@@ -176,15 +243,51 @@ function readData() {
   } catch { return structuredClone(DEMO_MODE ? DEMO_SEED_DATA : DEFAULT_DATA); }
 }
 function writeData(d) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
+  atomicWriteJson(DATA_FILE, d);
+  // After every successful write, ensure today's snapshot exists. We only
+  // create one snapshot per UTC day so writeData stays cheap; recovery scope
+  // is "yesterday's data" worst case. Failures here must NOT propagate — the
+  // primary write already succeeded, backup is best-effort.
+  try { ensureDailyBackup(d); } catch (e) { console.warn("  ⚠️   Backup snapshot failed:", e.message); }
+}
+function todayUtcStamp() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+function ensureDailyBackup(d) {
+  const stamp = todayUtcStamp();
+  const target = path.join(BACKUPS_DIR, `data-${stamp}.json`);
+  if (fs.existsSync(target)) return; // already snapshotted today
+  atomicWriteJson(target, d);
+  // Prune snapshots older than BACKUP_RETENTION_DAYS — defensive cap to
+  // prevent unbounded growth in long-running deployments.
+  pruneOldBackups();
+}
+function pruneOldBackups() {
+  const cutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  let entries;
+  try { entries = fs.readdirSync(BACKUPS_DIR); } catch { return; }
+  for (const name of entries) {
+    if (!/^data-\d{4}-\d{2}-\d{2}\.json$/.test(name)) continue;
+    const p = path.join(BACKUPS_DIR, name);
+    try {
+      const st = fs.statSync(p);
+      if (st.mtimeMs < cutoff) fs.unlinkSync(p);
+    } catch { /* best-effort */ }
+  }
 }
 function readConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch {
+  try {
+    const raw = fs.readFileSync(CONFIG_FILE, "utf8");
+    if (!raw.trim()) throw new Error("Config file is empty");
+    return JSON.parse(raw);
+  } catch {
     const seed = DEMO_MODE ? DEMO_DEFAULT_CONFIG : DEFAULT_CONFIG;
     writeConfig(seed); return structuredClone(seed);
   }
 }
-function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
+function writeConfig(c) {
+  atomicWriteJson(CONFIG_FILE, c);
+}
 
 // ── Demo-mode startup seeding ─────────────────────────────────────────────────
 // On first launch (or after manual deletion of data files), seed demo content.
@@ -581,7 +684,17 @@ async function handler(req, res) {
       if (!user || !pass) return json(res, 400, { error: "Username and password are required." });
       const cfg = readConfig();
       const admins = getAdmins(cfg);
-      const match = admins.find(a => a.username.toLowerCase() === user.toLowerCase() && a.password === pass);
+      // Constant-time match: iterate every admin, compare both username and
+      // password through SHA-256 + timingSafeEqual, never short-circuit. This
+      // prevents response-time differences between "no such user" and "wrong
+      // password" / "wrong user, right password" branches.
+      let match = null;
+      const userLower = String(user).toLowerCase();
+      for (const a of admins) {
+        const userOk = constantTimeStrEqual(String(a.username || "").toLowerCase(), userLower);
+        const passOk = constantTimeStrEqual(a.password, pass);
+        if (userOk && passOk) match = a;
+      }
       if (match) {
         const token = genToken();
         SESSIONS.set(token, { user: match.username, exp: Date.now() + 8 * 60 * 60 * 1000 });
@@ -919,20 +1032,40 @@ async function handler(req, res) {
     writeData(d);
 
     const cfg = readConfig();
-    // Send emails — capture failures and append them to the order's auditLog
+    // Send emails — capture failures and append them to the order's auditLog.
+    // Order is persisted BEFORE emails fire so an SMTP outage cannot lose the
+    // order. Failures are recorded structurally on the order so admin UI can
+    // surface them, and logged with the order id so ops can correlate.
     const emailResults = await Promise.allSettled([
       sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
       sendCustomerEmail(order, cfg),
     ]);
     const emailLabels = ["Admin notification", "Customer confirmation"];
     let needsWrite = false;
+    const failures = [];
     emailResults.forEach((r, i) => {
       if (r.status === "rejected") {
-        const entry = { ts: new Date().toISOString(), action: "Email send failed", note: `${emailLabels[i]}: ${r.reason?.message || r.reason}` };
+        const reason = r.reason?.message || String(r.reason || "unknown");
+        failures.push({ label: emailLabels[i], reason });
+        const entry = { ts: new Date().toISOString(), action: "Email send failed", note: `${emailLabels[i]}: ${reason}` };
         const idx2 = d.orders.findIndex(o => o.id === order.id);
         if (idx2 !== -1) { d.orders[idx2].auditLog = [...(d.orders[idx2].auditLog || []), entry]; needsWrite = true; }
       }
     });
+    if (failures.length) {
+      console.error(`  ⚠️   Email failures for ${order.id}:`, failures.map(f => `${f.label} (${f.reason})`).join("; "));
+      // Mark the order with an emailDeliveryStatus flag so admin UI can show
+      // a "needs follow-up" badge without grepping the audit log.
+      const idx2 = d.orders.findIndex(o => o.id === order.id);
+      if (idx2 !== -1) {
+        d.orders[idx2].emailDeliveryStatus = {
+          state: "failed",
+          failures: failures.map(f => f.label),
+          ts: new Date().toISOString(),
+        };
+        needsWrite = true;
+      }
+    }
     if (needsWrite) writeData(d);
 
     // Strip admin-only fields before returning to the customer
@@ -984,11 +1117,16 @@ async function handler(req, res) {
   }
 
   // ── PUT /api/orders/:id/status  (admin) ───────────────────────────────────
+  // When status === "Cancelled" the payload may include a `refund` object:
+  //   { amount: number, method: "none"|"manual"|"stripe"|"bank", reference: string }
+  // captured alongside the cancellation note. Stored verbatim with timestamp
+  // so admins have a paper trail without inventing a second endpoint.
   const statusMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/status$/);
   if (statusMatch && method === "PUT") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { status, note } = await readBody(req, res);
+    const body = await readBody(req, res);
+    const { status, note, refund } = body || {};
     if (!status || typeof status !== "string" || !status.trim()) return json(res, 400, { error: "A non-empty status string is required." });
     if (!VALID_STATUSES.includes(status)) return json(res, 400, { error: `Invalid status. Allowed: ${VALID_STATUSES.join(", ")}.` });
     const d = readData();
@@ -999,17 +1137,115 @@ async function handler(req, res) {
     if (note) auditEntry.note = note;
     d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), auditEntry];
     if (status === "Cancelled" && note) d.orders[idx].cancelReason = note;
+    // Refund metadata: only accept on Cancelled, whitelist fields, sanity-check types
+    if (status === "Cancelled" && refund && typeof refund === "object") {
+      const ALLOWED_METHODS = ["none", "manual", "bank", "stripe", "payid", "card"];
+      const cleanedRefund = {
+        amount: typeof refund.amount === "number" && refund.amount >= 0 ? Math.round(refund.amount * 100) / 100 : 0,
+        method: ALLOWED_METHODS.includes(refund.method) ? refund.method : "none",
+        reference: typeof refund.reference === "string" ? refund.reference.slice(0, 200) : "",
+        ts: new Date().toISOString(),
+        by: getSessionUser(token) || "admin",
+      };
+      d.orders[idx].refund = cleanedRefund;
+      d.orders[idx].auditLog.push({
+        ts: cleanedRefund.ts,
+        action: "Refund recorded",
+        note: `${cleanedRefund.method} $${cleanedRefund.amount.toFixed(2)}${cleanedRefund.reference ? ` (ref: ${cleanedRefund.reference})` : ""}`,
+      });
+    }
     writeData(d);
     return json(res, 200, { ok: true });
   }
 
+  // ── POST /api/orders/:id/notify  (admin — email customer about order) ─────
+  // Generic customer-notification endpoint. Body: { subject?, message }.
+  // Sends to order.contactInfo.email if present. Failures are logged to the
+  // order's auditLog so the admin UI can show that delivery was attempted.
+  const notifyMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/notify$/);
+  if (notifyMatch && method === "POST") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const { subject, message } = await readBody(req, res);
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return json(res, 400, { error: "A non-empty message is required." });
+    }
+    const safeMessage = message.slice(0, 5000);
+    const safeSubject = (typeof subject === "string" && subject.trim())
+      ? subject.slice(0, 200)
+      : null;
+    const d = readData();
+    const idx = d.orders.findIndex(o => o.id === notifyMatch[1]);
+    if (idx === -1) return json(res, 404, { error: "Order not found." });
+    const order = d.orders[idx];
+    const recipientEmail = order.contactInfo?.email;
+    if (!recipientEmail) return json(res, 400, { error: "Order has no customer email address." });
+    const cfg = readConfig();
+    const smtp = cfg.smtp || {};
+    if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
+    const subj = safeSubject || `Update on your TOCS order ${order.id}`;
+    // HTML-escape the user-provided message before injecting into the template.
+    const html = `
+      <div style="font-family:Arial,sans-serif;padding:24px;max-width:600px;color:#222;">
+        <h2 style="color:#1c3326;margin-top:0;">Order ${esc(order.id)} — status update</h2>
+        <p style="white-space:pre-wrap;line-height:1.5;">${esc(safeMessage).replace(/\n/g, "<br>")}</p>
+        <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0;">
+        <p style="font-size:0.78rem;color:#888;">${esc(cfg.emailTemplate?.footer || "TOCS — Top Owners Corporation Solution")}</p>
+      </div>`;
+    try {
+      const transporter = createSmtpTransporter(smtp);
+      await transporter.sendMail({
+        from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
+        to: recipientEmail,
+        subject: subj,
+        html,
+      });
+      d.orders[idx].auditLog = [
+        ...(d.orders[idx].auditLog || []),
+        { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subj}` },
+      ];
+      writeData(d);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      // Log the failure into the audit log too — failures should be visible
+      // to admins without grepping server logs.
+      d.orders[idx].auditLog = [
+        ...(d.orders[idx].auditLog || []),
+        { ts: new Date().toISOString(), action: "Customer notify failed", note: err.message },
+      ];
+      writeData(d);
+      console.error("  ❌  Customer notify failed for", order.id, "—", err.message);
+      return json(res, 500, { error: "Failed to send notification email." });
+    }
+  }
+
+  // ── POST /api/orders/:id/authority-link  (admin — mint short-lived download URL) ──
+  const authorityLinkMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/authority-link$/);
+  if (authorityLinkMatch && method === "POST") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const orderId = authorityLinkMatch[1];
+    const d = readData();
+    const order = d.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found." });
+    if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
+    const dl = mintDownloadToken(getSessionUser(token), orderId, "authority");
+    return json(res, 200, { url: `/api/orders/${encodeURIComponent(orderId)}/authority?dl=${dl}` });
+  }
+
   // ── GET /api/orders/:id/authority  (admin — download authority doc) ────────
+  // Auth: Bearer header OR ?dl=<short-lived single-use download token>.
+  // The ?token=<session> query-string fallback was removed (leaks via browser
+  // history / logs / referrer). Use POST /authority-link to obtain a ?dl= URL.
   const authorityMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/authority$/);
   if (authorityMatch && method === "GET") {
-    const token = new URL("http://x" + req.url).searchParams.get("token") || authHeader(req);
-    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const orderId = authorityMatch[1];
+    const dl = new URL("http://x" + req.url).searchParams.get("dl");
+    const headerToken = authHeader(req);
+    const dlEntry = dl ? consumeDownloadToken(dl, "authority", orderId) : null;
+    if (!validToken(headerToken) && !dlEntry) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
-    const order = d.orders.find(o => o.id === authorityMatch[1]);
+    const order = d.orders.find(o => o.id === orderId);
     if (!order) return json(res, 404, { error: "Order not found." });
     if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
     // Sanitise the stored filename: strip control chars (incl. CRLF) to prevent header injection
@@ -1084,8 +1320,10 @@ async function handler(req, res) {
   }
 
   // ── GET /api/orders/export  (admin — CSV download) ────────────────────────
+  // Bearer header only; query-string token fallback removed to prevent token
+  // leakage via browser history, server logs, referrer headers and CDN caches.
   if (urlPath === "/api/orders/export" && method === "GET") {
-    const token = authHeader(req) || new URL("http://x" + req.url).searchParams.get("token");
+    const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
     const rows = [["Order ID","Date","Name","Email","Phone","Building Name","Lot Number","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"]];
@@ -1274,6 +1512,40 @@ async function handler(req, res) {
     d.strataPlans = [...seen.values()];
     writeData(d);
     return json(res, 200, { ok: true });
+  }
+
+  // ── GET /api/admin/backup  (admin — download current data.json snapshot) ─
+  // Returns the live data file as a JSON download. Bearer-only (no query token).
+  if (urlPath === "/api/admin/backup" && method === "GET") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const d = readData();
+    const body = Buffer.from(JSON.stringify(d, null, 2), "utf8");
+    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="tocs-backup-${stamp}.json"`,
+      "Content-Length": body.length,
+    });
+    res.end(body);
+    return;
+  }
+
+  // ── GET /api/admin/backup/list  (admin — list on-disk daily snapshots) ────
+  if (urlPath === "/api/admin/backup/list" && method === "GET") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    let files = [];
+    try {
+      files = fs.readdirSync(BACKUPS_DIR)
+        .filter(f => /^data-\d{4}-\d{2}-\d{2}\.json$/.test(f))
+        .map(f => {
+          const st = fs.statSync(path.join(BACKUPS_DIR, f));
+          return { name: f, size: st.size, mtime: st.mtime.toISOString() };
+        })
+        .sort((a, b) => b.name.localeCompare(a.name));
+    } catch { /* no backups yet */ }
+    return json(res, 200, { backups: files, retentionDays: BACKUP_RETENTION_DAYS });
   }
 
   // ── POST /api/config/test-email  (admin) ──────────────────────────────────

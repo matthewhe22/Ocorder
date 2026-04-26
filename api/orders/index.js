@@ -61,15 +61,23 @@ export default async function handler(req, res) {
   // Also accepts admin Bearer token for manual triggers.
   // Scans all keys orders awaiting payment and polls their PIQ lot ledgers.
   if (req.method === "GET" && req.query?.action === "poll-piq") {
-    // Allow either: Vercel cron (no auth needed from internal scheduler)
-    // or admin Bearer token (for manual trigger via admin UI)
+    // Allow either: a valid CRON_SECRET (Vercel cron / scheduled trigger)
+    // or an admin Bearer token (manual trigger via admin UI). When CRON_SECRET
+    // is unset we MUST deny rather than allow — silently allowing cron
+    // requests without a secret would let any unauthenticated caller drive
+    // the PIQ poll loop and potentially flip order statuses.
     const cronSecret = process.env.CRON_SECRET;
     const reqSecret  = req.headers["x-cron-secret"];
     const token      = req.headers["authorization"]?.replace("Bearer ", "");
     const { validToken } = await import("../_lib/store.js");
     const isAdmin = await validToken(token);
-    const isCron  = cronSecret ? reqSecret === cronSecret : true; // if no CRON_SECRET set, allow
-    if (!isAdmin && !isCron) return res.status(401).json({ error: "Not authenticated." });
+    const isCron  = !!(cronSecret && reqSecret && reqSecret === cronSecret);
+    if (!isAdmin && !isCron) {
+      if (!cronSecret) {
+        console.error("[CRITICAL] CRON_SECRET not set — refusing cron request. Set CRON_SECRET in the deployment environment.");
+      }
+      return res.status(401).json({ error: "Not authenticated." });
+    }
 
     try {
       const cfg  = await readConfig();
