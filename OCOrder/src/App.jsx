@@ -2284,6 +2284,27 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [planSort, setPlanSort] = useState({ col: null, dir: "asc" });
   const [selectedPlanIds, setSelectedPlanIds] = useState(new Set());
   const [adminToast, setAdminToast] = useState(null);
+  // Order list: column sort (date desc by default) + page size
+  const [orderSort, setOrderSort] = useState({ col: "date", dir: "desc" });
+  const [orderPage, setOrderPage] = useState(1);
+  const ORDERS_PAGE_SIZE = 50;
+  // Notify customer modal — composed inline so we don't add another file
+  const [notifyModal, setNotifyModal] = useState(null); // { order, subject, message, sending, err }
+
+  // Global Escape handler for the inline `modal` state (Add Plan / Edit Lot
+  // / etc.) which doesn't use the dedicated modal components' useFocusTrap.
+  // Dedicated modals (CancelOrderModal, SendCertificateModal, etc.) handle
+  // their own Escape via useFocusTrap and aren't affected.
+  useEffect(() => {
+    if (!modal && !notifyModal) return;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (notifyModal && !notifyModal.sending) setNotifyModal(null);
+      else if (modal) { setModal(null); setEditTarget(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modal, notifyModal]);
 
   // ── PIQ Sync: fetch preview data from PIQ for a given plan ──────────────────
   const openPiqSync = async (planId) => {
@@ -2636,6 +2657,47 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     return statusOk && categoryOk && planOk && lotOk && textOk;
   }), [data.orders, orderFilter]);
 
+  // Sorted view of filtered orders. Sort happens after filter so the badge
+  // count still reflects matched-vs-total. Date is the default; clicking a
+  // header toggles direction or switches column.
+  const sortedOrders = useMemo(() => {
+    const arr = filteredOrders.slice();
+    const { col, dir } = orderSort;
+    const cmp = (a, b) => {
+      let av, bv;
+      switch (col) {
+        case "id":       av = a.id; bv = b.id; break;
+        case "building": av = a.items?.[0]?.planName || ""; bv = b.items?.[0]?.planName || ""; break;
+        case "name":     av = a.contactInfo?.name || ""; bv = b.contactInfo?.name || ""; break;
+        case "items":    av = (a.items || []).length; bv = (b.items || []).length; break;
+        case "total":    av = a.total || 0; bv = b.total || 0; break;
+        case "status":   av = a.status || ""; bv = b.status || ""; break;
+        case "date":
+        default:         av = new Date(a.date).getTime() || 0; bv = new Date(b.date).getTime() || 0; break;
+      }
+      if (typeof av === "string" && typeof bv === "string") return av.localeCompare(bv);
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    };
+    arr.sort((a, b) => dir === "asc" ? cmp(a, b) : -cmp(a, b));
+    return arr;
+  }, [filteredOrders, orderSort]);
+
+  const orderPageCount = Math.max(1, Math.ceil(sortedOrders.length / ORDERS_PAGE_SIZE));
+  const safeOrderPage = Math.min(orderPage, orderPageCount);
+  const pagedOrders = useMemo(() => {
+    const start = (safeOrderPage - 1) * ORDERS_PAGE_SIZE;
+    return sortedOrders.slice(start, start + ORDERS_PAGE_SIZE);
+  }, [sortedOrders, safeOrderPage]);
+
+  // Reset to page 1 whenever filters or sort change so users don't see "page 7"
+  // after narrowing to 3 results.
+  useEffect(() => { setOrderPage(1); }, [orderFilter, orderSort]);
+
+  const toggleOrderSort = (col) => {
+    setOrderSort(s => s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: col === "date" || col === "total" ? "desc" : "asc" });
+  };
+  const sortIndicator = (col) => orderSort.col === col ? (orderSort.dir === "asc" ? " ▲" : " ▼") : "";
+
   const handleLogout = () => {
     const tok = adminToken;
     setAdminToken(null);
@@ -2882,6 +2944,54 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (adminToastTimer.current) clearTimeout(adminToastTimer.current);
     setAdminToast({ type, msg });
     adminToastTimer.current = setTimeout(() => setAdminToast(null), 4000);
+  };
+
+  // Send a one-off status / note email to the customer for an order.
+  const sendNotify = async () => {
+    if (!notifyModal) return;
+    const { order, subject, message } = notifyModal;
+    if (!message?.trim()) { setNotifyModal({ ...notifyModal, err: "A message is required." }); return; }
+    setNotifyModal({ ...notifyModal, sending: true, err: "" });
+    try {
+      const r = await fetch(`/api/orders/${order.id}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ subject: subject?.trim() || undefined, message }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setNotifyModal({ ...notifyModal, sending: false, err: d.error || "Failed to send email." });
+        return;
+      }
+      // Append audit entry locally so the row updates without a refetch
+      setData(p => ({ ...p, orders: p.orders.map(o => o.id !== order.id ? o : {
+        ...o,
+        auditLog: [...(o.auditLog || []), { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subject?.trim() || `Update on your TOCS order ${order.id}`}` }],
+      }) }));
+      setNotifyModal(null);
+      showAdminToast("ok", `Email sent to ${order.contactInfo?.email}.`);
+    } catch {
+      setNotifyModal({ ...notifyModal, sending: false, err: "Network error — please try again." });
+    }
+  };
+
+  // Opens an authority-document download via a short-lived signed URL so the
+  // long-lived admin session token never appears in the URL / browser history.
+  const openAuthorityDoc = async (orderId) => {
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/authority-link`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + adminToken },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.url) {
+        showAdminToast("err", d.error || "Could not open authority document.");
+        return;
+      }
+      window.location.href = d.url;
+    } catch {
+      showAdminToast("err", "Network error opening authority document.");
+    }
   };
 
   const updateOrderStatus = async (oid, status) => {
@@ -3413,9 +3523,26 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           ) : (
             <div style={{ overflowX: "auto" }}>
             <table className="tbl">
-              <thead><tr><th>Order ID</th><th>Date</th><th>Building / Lot</th><th>Applicant</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  {[
+                    { key: "id", label: "Order ID" },
+                    { key: "date", label: "Date" },
+                    { key: "building", label: "Building / Lot" },
+                    { key: "name", label: "Applicant" },
+                    { key: "items", label: "Items" },
+                    { key: "total", label: "Total" },
+                    { key: "status", label: "Status" },
+                  ].map(h => (
+                    <th key={h.key} style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleOrderSort(h.key)} title={`Sort by ${h.label}`}>
+                      {h.label}{sortIndicator(h.key)}
+                    </th>
+                  ))}
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>
-                {filteredOrders.map(o => {
+                {pagedOrders.map(o => {
                   const building = o.items?.[0]?.planName || "—";
                   const lotNum = o.items?.[0]?.lotNumber || "—";
                   return (
@@ -3485,10 +3612,17 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 .catch(() => showAdminToast("err", "Delete failed."));
                             }}>Delete</button>
                         )}
+                        {o.contactInfo?.email && (
+                          <button className="tbl-act-btn" style={{ background:"#eff6ff",color:"#1d4ed8",border:"1px solid #bfdbfe" }}
+                            title={`Email ${o.contactInfo.email} a status update`}
+                            onClick={e => { e.stopPropagation(); setNotifyModal({ order: o, subject: `Update on your TOCS order ${o.id}`, message: `Hi ${o.contactInfo?.name || ""},\n\nYour order ${o.id} is currently: ${o.status}.\n\nKind regards,\nTOCS Team`, sending: false, err: "" }); }}>
+                            ✉ Notify
+                          </button>
+                        )}
                         {(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl) && (
                           o.lotAuthorityUrl
                             ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="tbl-act-btn" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
-                            : <a href={`/api/orders/${o.id}/authority?token=${adminToken}`} className="tbl-act-btn" style={{ textDecoration:"none" }} download onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
+                            : <button type="button" className="tbl-act-btn" style={{ background:"none", border:0, padding:0, cursor:"pointer", color:"inherit", font:"inherit" }} onClick={e => { e.stopPropagation(); openAuthorityDoc(o.id); }}>📎 Auth Doc</button>
                         )}
                         <Ic n={expandedOrder === o.id ? "arrowL" : "arrow"} s={12}/>
                       </td>
@@ -3551,6 +3685,25 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                               </div>
                             );
                           })()}
+                          {/* Cancellation + refund summary — only when cancelled */}
+                          {o.status === "Cancelled" && (o.cancelReason || o.refund) && (
+                            <div style={{ marginBottom: "1rem" }}>
+                              <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Cancellation</div>
+                              <table style={{ fontSize: "0.8rem", borderCollapse: "collapse" }}>
+                                <tbody>
+                                  {o.cancelReason && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Reason</td><td style={{ paddingBottom:"4px" }}>{o.cancelReason}</td></tr>}
+                                  {o.refund && (
+                                    <>
+                                      <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Refund method</td><td style={{ paddingBottom:"4px" }}>{o.refund.method}</td></tr>
+                                      <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Refund amount</td><td style={{ paddingBottom:"4px" }}>{fmt(o.refund.amount || 0)}</td></tr>
+                                      {o.refund.reference && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Reference</td><td style={{ paddingBottom:"4px", fontFamily:"monospace", fontSize:"0.78rem" }}>{o.refund.reference}</td></tr>}
+                                      {o.refund.ts && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Recorded</td><td style={{ paddingBottom:"4px" }}>{new Date(o.refund.ts).toLocaleString("en-AU")}{o.refund.by ? ` by ${o.refund.by}` : ""}</td></tr>}
+                                    </>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                           {/* Documents section — order summary, authority doc, certificate, invoice */}
                           {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.invoiceUrl) && (
                             <div style={{ marginBottom: "1rem" }}>
@@ -3567,9 +3720,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                       <Ic n="shield" s={13}/> Authority Doc
                                     </a>
                                   ) : (
-                                    <a href={`/api/orders/${o.id}/authority?token=${adminToken}`} className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} download>
+                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)}>
                                       <Ic n="shield" s={13}/> Authority Doc
-                                    </a>
+                                    </button>
                                   )
                                 )}
                                 {o.certificateUrl && (
@@ -3616,6 +3769,19 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 })}
               </tbody>
             </table>
+            </div>
+          )}
+          {/* Pagination — only render when more than one page */}
+          {sortedOrders.length > ORDERS_PAGE_SIZE && (
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", fontSize:"0.82rem", color:"var(--muted)" }}>
+              <span>
+                Showing {(safeOrderPage - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(safeOrderPage * ORDERS_PAGE_SIZE, sortedOrders.length)} of {sortedOrders.length}
+              </span>
+              <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+                <button className="btn btn-out" style={{ padding:"4px 10px", fontSize:"0.78rem" }} disabled={safeOrderPage <= 1} onClick={() => setOrderPage(p => Math.max(1, p - 1))}>← Prev</button>
+                <span>Page {safeOrderPage} / {orderPageCount}</span>
+                <button className="btn btn-out" style={{ padding:"4px 10px", fontSize:"0.78rem" }} disabled={safeOrderPage >= orderPageCount} onClick={() => setOrderPage(p => Math.min(orderPageCount, p + 1))}>Next →</button>
+              </div>
             </div>
           )}
         </div>
@@ -3887,6 +4053,47 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         </div>
       )}
 
+      {/* Notify Customer Modal — minimal inline modal sending POST /api/orders/:id/notify */}
+      {notifyModal && (
+        <div className="overlay" onClick={() => !notifyModal.sending && setNotifyModal(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Notify Customer" style={{ maxWidth: 540, width: "100%" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"1rem" }}>
+              <h2 className="modal-tt" style={{ margin:0 }}>Email Customer</h2>
+              <button aria-label="Close" style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)" }} onClick={() => !notifyModal.sending && setNotifyModal(null)}><Ic n="x" s={20}/></button>
+            </div>
+            <div style={{ fontSize:"0.86rem", color:"var(--muted)", marginBottom:"1rem" }}>
+              Sending to <strong>{notifyModal.order.contactInfo?.email}</strong> · order <strong>{notifyModal.order.id}</strong> · status <strong>{notifyModal.order.status}</strong>
+            </div>
+            <div className="form-row">
+              <label className="f-label">Subject</label>
+              <input
+                className="f-input"
+                autoFocus
+                value={notifyModal.subject}
+                onChange={e => setNotifyModal(s => ({ ...s, subject: e.target.value, err: "" }))}
+              />
+            </div>
+            <div className="form-row">
+              <label className="f-label">Message *</label>
+              <textarea
+                className="f-input"
+                rows={7}
+                style={{ resize:"vertical", fontFamily:"inherit", lineHeight:1.5 }}
+                value={notifyModal.message}
+                onChange={e => setNotifyModal(s => ({ ...s, message: e.target.value, err: "" }))}
+              />
+            </div>
+            {notifyModal.err && <div className="alert alert-err" style={{ marginBottom:"1rem" }}>{notifyModal.err}</div>}
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button className="btn btn-out" style={{ flex:1 }} onClick={() => setNotifyModal(null)} disabled={notifyModal.sending}>Cancel</button>
+              <button className="btn btn-blk" style={{ flex:1, justifyContent:"center" }} onClick={sendNotify} disabled={notifyModal.sending}>
+                {notifyModal.sending ? "Sending…" : "Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Send Certificate Modal */}
       {sendCertModal && (
         <SendCertificateModal
@@ -3919,8 +4126,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           order={cancelOrderModal.order}
           adminToken={adminToken}
           onClose={() => setCancelOrderModal(null)}
-          onCancelled={(oid, reason) => {
-            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: "Cancelled", cancelReason: reason, auditLog: [...(o.auditLog||[]), { ts: new Date().toISOString(), action: "Order cancelled", note: reason }] }) }));
+          onCancelled={(oid, reason, refund) => {
+            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : {
+              ...o,
+              status: "Cancelled",
+              cancelReason: reason,
+              ...(refund ? { refund: { ...refund, ts: new Date().toISOString() } } : {}),
+              auditLog: [
+                ...(o.auditLog||[]),
+                { ts: new Date().toISOString(), action: "Order cancelled", note: reason },
+                ...(refund ? [{ ts: new Date().toISOString(), action: "Refund recorded", note: `${refund.method} $${(refund.amount||0).toFixed(2)}${refund.reference ? ` (ref: ${refund.reference})` : ""}` }] : []),
+              ],
+            }) }));
             setCancelOrderModal(null);
           }}
         />
@@ -4295,16 +4512,26 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  // Refund metadata captured alongside the cancellation. Default amount to
+  // the full order total so the typical "issued + paid → refund full" path
+  // is one click; admin can override or set 0 to mark "no refund due".
+  const [refundAmount, setRefundAmount] = useState(typeof order.total === "number" ? String(order.total.toFixed(2)) : "0.00");
+  const [refundMethod, setRefundMethod] = useState("none");
+  const [refundReference, setRefundReference] = useState("");
 
   const handleCancel = async () => {
     if (!reason.trim()) { setErr("Please enter a reason for cancelling this order."); return; }
     if (!confirmed) { setErr("Please tick the confirmation checkbox before proceeding."); return; }
     setSaving(true); setErr("");
+    const amountNum = Number(refundAmount);
+    const refund = (refundMethod !== "none" || amountNum > 0)
+      ? { amount: Number.isFinite(amountNum) ? amountNum : 0, method: refundMethod, reference: refundReference.trim() }
+      : undefined;
     try {
       const r = await fetch(`/api/orders/${order.id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ status: "Cancelled", note: reason }),
+        body: JSON.stringify({ status: "Cancelled", note: reason, refund }),
       });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
@@ -4312,7 +4539,7 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
         setSaving(false);
         return;
       }
-      onCancelled(order.id, reason);
+      onCancelled(order.id, reason, refund);
     } catch {
       setErr("Network error — please try again.");
       setSaving(false);
@@ -4343,6 +4570,46 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
             onChange={e => { setReason(e.target.value); setErr(""); }}
           />
         </div>
+
+        <fieldset style={{ border:"1px solid var(--border)", borderRadius:"6px", padding:"10px 12px 4px", marginBottom:"1.2rem" }}>
+          <legend style={{ padding:"0 6px", fontSize:"0.74rem", fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Refund (optional)</legend>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"6px" }}>
+            <div>
+              <label className="f-label" style={{ fontSize:"0.78rem" }}>Method</label>
+              <select className="f-input" value={refundMethod} onChange={e => setRefundMethod(e.target.value)}>
+                <option value="none">No refund due</option>
+                <option value="manual">Manual (record only)</option>
+                <option value="bank">Bank transfer</option>
+                <option value="payid">PayID</option>
+                <option value="stripe">Stripe</option>
+                <option value="card">Card</option>
+              </select>
+            </div>
+            <div>
+              <label className="f-label" style={{ fontSize:"0.78rem" }}>Amount (AUD)</label>
+              <input
+                className="f-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={refundAmount}
+                onChange={e => setRefundAmount(e.target.value)}
+                disabled={refundMethod === "none"}
+              />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom:"4px" }}>
+            <label className="f-label" style={{ fontSize:"0.78rem" }}>Reference (optional)</label>
+            <input
+              className="f-input"
+              maxLength={200}
+              placeholder="e.g. Stripe refund id, bank receipt no., internal note"
+              value={refundReference}
+              onChange={e => setRefundReference(e.target.value)}
+              disabled={refundMethod === "none"}
+            />
+          </div>
+        </fieldset>
 
         <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", fontSize: "0.84rem", marginBottom: "1.2rem" }}>
           <input

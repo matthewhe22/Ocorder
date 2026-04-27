@@ -7,9 +7,19 @@
 //   "change-credentials" — update own username/password
 import { readConfig, writeConfig, createSession, validToken, extractToken,
          invalidateAllSessions, cors, kvGet, kvSet, kvDel, KV_AVAILABLE } from "../_lib/store.js";
+import { createHash, timingSafeEqual } from "crypto";
 
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_TTL = 15 * 60; // seconds
+
+// Constant-time string comparison via SHA-256 digests — prevents timing
+// attacks on credential validation. Length differences are masked because
+// both inputs are hashed to a fixed 32-byte digest before comparison.
+function constantTimeStrEqual(a, b) {
+  const ah = createHash("sha256").update(String(a == null ? "" : a)).digest();
+  const bh = createHash("sha256").update(String(b == null ? "" : b)).digest();
+  return timingSafeEqual(ah, bh);
+}
 
 // Returns the admins array from cfg, migrating from legacy single-user format if needed.
 function getAdmins(cfg) {
@@ -63,7 +73,17 @@ export default async function handler(req, res) {
 
       const cfg = await readConfig();
       const admins = getAdmins(cfg);
-      const match = admins.find(a => a.username.toLowerCase() === user.toLowerCase() && a.password === pass);
+      // Constant-time match: iterate every admin, compare username and
+      // password through SHA-256 + timingSafeEqual, never short-circuit on
+      // the first username hit. Mitigates response-time disclosure of which
+      // branch (wrong user vs wrong password) failed.
+      let match = null;
+      const userLower = String(user).toLowerCase();
+      for (const a of admins) {
+        const userOk = constantTimeStrEqual(String(a.username || "").toLowerCase(), userLower);
+        const passOk = constantTimeStrEqual(a.password, pass);
+        if (userOk && passOk) match = a;
+      }
 
       if (match) {
         if (KV_AVAILABLE) {
@@ -84,8 +104,10 @@ export default async function handler(req, res) {
 
       return res.status(401).json({ error: "Incorrect username or password." });
     } catch (err) {
+      // Log full error server-side; return generic message to avoid leaking
+      // stack traces / dependency error text (Stripe, KV, SMTP) to clients.
       console.error("Login error:", err);
-      return res.status(500).json({ error: "Server error: " + (err.message || "Unknown error") });
+      return res.status(500).json({ error: "Internal server error." });
     }
   }
 

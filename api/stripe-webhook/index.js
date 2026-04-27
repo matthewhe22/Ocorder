@@ -29,18 +29,29 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const cfg = await readConfig();
+  const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
+  const stripeInUse = !!stripeKey;
+
+  // Refuse to process any webhook without the signing secret. We escalate the
+  // log level when Stripe IS configured (live payments) but the webhook secret
+  // is missing — that's a deploy-time misconfiguration that must be fixed,
+  // not a routine "Stripe disabled" no-op. Using 503 (vs 403) so monitoring
+  // and Stripe's own retry/back-off treat this as a server fault.
   if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET is not set — rejecting webhook to prevent unauthenticated payment confirmation.");
-    return res.status(403).json({ error: "Webhook secret not configured." });
+    if (stripeInUse) {
+      console.error("[CRITICAL] STRIPE_WEBHOOK_SECRET missing while Stripe is configured — payment confirmations cannot be verified. Set STRIPE_WEBHOOK_SECRET in the deployment environment.");
+    } else {
+      console.error("STRIPE_WEBHOOK_SECRET is not set — rejecting webhook.");
+    }
+    return res.status(503).json({ error: "Webhook secret not configured.", code: "WEBHOOK_SECRET_MISSING" });
   }
 
   // Read raw body for Stripe signature verification
   const rawBody = await getRawBody(req);
   const sig = req.headers["stripe-signature"];
 
-  const cfg = await readConfig();
-  const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) {
+  if (!stripeInUse) {
     console.error("Stripe secret key is not configured — cannot initialise Stripe.");
     return res.status(200).json({ received: true, skipped: true });
   }
@@ -51,8 +62,11 @@ export default async function handler(req, res) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
+    // Log full reason server-side; respond with a generic message so the raw
+    // Stripe error (which may include internal payload details) isn't echoed
+    // back to whoever sent the request.
     console.error("Stripe webhook signature verification failed:", err.message);
-    return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
+    return res.status(400).json({ error: "Webhook signature verification failed." });
   }
 
   // Handle checkout.session.expired — customer abandoned or session timed out
