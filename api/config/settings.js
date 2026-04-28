@@ -212,7 +212,11 @@ export default async function handler(req, res) {
         };
       });
 
-      const response = { ok: true, piqBuildingId, schedules, lots };
+      // Include raw first lot for debugging — lets admin inspect what fields PIQ actually returns
+      // so field-name mapping can be verified/corrected without guessing.
+      const _debugRawLot = rawLots.length > 0 ? rawLots[0] : null;
+
+      const response = { ok: true, piqBuildingId, schedules, lots, _debugRawLot };
       if (buildingName    !== undefined) response.buildingName    = buildingName;
       if (buildingAddress !== undefined && buildingAddress !== null) response.address = buildingAddress;
       return res.status(200).json(response);

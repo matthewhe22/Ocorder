@@ -4062,6 +4062,16 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         </div>
                     }
                   </div>
+                  {piqSyncModal.result._debugRawLot && (
+                    <div style={{ marginBottom:"16px" }}>
+                      <div style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:"6px" }}>
+                        Raw PIQ lot fields (first lot — for field mapping verification)
+                      </div>
+                      <pre style={{ background:"#f8f8f8", border:"1px solid var(--border)", borderRadius:"4px", padding:"8px 10px", fontSize:"0.7rem", overflowX:"auto", maxHeight:"140px", overflowY:"auto", margin:0, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>
+                        {JSON.stringify(piqSyncModal.result._debugRawLot, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                   <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"6px", padding:"10px 14px", fontSize:"0.78rem", marginBottom:"16px" }}>
                     ℹ️ Importing will add/update Owner Corporations and Lots in plan <strong>{piqSyncModal.planId}</strong>. Existing data will not be deleted.
                     {(piqSyncModal.result.schedules?.length === 1)
