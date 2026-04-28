@@ -199,10 +199,10 @@ export default async function handler(req, res) {
       // Map PIQ lots → platform lot format
       const lots = rawLots.map(l => ({
         piqLotId:     l.id,
-        lotNumber:    l.lotNumber  || l.number || String(l.id),
-        unitNumber:   l.unitNumber || "",
+        lotNumber:    l.lotNumber  || l.lot    || l.number || String(l.id),
+        unitNumber:   l.unitNumber || l.unit   || "",
         streetNumber: l.streetNumber || l.houseNumber || l.streetNo || "",
-        streetName:   l.streetName  || l.street || "",
+        streetName:   l.streetName   || l.street || "",
         ownerName:    l.ownerContact?.name || l.name || "",
       }));
 

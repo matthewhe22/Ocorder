@@ -1185,7 +1185,13 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                   else if (!lotNum) setSelectedOCs([]);
                 };
                 const filtered = lotInputText.trim()
-                  ? plan.lots.filter(l => l.number.toLowerCase().includes(lotInputText.trim().toLowerCase()))
+                  ? plan.lots.filter(l => {
+                      const q = lotInputText.trim().toLowerCase();
+                      return l.number.toLowerCase().includes(q) ||
+                        (l.unitNumber  && l.unitNumber.toLowerCase().includes(q)) ||
+                        (l.streetNumber && l.streetNumber.toLowerCase().includes(q)) ||
+                        (l.streetName  && l.streetName.toLowerCase().includes(q));
+                    })
                   : plan.lots;
                 return (
                   <div style={{ position: "relative" }}>
@@ -1219,9 +1225,12 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                             onMouseEnter={e => e.currentTarget.style.background = "var(--sage-tint)"}
                             onMouseLeave={e => e.currentTarget.style.background = lotNumber === l.number ? "var(--sage-tint)" : "white"}
                           >
-                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
+                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>
+                              {l.number}
+                              {l.unitNumber ? <span style={{ fontWeight: 400, color: "var(--muted)", marginLeft: "6px" }}>Unit {l.unitNumber}</span> : null}
+                            </span>
                             <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                              {l.type || ""}
+                              {l.streetNumber || l.streetName ? [l.streetNumber, l.streetName].filter(Boolean).join(" ") : (l.type || "")}
                             </span>
                           </div>
                         ))}
