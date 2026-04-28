@@ -1229,7 +1229,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                               {l.number}
                               {l.unitNumber ? <span style={{ fontWeight: 400, color: "var(--muted)", marginLeft: "6px" }}>Unit {l.unitNumber}</span> : null}
                             </span>
-                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{l.type || ""}</span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                              {(l.streetNumber || l.streetName)
+                                ? [l.streetNumber, l.streetName].filter(Boolean).join(" ")
+                                : (l.type || "")}
+                            </span>
                           </div>
                         ))}
                       </div>

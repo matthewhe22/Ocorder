@@ -196,15 +196,21 @@ export default async function handler(req, res) {
         name:          s.name || `Schedule ${s.id}`,
       }));
 
-      // Map PIQ lots → platform lot format
-      const lots = rawLots.map(l => ({
-        piqLotId:     l.id,
-        lotNumber:    l.lotNumber  || l.lot    || l.number || String(l.id),
-        unitNumber:   l.unitNumber || l.unit   || "",
-        streetNumber: l.streetNumber || l.houseNumber || l.streetNo || "",
-        streetName:   l.streetName   || l.street || "",
-        ownerName:    l.ownerContact?.name || l.name || "",
-      }));
+      // Map PIQ lots → platform lot format.
+      // Address fields may be top-level scalars OR nested under l.address / l.propertyAddress.
+      const lots = rawLots.map(l => {
+        const addr = l.address || l.propertyAddress || l.physicalAddress || {};
+        return {
+          piqLotId:     l.id,
+          lotNumber:    l.lotNumber  || l.lot    || l.number || String(l.id),
+          unitNumber:   l.unitNumber || l.unit   || addr.unitNumber || addr.unit || "",
+          streetNumber: l.streetNumber || l.houseNumber || l.streetNo ||
+                        addr.streetNumber || addr.houseNumber || addr.streetNo || "",
+          streetName:   l.streetName || l.street ||
+                        addr.streetName || addr.street || "",
+          ownerName:    l.ownerContact?.name || l.name || "",
+        };
+      });
 
       const response = { ok: true, piqBuildingId, schedules, lots };
       if (buildingName    !== undefined) response.buildingName    = buildingName;

@@ -137,7 +137,7 @@ export async function getPiqLots(cfg, buildingId) {
     const result    = await piqGet(access_token, baseUrl, `/buildings/${buildingId}/lots`, {
       number: PAGE_SIZE,
       page,
-      include: "ownerContact",
+      include: "ownerContact,address",
     });
     const pageData = Array.isArray(result) ? result : (result?.data || []);
     if (!pageData.length) break;
