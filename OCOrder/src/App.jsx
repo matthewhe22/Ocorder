@@ -2372,21 +2372,25 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           normLot(el.number) === normLot(l.lotNumber)
         );
         if (existingIdx >= 0) {
-          existingLots[existingIdx].piqLotId   = l.piqLotId;
-          existingLots[existingIdx].id          = `piq-${l.piqLotId}`;
-          existingLots[existingIdx].unitNumber  = l.unitNumber || existingLots[existingIdx].unitNumber || "";
+          existingLots[existingIdx].piqLotId     = l.piqLotId;
+          existingLots[existingIdx].id            = `piq-${l.piqLotId}`;
+          existingLots[existingIdx].unitNumber    = l.unitNumber    || existingLots[existingIdx].unitNumber    || "";
+          existingLots[existingIdx].streetNumber  = l.streetNumber  || existingLots[existingIdx].streetNumber  || "";
+          existingLots[existingIdx].streetName    = l.streetName    || existingLots[existingIdx].streetName    || "";
           // Auto-assign OC if the lot currently has none and there is only one OC
           if (autoAssignOC && (!existingLots[existingIdx].ownerCorps || existingLots[existingIdx].ownerCorps.length === 0)) {
             existingLots[existingIdx].ownerCorps = autoAssignOC;
           }
         } else {
           existingLots.push({
-            id:         `piq-${l.piqLotId}`,
-            number:     l.lotNumber,
-            unitNumber: l.unitNumber || "",
-            type:       "",
-            ownerCorps: autoAssignOC || [],
-            piqLotId:   l.piqLotId,
+            id:           `piq-${l.piqLotId}`,
+            number:       l.lotNumber,
+            unitNumber:   l.unitNumber   || "",
+            streetNumber: l.streetNumber || "",
+            streetName:   l.streetName   || "",
+            type:         "",
+            ownerCorps:   autoAssignOC || [],
+            piqLotId:     l.piqLotId,
           });
         }
       }
@@ -2533,13 +2537,15 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber)
           );
           if (ei >= 0) {
-            existingLots[ei].piqLotId  = l.piqLotId;
-            existingLots[ei].id        = `piq-${l.piqLotId}`;
-            existingLots[ei].unitNumber = l.unitNumber || existingLots[ei].unitNumber || "";
+            existingLots[ei].piqLotId     = l.piqLotId;
+            existingLots[ei].id           = `piq-${l.piqLotId}`;
+            existingLots[ei].unitNumber   = l.unitNumber   || existingLots[ei].unitNumber   || "";
+            existingLots[ei].streetNumber = l.streetNumber || existingLots[ei].streetNumber || "";
+            existingLots[ei].streetName   = l.streetName   || existingLots[ei].streetName   || "";
             if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0))
               existingLots[ei].ownerCorps = autoOC;
           } else {
-            existingLots.push({ id: `piq-${l.piqLotId}`, number: l.lotNumber, unitNumber: l.unitNumber || "", type: "", ownerCorps: autoOC || [], piqLotId: l.piqLotId });
+            existingLots.push({ id: `piq-${l.piqLotId}`, number: l.lotNumber, unitNumber: l.unitNumber || "", streetNumber: l.streetNumber || "", streetName: l.streetName || "", type: "", ownerCorps: autoOC || [], piqLotId: l.piqLotId });
           }
         }
         plan.lots = existingLots;
@@ -4027,13 +4033,15 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       : <div style={{ maxHeight:"200px", overflow:"auto", border:"1px solid var(--border)", borderRadius:"4px" }}>
                           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
                             <thead style={{ position:"sticky", top:0, background:"var(--cream)" }}>
-                              <tr><th style={{ padding:"6px 10px", textAlign:"left" }}>PIQ Lot ID</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Lot No.</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Unit</th></tr>
+                              <tr><th style={{ padding:"6px 10px", textAlign:"left" }}>PIQ Lot ID</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Lot No.</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Unit</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Street No</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Street Name</th></tr>
                             </thead>
                             <tbody>{(piqSyncModal.result.lots || []).map(l => (
                               <tr key={l.piqLotId} style={{ borderBottom:"1px solid var(--border2)" }}>
                                 <td style={{ padding:"5px 10px", fontFamily:"monospace", color:"var(--muted)" }}>{l.piqLotId}</td>
                                 <td style={{ padding:"5px 10px" }}>{l.lotNumber}</td>
                                 <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.unitNumber || "—"}</td>
+                                <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.streetNumber || "—"}</td>
+                                <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.streetName || "—"}</td>
                               </tr>
                             ))}</tbody>
                           </table>
