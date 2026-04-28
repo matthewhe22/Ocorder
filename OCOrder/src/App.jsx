@@ -100,7 +100,8 @@ const Ic = ({ n, s=18 }) => {
     list:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
     info:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>,
     logout:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>,
-    upload:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13"/></svg>,
+    upload:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13"/></svg>,
+    download: <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>,
     mail:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>,
     image:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
     cloud:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/></svg>,
@@ -2890,7 +2891,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
     setLotOcErr("");
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
-      ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, type: form.lotType || "Residential", ownerCorps: ocList }]
+      ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, unitNumber: form.unitNumber || "", streetNumber: form.streetNumber || "", streetName: form.streetName || "", type: form.lotType || "Residential", ownerCorps: ocList }]
     });
     await savePlans(plans);
     setModal(null); setForm({});
@@ -2906,7 +2907,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setLotOcErr("");
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, lots: pl.lots.map(l => l.id !== editTarget.id ? l : {
-        ...l, number: form.lotNum, type: form.lotType || "Residential",
+        ...l, number: form.lotNum, unitNumber: form.unitNumber || "", streetNumber: form.streetNumber || "", streetName: form.streetName || "", type: form.lotType || "Residential",
         ownerCorps: ocList,
       })
     });
@@ -3040,7 +3041,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setLotOcErr("");
-    setForm({ lotNum: lot.number, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
+    setForm({ lotNum: lot.number, lotType: lot.type, ocIds: lot.ownerCorps.join(", "), unitNumber: lot.unitNumber || "", streetNumber: lot.streetNumber || "", streetName: lot.streetName || "" });
     setModal("editLot");
   };
 
@@ -3052,6 +3053,21 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
     setForm({ name: prod.name, desc: prod.description, price: prod.price, secondaryPrice: prod.secondaryPrice, turnaround: prod.turnaround, perOC: String(prod.perOC), category: prod.category || "oc", managerAdminCharge: prod.managerAdminCharge !== undefined ? prod.managerAdminCharge : "", externalUrl: prod.externalUrl || "", ...scFields });
     setModal("editProduct");
+  };
+
+  // ── Download sample lots Excel ──────────────────────────────────────────────
+  const downloadSampleLotsExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = [
+      { "Lot Number": "1", "Unit Number": "1", "Street No": "31", "Street Name": "Faraday Road", "Type": "Residential", "Owner Corp IDs": "OC-1" },
+      { "Lot Number": "2", "Unit Number": "2", "Street No": "31", "Street Name": "Faraday Road", "Type": "Residential", "Owner Corp IDs": "OC-1" },
+      { "Lot Number": "3", "Unit Number": "3", "Street No": "31", "Street Name": "Faraday Road", "Type": "Commercial", "Owner Corp IDs": "OC-1, OC-2" },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Lots");
+    XLSX.writeFile(wb, "lots-sample.xlsx");
   };
 
   // ── Excel / CSV import for lots ─────────────────────────────────────────────
@@ -3076,8 +3092,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             const k = keys.find(k => names.some(n => norm(k) === norm(n)));
             return k ? String(row[k]).trim() : "";
           };
-          const number = get("Lot Number", "Lot No", "Lot", "Number");
-          const type   = get("Type", "Lot Type", "Use");
+          const number       = get("Lot Number", "Lot No", "Lot", "Number");
+          const type         = get("Type", "Lot Type", "Use");
+          const unitNumber   = get("Unit Number", "Unit No", "Unit");
+          const streetNumber = get("Street No", "Street Number", "Street No.", "StreetNo");
+          const streetName   = get("Street Name", "Street", "StreetName");
           if (!number) return;
           let ownerCorps;
           if (fixedOcId) {
@@ -3087,7 +3106,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             ownerCorps = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
           }
           const VALID_LOT_TYPES = ["Residential", "Commercial", "Parking"];
-          parsed.push({ id: "L" + idBase + (baseIdx + idx), number, type: VALID_LOT_TYPES.includes(type) ? type : "Residential", ownerCorps });
+          parsed.push({ id: "L" + idBase + (baseIdx + idx), number, unitNumber, streetNumber, streetName, type: VALID_LOT_TYPES.includes(type) ? type : "Residential", ownerCorps });
         });
         return parsed;
       };
@@ -3363,6 +3382,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <div className="section-hd">
                 <h2 className="section-tt">Lots — {plan.name}</h2>
                 <div style={{ display: "flex", gap: "8px" }}>
+                  <button className="btn btn-out" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={downloadSampleLotsExcel}>
+                    <Ic n="download" s={13}/> Sample Excel
+                  </button>
                   <label className="btn btn-out" style={{ padding: "8px 16px", fontSize: "0.72rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                     <Ic n="upload" s={13}/> Import Excel
                     <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => importLotsFromFile(e, planId)}/>
@@ -4376,6 +4398,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2 className="modal-tt">{modal === "editLot" ? "Edit Lot" : "Add Lot"}</h2>
             <div className="form-row"><label className="f-label">Lot Number (e.g. Lot 10)</label><input className="f-input" placeholder="Lot Number (e.g. Lot 10)" value={form.lotNum||""} onChange={e => upd("lotNum",e.target.value)}/></div>
+            <div style={{ display:"flex", gap:"12px" }}>
+              <div className="form-row" style={{ flex:1 }}><label className="f-label">Unit Number</label><input className="f-input" placeholder="e.g. 3" value={form.unitNumber||""} onChange={e => upd("unitNumber",e.target.value)}/></div>
+              <div className="form-row" style={{ flex:1 }}><label className="f-label">Street No</label><input className="f-input" placeholder="e.g. 31" value={form.streetNumber||""} onChange={e => upd("streetNumber",e.target.value)}/></div>
+            </div>
+            <div className="form-row"><label className="f-label">Street Name</label><input className="f-input" placeholder="e.g. Faraday Road" value={form.streetName||""} onChange={e => upd("streetName",e.target.value)}/></div>
             <div className="form-row"><label className="f-label">Type</label>
               <select className="f-select" value={form.lotType||"Residential"} onChange={e => upd("lotType",e.target.value)}>
                 {["Residential","Commercial","Parking","Storage","Mixed"].map(t => <option key={t}>{t}</option>)}
