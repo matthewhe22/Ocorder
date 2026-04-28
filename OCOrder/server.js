@@ -468,6 +468,63 @@ function buildCertEmailHtml(order, message, cfg) {
 </body></html>`;
 }
 
+// ── Order-amended applicant email ────────────────────────────────────────────
+// Sent when an admin amends an unpaid order so the applicant sees the updated
+// total, items, and any note explaining the change.
+function buildAmendedCustomerEmailHtml(order, oldTotal, newTotal, note, cfg) {
+  const tpl = cfg.emailTemplate || {};
+  const contact = order.contactInfo || {};
+  const items = order.items || [];
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const itemRows = items.map(it => `
+    <tr>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(it.productName) || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:center;">${Number(it.qty) || 1}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:right;">$${(Number(it.price) || 0).toFixed(2)}</td>
+    </tr>`).join("");
+  const totalChanged = Math.round(Number(newTotal) * 100) !== Math.round(Number(oldTotal) * 100);
+  const totalsBlock = totalChanged
+    ? `<tr><td style="padding:6px 0;color:#666;width:38%;">Previous Total</td><td style="padding:6px 0;text-decoration:line-through;color:#999;">$${Number(oldTotal).toFixed(2)} AUD</td></tr>
+       <tr><td style="padding:6px 0;color:#666;">New Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${Number(newTotal).toFixed(2)} AUD</td></tr>`
+    : `<tr><td style="padding:6px 0;color:#666;width:38%;">Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${Number(newTotal).toFixed(2)} AUD</td></tr>`;
+  const noteBlock = note
+    ? `<p style="margin:16px 0 0;padding:12px 16px;background:#f0f7f3;border-left:4px solid #2e6b42;border-radius:4px;font-size:0.88rem;"><strong>Note from TOCS:</strong> ${esc(note).replace(/\n/g, "<br>")}</p>`
+    : "";
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1c3326;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Portal</h1>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Updated</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin-top:0;">Dear ${esc(contact.name) || "Applicant"},</p>
+      <p>Your order <strong style="font-family:monospace;">${esc(order.id)}</strong> has been amended by our team. The order reference number stays the same; the updated details are shown below.</p>
+      ${noteBlock}
+      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Updated Order</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        ${totalsBlock}
+        <tr><td style="padding:6px 0;color:#666;">Status</td><td style="padding:6px 0;">${esc(order.status)}</td></tr>
+      </table>
+      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Items</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <tr style="background:#f5f7f5;">
+          <th style="padding:8px 12px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#666;">Product</th>
+          <th style="padding:8px 12px;text-align:center;font-size:0.78rem;text-transform:uppercase;color:#666;">Qty</th>
+          <th style="padding:8px 12px;text-align:right;font-size:0.78rem;text-transform:uppercase;color:#666;">Price</th>
+        </tr>
+        ${itemRows}
+        ${order.selectedShipping?.name ? `<tr><td colspan="2" style="padding:8px 12px;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;">$${(Number(order.selectedShipping.price) || 0).toFixed(2)}</td></tr>` : ""}
+        <tr style="background:#f5f7f5;"><td colspan="2" style="padding:8px 12px;font-weight:700;">Total</td><td style="padding:8px 12px;text-align:right;font-weight:700;">$${Number(newTotal).toFixed(2)} AUD</td></tr>
+      </table>
+      <p style="font-size:0.85rem;color:#555;">If an invoice was previously issued, an updated invoice reflecting the new total will be sent separately. Please use the same order reference for any payment.</p>
+      <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
+      <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
 // ── Shared SMTP transporter factory ──────────────────────────────────────────
 function createSmtpTransporter(smtp) {
   return nodemailer.createTransport({
@@ -1188,6 +1245,40 @@ async function handler(req, res) {
       note: auditNote,
     }];
     writeData(d);
+
+    // Notify the applicant by email that the order has been amended.
+    // Best-effort: SMTP failure is recorded in the audit log but does not
+    // fail the request — the amendment itself has already been persisted.
+    const cfgAmend = readConfig();
+    const smtpAmend = cfgAmend.smtp || {};
+    const recipientEmail = d.orders[idx].contactInfo?.email;
+    if (recipientEmail && smtpAmend.host && smtpAmend.user && smtpAmend.pass) {
+      try {
+        const transporter = createSmtpTransporter(smtpAmend);
+        const fromEmail = cfgAmend.orderEmail || "Orders@tocs.co";
+        await transporter.sendMail({
+          from: `"Top Owners Corporation Solution" <${fromEmail}>`,
+          to: recipientEmail,
+          subject: `Update to your TOCS order ${d.orders[idx].id}`,
+          html: buildAmendedCustomerEmailHtml(d.orders[idx], oldTotal, newTotal, noteText, cfgAmend),
+        });
+        d.orders[idx].auditLog.push({
+          ts: new Date().toISOString(),
+          action: "Amendment notification sent",
+          note: `Sent to: ${recipientEmail}`,
+        });
+        writeData(d);
+      } catch (err) {
+        d.orders[idx].auditLog.push({
+          ts: new Date().toISOString(),
+          action: "Amendment notification failed",
+          note: (err.message || "").substring(0, 200),
+        });
+        writeData(d);
+        console.error("  ❌  Amendment notification failed for", d.orders[idx].id, "—", err.message);
+      }
+    }
+
     return json(res, 200, { ok: true, order: d.orders[idx] });
   }
 
@@ -1813,6 +1904,7 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],
+      [/^\/api\/orders\/[^/]+\/notify$/, ["POST"]],
       [/^\/api\/lots\/import$/, ["POST"]],
       [/^\/api\/plans$/, ["POST"]],
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
