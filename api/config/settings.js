@@ -198,10 +198,12 @@ export default async function handler(req, res) {
 
       // Map PIQ lots → platform lot format
       const lots = rawLots.map(l => ({
-        piqLotId:   l.id,
-        lotNumber:  l.lotNumber  || l.number || String(l.id),
-        unitNumber: l.unitNumber || "",
-        ownerName:  l.ownerContact?.name || l.name || "",
+        piqLotId:     l.id,
+        lotNumber:    l.lotNumber  || l.lot    || l.number || String(l.id),
+        unitNumber:   l.unitNumber || l.unit   || "",
+        streetNumber: l.streetNumber || l.houseNumber || l.streetNo || "",
+        streetName:   l.streetName   || l.street || "",
+        ownerName:    l.ownerContact?.name || l.name || "",
       }));
 
       const response = { ok: true, piqBuildingId, schedules, lots };
