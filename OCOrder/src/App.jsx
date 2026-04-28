@@ -1229,9 +1229,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                               {l.number}
                               {l.unitNumber ? <span style={{ fontWeight: 400, color: "var(--muted)", marginLeft: "6px" }}>Unit {l.unitNumber}</span> : null}
                             </span>
-                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                              {l.streetNumber || l.streetName ? [l.streetNumber, l.streetName].filter(Boolean).join(" ") : (l.type || "")}
-                            </span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{l.type || ""}</span>
                           </div>
                         ))}
                       </div>
@@ -3371,11 +3369,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 </div>
               </div>
               <table className="tbl">
-                <thead><tr><th>Lot</th><th>Type</th><th>Owner Corporations</th><th></th></tr></thead>
+                <thead><tr><th>Lot</th><th>Unit</th><th>Street No</th><th>Street Name</th><th>Type</th><th>Owner Corporations</th><th></th></tr></thead>
                 <tbody>
                   {plan.lots.map(l => (
                     <tr key={l.id} style={(!l.ownerCorps || l.ownerCorps.length === 0) ? { background:"#fffbeb", borderLeft:"3px solid #f59e0b" } : {}}>
                       <td><strong>{l.number}</strong></td>
+                      <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{l.unitNumber || "—"}</td>
+                      <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{l.streetNumber || "—"}</td>
+                      <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{l.streetName || "—"}</td>
                       <td><span className={`badge ${l.type==="Residential"?"bg-b":l.type==="Commercial"?"bg-gold":"bg-gray"}`}>{l.type}</span></td>
                       <td style={{ fontSize: "0.78rem" }}>
                         {(!l.ownerCorps || l.ownerCorps.length === 0)
