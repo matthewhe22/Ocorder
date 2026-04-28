@@ -29,6 +29,7 @@ npm-debug.log*
 data.json
 config.json
 *.bak
+backups/
 
 # Credentials / secrets (NEVER commit these)
 .env.development.loca
