@@ -1,5 +1,7 @@
 // Merged handler: GET  /api/orders/:id/authority
 //                 PUT  /api/orders/:id/status
+//                 PUT  /api/orders/:id/amend
+//                 POST /api/orders/:id/notify
 //                 POST /api/orders/:id/send-certificate
 //                 POST /api/orders/:id/send-invoice
 //                 POST /api/orders/:id/stripe-confirm  (public — no admin auth)
@@ -20,6 +22,83 @@ function esc(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
+}
+
+// ── Generic customer notification email (used by /notify) ────────────────────
+function buildNotifyEmailHtml(order, message, cfg) {
+  const tpl = cfg.emailTemplate || {};
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const body = esc(message).replace(/\n/g, "<br>");
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1c3326;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order ${esc(order.id)} — status update</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin-top:0;white-space:pre-wrap;line-height:1.5;">${body}</p>
+      <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
+      </div>
+      <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
+      <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+// ── Order-amended customer email (used by /amend) ────────────────────────────
+function buildAmendedEmailHtml(order, oldTotal, newTotal, note, cfg) {
+  const tpl = cfg.emailTemplate || {};
+  const contact = order.contactInfo || {};
+  const items = order.items || [];
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const itemRows = items.map(it => `
+    <tr>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(it.productName) || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:center;">${Number(it.qty) || 1}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:right;">$${(Number(it.price) || 0).toFixed(2)}</td>
+    </tr>`).join("");
+  const totalChanged = Math.round(newTotal * 100) !== Math.round(oldTotal * 100);
+  const totalsBlock = totalChanged
+    ? `<tr><td style="padding:6px 0;color:#666;width:38%;">Previous Total</td><td style="padding:6px 0;text-decoration:line-through;color:#999;">$${oldTotal.toFixed(2)} AUD</td></tr>
+       <tr><td style="padding:6px 0;color:#666;">New Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${newTotal.toFixed(2)} AUD</td></tr>`
+    : `<tr><td style="padding:6px 0;color:#666;width:38%;">Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${newTotal.toFixed(2)} AUD</td></tr>`;
+  const noteBlock = note ? `<p style="margin:16px 0 0;padding:12px 16px;background:#f0f7f3;border-left:4px solid #2e6b42;border-radius:4px;font-size:0.88rem;"><strong>Note from TOCS:</strong> ${esc(note).replace(/\n/g, "<br>")}</p>` : "";
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1c3326;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Portal</h1>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Updated</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin-top:0;">Dear ${esc(contact.name) || "Applicant"},</p>
+      <p>Your order <strong style="font-family:monospace;">${esc(order.id)}</strong> has been amended by our team. The order reference number stays the same; the updated details are shown below.</p>
+      ${noteBlock}
+      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Updated Order</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        ${totalsBlock}
+        <tr><td style="padding:6px 0;color:#666;">Status</td><td style="padding:6px 0;">${esc(order.status)}</td></tr>
+      </table>
+      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Items</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <tr style="background:#f5f7f5;">
+          <th style="padding:8px 12px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#666;">Product</th>
+          <th style="padding:8px 12px;text-align:center;font-size:0.78rem;text-transform:uppercase;color:#666;">Qty</th>
+          <th style="padding:8px 12px;text-align:right;font-size:0.78rem;text-transform:uppercase;color:#666;">Price</th>
+        </tr>
+        ${itemRows}
+        ${order.selectedShipping?.name ? `<tr><td colspan="2" style="padding:8px 12px;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;">$${(Number(order.selectedShipping.price) || 0).toFixed(2)}</td></tr>` : ""}
+        <tr style="background:#f5f7f5;"><td colspan="2" style="padding:8px 12px;font-weight:700;">Total</td><td style="padding:8px 12px;text-align:right;font-weight:700;">$${newTotal.toFixed(2)} AUD</td></tr>
+      </table>
+      <p style="font-size:0.85rem;color:#555;">If an invoice was previously issued, an updated invoice reflecting the new total will be sent separately. Please use the same order reference for any payment.</p>
+      <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
+      <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
+    </div>
+  </div>
+</body></html>`;
 }
 
 // ── Email builder ─────────────────────────────────────────────────────────────
@@ -232,7 +311,92 @@ export default async function handler(req, res) {
         await writeData(fresh).catch(e => console.error("Amend SP audit persist failed:", e.message));
       }
     }
+    // Notify the applicant by email that their order has been amended.
+    // Best-effort: failure is recorded in the audit log but does not fail the request,
+    // since the amendment itself has already been persisted.
+    const cfgForEmail = cfgForSp;
+    const smtp = cfgForEmail.smtp || {};
+    const recipientEmail = data.orders[idx].contactInfo?.email;
+    if (recipientEmail && smtp.host && smtp.user && smtp.pass) {
+      try {
+        const transporter = createTransporter(smtp);
+        const fromEmail = cfgForEmail.orderEmail || "Orders@tocs.co";
+        await transporter.sendMail({
+          from: `"Top Owners Corporation Solution" <${fromEmail}>`,
+          to: recipientEmail,
+          subject: `Update to your TOCS order ${id}`,
+          html: buildAmendedEmailHtml(data.orders[idx], oldTotal, newTotal, noteText, cfgForEmail),
+        });
+        const fresh = await readData().catch(() => null);
+        const oi = fresh?.orders.find(o => o.id === id);
+        if (oi) {
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment notification sent", note: `Sent to: ${recipientEmail}` });
+          await writeData(fresh).catch(e => console.error("Amend email audit persist failed:", e.message));
+        }
+      } catch (e) {
+        console.error(`Amend customer email failed for ${id}:`, e.message);
+        const fresh = await readData().catch(() => null);
+        const oi = fresh?.orders.find(o => o.id === id);
+        if (oi) {
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment notification failed", note: e.message?.substring(0, 200) || "" });
+          await writeData(fresh).catch(err => console.error("Amend email failure audit persist failed:", err.message));
+        }
+      }
+    }
     return res.status(200).json({ ok: true, order: data.orders[idx] });
+  }
+
+  // ── POST /api/orders/:id/notify  (admin — generic customer email) ────────
+  // Body: { subject?, message }.  Sends to order.contactInfo.email; failure is
+  // logged to the order audit log so the admin UI surfaces delivery problems
+  // without needing access to server logs.
+  if (action === "notify" && req.method === "POST") {
+    const token = extractToken(req);
+    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const { subject, message } = req.body || {};
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ error: "A non-empty message is required." });
+    }
+    const safeMessage = message.slice(0, 5000);
+    const safeSubject = (typeof subject === "string" && subject.trim()) ? subject.slice(0, 200) : null;
+
+    const data = await readData();
+    const idx = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+    const recipientEmail = order.contactInfo?.email;
+    if (!recipientEmail) return res.status(400).json({ error: "Order has no customer email address." });
+
+    const cfg = await readConfig();
+    const smtp = cfg.smtp || {};
+    if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
+
+    const subj = safeSubject || `Update on your TOCS order ${order.id}`;
+    try {
+      const transporter = createTransporter(smtp);
+      const fromEmail = cfg.orderEmail || "Orders@tocs.co";
+      await transporter.sendMail({
+        from: `"Top Owners Corporation Solution" <${fromEmail}>`,
+        to: recipientEmail,
+        subject: subj,
+        html: buildNotifyEmailHtml(order, safeMessage, cfg),
+      });
+      data.orders[idx].auditLog = [
+        ...(data.orders[idx].auditLog || []),
+        { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subj}` },
+      ];
+      await writeData(data);
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      data.orders[idx].auditLog = [
+        ...(data.orders[idx].auditLog || []),
+        { ts: new Date().toISOString(), action: "Customer notify failed", note: err.message?.substring(0, 200) || "" },
+      ];
+      await writeData(data).catch(() => {});
+      console.error(`Customer notify failed for ${id}:`, err.message);
+      return res.status(500).json({ error: "Failed to send notification email." });
+    }
   }
 
   // ── POST /api/orders/:id/send-certificate ─────────────────────────────────
