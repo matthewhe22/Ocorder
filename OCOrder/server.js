@@ -1116,6 +1116,81 @@ async function handler(req, res) {
     return json(res, 200, { ok: true });
   }
 
+  // ── PUT /api/orders/:id/amend  (admin — edit items / shipping pre-payment) ─
+  // Body: { items: [...], selectedShipping?: {...}, note?: string }
+  // Allowed only for unpaid orders; recomputes total from items + shipping.
+  // The order id (reference number) is preserved.  If an invoice was already
+  // sent, the admin must click "Send Invoice" again after saving — this route
+  // does not auto-reissue.
+  const amendMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/amend$/);
+  if (amendMatch && method === "PUT") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const body = await readBody(req, res);
+    const { items, selectedShipping, note } = body || {};
+    const AMENDABLE_STATUSES = ["Invoice to be issued", "Pending Payment", "Awaiting Stripe Payment", "On Hold", "Awaiting Documents"];
+    if (!Array.isArray(items) || items.length === 0) return json(res, 400, { error: "items must be a non-empty array." });
+    if (items.length > 50) return json(res, 400, { error: "Too many items (max 50)." });
+    for (const it of items) {
+      if (!it?.productName || typeof it.price !== "number" || !Number.isFinite(it.price) || it.price < 0) {
+        return json(res, 400, { error: "Each item must have productName and a non-negative numeric price." });
+      }
+    }
+    const d = readData();
+    const idx = d.orders.findIndex(o => o.id === amendMatch[1]);
+    if (idx === -1) return json(res, 404, { error: "Order not found." });
+    const order = d.orders[idx];
+    if (!AMENDABLE_STATUSES.includes(order.status)) {
+      return json(res, 409, { error: `Order cannot be amended in status "${order.status}". Cancel and re-create instead.` });
+    }
+    if (order.payment === "stripe" && order.status === "Awaiting Stripe Payment") {
+      return json(res, 409, { error: "Stripe orders cannot be amended — the customer is mid-checkout. Cancel and re-create instead." });
+    }
+    const stripCtrl = v => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f<>]/g, "") : v;
+    const cleanItems = items.map(it => ({
+      productId:   it.productId,
+      productName: stripCtrl(String(it.productName)).slice(0, 200),
+      price:       Math.max(0, Math.round(Number(it.price) * 100) / 100),
+      qty:         Math.min(100, Math.max(1, Math.floor(Number(it.qty) || 1))),
+      lotNumber:   stripCtrl(String(it.lotNumber || "")).slice(0, 50),
+      lotId:       it.lotId,
+      planId:      it.planId,
+      planName:    stripCtrl(String(it.planName || "")).slice(0, 200),
+      ocName:      stripCtrl(String(it.ocName   || "")).slice(0, 200),
+      ocId:        it.ocId || null,
+      ...(it.isSecondaryOC ? { isSecondaryOC: true } : {}),
+      ...(it.turnaround ? { turnaround: stripCtrl(String(it.turnaround)).slice(0, 100) } : {}),
+      ...(it.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, Number(it.managerAdminCharge) || 0) } : {}),
+      ...(it.key ? { key: stripCtrl(String(it.key)).slice(0, 200) } : {}),
+    }));
+    let cleanShipping = order.selectedShipping;
+    if (order.orderCategory === "keys" && selectedShipping && typeof selectedShipping === "object") {
+      cleanShipping = {
+        id:    stripCtrl(String(selectedShipping.id   || "")).slice(0, 50),
+        name:  stripCtrl(String(selectedShipping.name || "")).slice(0, 100),
+        type:  stripCtrl(String(selectedShipping.type || "")).slice(0, 50),
+        price: Math.max(0, Number(selectedShipping.price) || 0),
+      };
+    }
+    const shippingCost = (order.orderCategory === "keys" && cleanShipping)
+      ? Math.max(0, Number(cleanShipping.price) || 0) : 0;
+    const newTotal = Math.round((cleanItems.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost) * 100) / 100;
+    const oldTotal = Number(order.total) || 0;
+    const oldItemCount = (order.items || []).length;
+    const noteText = (typeof note === "string" && note.trim()) ? stripCtrl(note.trim()).slice(0, 200) : "";
+    const auditNote = `Total: $${oldTotal.toFixed(2)} → $${newTotal.toFixed(2)} | Items: ${oldItemCount} → ${cleanItems.length}${noteText ? ` | ${noteText}` : ""}`;
+    d.orders[idx].items = cleanItems;
+    d.orders[idx].total = newTotal;
+    if (cleanShipping) d.orders[idx].selectedShipping = cleanShipping;
+    d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), {
+      ts: new Date().toISOString(),
+      action: "Order amended",
+      note: auditNote,
+    }];
+    writeData(d);
+    return json(res, 200, { ok: true, order: d.orders[idx] });
+  }
+
   // ── PUT /api/orders/:id/status  (admin) ───────────────────────────────────
   // When status === "Cancelled" the payload may include a `refund` object:
   //   { amount: number, method: "none"|"manual"|"stripe"|"bank", reference: string }
@@ -1734,6 +1809,7 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/track$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/delete$/, ["DELETE"]],
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
+      [/^\/api\/orders\/[^/]+\/amend$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],

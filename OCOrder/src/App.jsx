@@ -2278,6 +2278,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [sendCertModal, setSendCertModal] = useState(null); // { orderId, order }
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
+  const [amendOrderModal, setAmendOrderModal] = useState(null);   // { orderId, order }
   const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
   const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { phase, templatePlanId, rows, warning, error, saveErr }
   const [piqFillModal, setPiqFillModal] = useState(null);       // { phase, updated, error, saveErr }
@@ -3590,6 +3591,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
                           <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
+                        {["Invoice to be issued", "Pending Payment", "On Hold", "Awaiting Documents"].includes(o.status) && (
+                          <button className="tbl-act-btn" style={{ background:"#fefce8",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                        )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && (
                           <button className="tbl-act-btn danger" onClick={e => { e.stopPropagation(); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
                         )}
@@ -4120,6 +4124,19 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         />
       )}
 
+      {/* Amend Order Modal */}
+      {amendOrderModal && (
+        <AmendOrderModal
+          order={amendOrderModal.order}
+          adminToken={adminToken}
+          onClose={() => setAmendOrderModal(null)}
+          onAmended={(updatedOrder) => {
+            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== updatedOrder.id ? o : updatedOrder) }));
+            setAmendOrderModal(null);
+          }}
+        />
+      )}
+
       {/* Cancel Order Modal */}
       {cancelOrderModal && (
         <CancelOrderModal
@@ -4634,6 +4651,180 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
             {saving
               ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Cancelling…</>
               : <><Ic n="trash" s={15}/> Cancel Order</>
+            }
+          </button>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    </div>
+  );
+}
+
+// ─── AMEND ORDER MODAL ────────────────────────────────────────────────────────
+// Lets admins edit qty / remove line items on unpaid orders.  The order id
+// (reference number) is preserved.  If an invoice was already sent the admin
+// must click "Send Invoice" again afterwards to re-issue with the new total.
+function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
+  const trapRef = useFocusTrap(onClose);
+  // _unit = unit price, derived once so qty edits can recompute the line total
+  // without losing precision from repeated divisions.
+  const initialItems = (order.items || []).map(it => {
+    const qty = Math.max(1, Number(it.qty) || 1);
+    return { ...it, qty, _unit: (Number(it.price) || 0) / qty };
+  });
+  const [items, setItems] = useState(initialItems);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const updateQty = (idx, value) => {
+    const q = Math.min(100, Math.max(1, Math.floor(Number(value) || 1)));
+    setItems(arr => arr.map((it, i) => i !== idx ? it : {
+      ...it, qty: q, price: Math.round(it._unit * q * 100) / 100,
+    }));
+  };
+  const removeItem = (idx) => {
+    setItems(arr => arr.filter((_, i) => i !== idx));
+  };
+
+  const shippingCost = order.orderCategory === "keys" ? Number(order.selectedShipping?.price) || 0 : 0;
+  const newTotal = items.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost;
+  const oldTotal = Number(order.total) || 0;
+  const totalChanged = Math.round(newTotal * 100) !== Math.round(oldTotal * 100);
+
+  const handleSave = async () => {
+    if (saving) return;
+    if (items.length === 0) { setErr("An order must have at least one item. Cancel the order instead."); return; }
+    setSaving(true); setErr("");
+    try {
+      const payload = {
+        items: items.map(({ _unit, ...rest }) => rest),
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(order.orderCategory === "keys" && order.selectedShipping ? { selectedShipping: order.selectedShipping } : {}),
+      };
+      const r = await fetch(`/api/orders/${order.id}/amend`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (!r.ok) { setErr(d.error || "Failed to amend order."); setSaving(false); return; }
+      onAmended(d.order);
+    } catch (e) {
+      setErr("Network error: " + e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Amend Order"
+        style={{ maxWidth: "640px", width: "100%" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <h2 className="modal-tt" style={{ marginBottom: 0 }}>Amend Order</h2>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+        </div>
+        <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "0.8rem" }}>
+          Order <strong style={{ color: "var(--ink)", fontFamily: "monospace" }}>{order.id}</strong> · Status: <strong>{order.status}</strong>
+        </div>
+        <div className="alert alert-warn" style={{ marginBottom: "1rem", fontSize: "0.8rem" }}>
+          The order reference number stays the same. If an invoice was already sent, click <strong>Send Invoice</strong> again after saving to re-issue with the new total.
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem", marginBottom: "1rem" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th style={{ textAlign: "left",  padding: "6px 4px", fontWeight: 600 }}>Item</th>
+              <th style={{ textAlign: "right", padding: "6px 4px", fontWeight: 600 }}>Unit</th>
+              <th style={{ textAlign: "center",padding: "6px 4px", fontWeight: 600, width: "100px" }}>Qty</th>
+              <th style={{ textAlign: "right", padding: "6px 4px", fontWeight: 600 }}>Line</th>
+              <th style={{ width: "32px" }}/>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid var(--border2)" }}>
+                <td style={{ padding: "6px 4px" }}>
+                  <strong>{it.productName}</strong>
+                  {it.isSecondaryOC && <span style={{ fontSize: "0.68rem", color: "var(--sage)", marginLeft: "4px" }}>Additional OC</span>}
+                  <br/><span style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
+                    {it.lotNumber}{it.ocName ? ` · ${it.ocName}` : ""}
+                  </span>
+                </td>
+                <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--muted)" }}>
+                  ${(Number(it._unit) || 0).toFixed(2)}
+                </td>
+                <td style={{ padding: "6px 4px" }}>
+                  <input type="number" min="1" max="100" step="1" value={it.qty}
+                    onChange={e => updateQty(i, e.target.value)}
+                    className="f-input"
+                    style={{ width: "84px", textAlign: "center", padding: "4px 6px" }}/>
+                </td>
+                <td style={{ padding: "6px 4px", textAlign: "right" }}>
+                  <strong>${(Number(it.price) || 0).toFixed(2)}</strong>
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  <button title="Remove this item"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }}
+                    onClick={() => removeItem(i)}><Ic n="trash" s={14}/></button>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: "12px 4px", textAlign: "center", color: "var(--muted)", fontStyle: "italic" }}>
+                No items. Cancel the order instead.
+              </td></tr>
+            )}
+          </tbody>
+          <tfoot>
+            {shippingCost > 0 && (
+              <tr>
+                <td colSpan={3} style={{ padding: "6px 4px", textAlign: "right", color: "var(--muted)", fontSize: "0.78rem" }}>
+                  Shipping{order.selectedShipping?.name ? ` (${order.selectedShipping.name})` : ""}
+                </td>
+                <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--muted)", fontSize: "0.82rem" }}>
+                  ${shippingCost.toFixed(2)}
+                </td>
+                <td/>
+              </tr>
+            )}
+            <tr>
+              <td colSpan={3} style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600 }}>New Total</td>
+              <td style={{ padding: "8px 4px", textAlign: "right", fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: totalChanged ? "var(--forest)" : "var(--ink)" }}>
+                ${newTotal.toFixed(2)}
+              </td>
+              <td/>
+            </tr>
+            {totalChanged && (
+              <tr>
+                <td colSpan={3} style={{ padding: "0 4px 4px", textAlign: "right", fontSize: "0.74rem", color: "var(--muted)" }}>was</td>
+                <td style={{ padding: "0 4px 4px", textAlign: "right", fontSize: "0.78rem", color: "var(--muted)", textDecoration: "line-through" }}>
+                  ${oldTotal.toFixed(2)}
+                </td>
+                <td/>
+              </tr>
+            )}
+          </tfoot>
+        </table>
+
+        <div className="form-row">
+          <label className="f-label">Reason / note (optional)</label>
+          <textarea className="f-input" rows={2} maxLength={200}
+            placeholder="e.g. Reduced fob qty per owner request"
+            style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+            value={note} onChange={e => setNote(e.target.value)}/>
+        </div>
+
+        {err && <div className="alert alert-err" style={{ marginBottom: "1rem" }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button className="btn btn-out" style={{ flex: 1 }} onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
+            onClick={handleSave}
+            disabled={saving || items.length === 0 || !totalChanged && items.length === (order.items || []).length}>
+            {saving
+              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+              : <>Save Amendment</>
             }
           </button>
         </div>
