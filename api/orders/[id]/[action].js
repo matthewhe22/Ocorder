@@ -185,12 +185,53 @@ export default async function handler(req, res) {
     data.orders[idx].items = cleanItems;
     data.orders[idx].total = newTotal;
     if (cleanShipping) data.orders[idx].selectedShipping = cleanShipping;
+    const amendTs = new Date().toISOString();
     data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), {
-      ts: new Date().toISOString(),
+      ts: amendTs,
       action: "Order amended",
       note: auditNote,
     }];
     await writeData(data);
+
+    // Regenerate the order summary PDF and upload to SharePoint so the stored
+    // copy reflects the amendment.  The new file is date-stamped so multiple
+    // amendments on different days each get their own file; same-day amendments
+    // overwrite (the latest snapshot is what matters).  Failures are logged to
+    // the audit log but do not roll back the amendment itself.
+    const cfgForSp = await readConfig();
+    const spConfig = cfgForSp?.sharepoint || {};
+    const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
+    if (spEnabled) {
+      const updatedOrder = data.orders[idx];
+      const categoryFolder = updatedOrder.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+      const buildingName = (updatedOrder.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+      const spSubFolder = `${buildingName}/${categoryFolder}/${updatedOrder.id}`;
+      const dateStr = amendTs.slice(0, 10); // YYYY-MM-DD
+      const filename = `order-summary-amended-${dateStr}.pdf`;
+      let newSummaryUrl = null;
+      let spErr = null;
+      try {
+        const pdfBuffer = await generateOrderPdf(updatedOrder);
+        newSummaryUrl = await uploadToSharePoint(filename, "application/pdf", pdfBuffer.toString("base64"), spConfig, spSubFolder);
+      } catch (e) {
+        spErr = e;
+        console.error(`Amend: order summary regeneration failed for ${id}:`, e.message);
+      }
+      // Fresh-read so we don't clobber any concurrent writes (e.g. PIQ poll)
+      const fresh = await readData().catch(() => null);
+      const oi = fresh?.orders.find(o => o.id === id);
+      if (oi) {
+        if (newSummaryUrl) {
+          oi.summaryUrl = newSummaryUrl;
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regenerated", note: `${filename} → ${newSummaryUrl}` });
+          data.orders[idx].summaryUrl = newSummaryUrl;
+        } else {
+          const note = spErr?.message ? spErr.message.substring(0, 120) : "See Vercel logs";
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regeneration failed", note });
+        }
+        await writeData(fresh).catch(e => console.error("Amend SP audit persist failed:", e.message));
+      }
+    }
     return res.status(200).json({ ok: true, order: data.orders[idx] });
   }
 
