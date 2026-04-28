@@ -1261,6 +1261,25 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
               )}
             </div>
 
+            {lotNumber && (() => {
+              const lotObj = plan?.lots?.find(l => l.number === lotNumber);
+              if (!lotObj) return null;
+              const details = [
+                { label: "Lot No.",    value: lotObj.number },
+                lotObj.unitNumber   ? { label: "Unit No.",    value: lotObj.unitNumber   } : null,
+                lotObj.streetNumber ? { label: "Street No.",  value: lotObj.streetNumber } : null,
+                lotObj.streetName   ? { label: "Street Name", value: lotObj.streetName   } : null,
+              ].filter(Boolean);
+              if (details.length <= 1) return null;
+              return (
+                <div style={{ marginTop: "6px", padding: "8px 12px", background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "6px", fontSize: "0.78rem", display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
+                  {details.map(d => (
+                    <span key={d.label}><span style={{ color: "var(--muted)" }}>{d.label}</span>{" "}<strong style={{ color: "var(--forest)" }}>{d.value}</strong></span>
+                  ))}
+                </div>
+              );
+            })()}
+
             {orderCategory === "oc" && lotNumber && selectedOCs.length > 0 && (
               <div style={{ marginTop: "1rem" }}>
                 <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "10px" }}>
