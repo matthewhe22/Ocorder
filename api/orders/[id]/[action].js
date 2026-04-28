@@ -117,6 +117,83 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // ── PUT /api/orders/:id/amend ────────────────────────────────────────────
+  // Admin only. Edits items / shipping for an unpaid order and recomputes total.
+  // Order reference (id) is preserved.  If an invoice was already sent the admin
+  // must click "Send Invoice" again after amending — this endpoint does not
+  // re-issue invoices automatically.
+  if (action === "amend" && req.method === "PUT") {
+    const token = extractToken(req);
+    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const AMENDABLE_STATUSES = ["Invoice to be issued", "Pending Payment", "Awaiting Stripe Payment", "On Hold", "Awaiting Documents"];
+    const { items, selectedShipping, note } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items must be a non-empty array." });
+    if (items.length > 50) return res.status(400).json({ error: "Too many items (max 50)." });
+    for (const it of items) {
+      if (!it?.productName || typeof it.price !== "number" || !Number.isFinite(it.price) || it.price < 0) {
+        return res.status(400).json({ error: "Each item must have productName and a non-negative numeric price." });
+      }
+    }
+
+    const data = await readData();
+    const idx = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+    if (!AMENDABLE_STATUSES.includes(order.status)) {
+      return res.status(409).json({ error: `Order cannot be amended in status "${order.status}". Cancel and re-create instead.` });
+    }
+    if (order.payment === "stripe" && order.status === "Awaiting Stripe Payment") {
+      return res.status(409).json({ error: "Stripe orders cannot be amended — the customer is mid-checkout. Cancel and re-create instead." });
+    }
+
+    const cleanItems = items.map(it => ({
+      productId:   it.productId,
+      productName: String(it.productName).slice(0, 200),
+      price:       Math.max(0, Math.round(Number(it.price) * 100) / 100),
+      qty:         Math.min(100, Math.max(1, Math.floor(Number(it.qty) || 1))),
+      lotNumber:   String(it.lotNumber || "").slice(0, 50),
+      lotId:       it.lotId,
+      planId:      it.planId,
+      planName:    String(it.planName || "").slice(0, 200),
+      ocName:      String(it.ocName || "").slice(0, 200),
+      ocId:        it.ocId || null,
+      ...(it.isSecondaryOC ? { isSecondaryOC: true } : {}),
+      ...(it.turnaround ? { turnaround: String(it.turnaround).slice(0, 100) } : {}),
+      ...(it.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, Number(it.managerAdminCharge) || 0) } : {}),
+      ...(it.key ? { key: String(it.key).slice(0, 200) } : {}),
+    }));
+
+    let cleanShipping = order.selectedShipping;
+    if (order.orderCategory === "keys" && selectedShipping && typeof selectedShipping === "object") {
+      cleanShipping = {
+        id:    String(selectedShipping.id   || "").slice(0, 50),
+        name:  String(selectedShipping.name || "").slice(0, 100),
+        type:  String(selectedShipping.type || "").slice(0, 50),
+        price: Math.max(0, Number(selectedShipping.price) || 0),
+      };
+    }
+    const shippingCost = (order.orderCategory === "keys" && cleanShipping)
+      ? Math.max(0, Number(cleanShipping.price) || 0) : 0;
+    const newTotal = Math.round((cleanItems.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost) * 100) / 100;
+
+    const oldTotal = Number(order.total) || 0;
+    const oldItemCount = (order.items || []).length;
+    const noteText = (typeof note === "string" && note.trim()) ? note.trim().slice(0, 200) : "";
+    const auditNote = `Total: $${oldTotal.toFixed(2)} → $${newTotal.toFixed(2)} | Items: ${oldItemCount} → ${cleanItems.length}${noteText ? ` | ${noteText}` : ""}`;
+
+    data.orders[idx].items = cleanItems;
+    data.orders[idx].total = newTotal;
+    if (cleanShipping) data.orders[idx].selectedShipping = cleanShipping;
+    data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), {
+      ts: new Date().toISOString(),
+      action: "Order amended",
+      note: auditNote,
+    }];
+    await writeData(data);
+    return res.status(200).json({ ok: true, order: data.orders[idx] });
+  }
+
   // ── POST /api/orders/:id/send-certificate ─────────────────────────────────
   if (action === "send-certificate" && req.method === "POST") {
     const token = extractToken(req);
