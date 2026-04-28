@@ -2670,7 +2670,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         case "id":       av = a.id; bv = b.id; break;
         case "building": av = a.items?.[0]?.planName || ""; bv = b.items?.[0]?.planName || ""; break;
         case "name":     av = a.contactInfo?.name || ""; bv = b.contactInfo?.name || ""; break;
-        case "items":    av = (a.items || []).length; bv = (b.items || []).length; break;
+        case "items":    av = (a.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0); bv = (b.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0); break;
         case "total":    av = a.total || 0; bv = b.total || 0; break;
         case "status":   av = a.status || ""; bv = b.status || ""; break;
         case "date":
@@ -3564,7 +3564,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         })()}
                         <br/><span style={{ color: "var(--muted)" }}>{o.contactInfo?.email}</span>
                       </td>
-                      <td>{(o.items || []).length}</td>
+                      <td title={`${(o.items || []).length} line item${(o.items || []).length === 1 ? "" : "s"}`}>{(o.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0)}</td>
                       <td><strong>{fmt(o.total)}</strong></td>
                       <td><span className={`badge ${
                         o.status==="Issued"?"bg-b":
@@ -3581,6 +3581,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
                           <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
+                        )}
+                        {o.status === "Pending Payment" && o.payment === "invoice" && (
+                          <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
                         )}
                         {o.status === "Invoice to be issued" && o.orderCategory === "keys" && (
                           <button className="tbl-act-btn" style={{ background:"#fff7ed",color:"#c2410c",border:"1px solid #fed7aa" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending Payment</button>
