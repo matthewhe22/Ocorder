@@ -1,6 +1,7 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
 import { readData, writeData, readConfig, cors, writeAuthority, KV_AVAILABLE } from "../_lib/store.js";
+import { randomBytes } from "crypto";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
@@ -193,8 +194,12 @@ export default async function handler(req, res) {
     const spConfig = cfg?.sharepoint || {};
     const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
 
-    // CRIT-1: Generate order ID server-side
-    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+    // CRIT-1: Generate order ID server-side. The suffix uses 8 cryptographically
+    // random bytes (~48 bits of entropy in the encoded form) — 65k× harder to
+    // guess than the previous 3-char Math.random suffix and resistant to
+    // /track endpoint enumeration.
+    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase()
+      + "-" + randomBytes(8).toString("base64url").replace(/[-_]/g, "").slice(0, 10).toUpperCase();
     order.id = serverId;
 
     // CRIT-2: Validate payment method and order category

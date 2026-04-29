@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment, Component } from "react";
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAfQAAABACAYAAADs+oVdAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAABHm0lEQVR42u19eXxV1bX/2ucOGUhImAdRRJEqOGO1WhXRap/Wvtb2xbbP33t9tdVaW/tqJ/392tcATlXbqq3tk2prW4dqUFTEgKAGgYQAgQRIyEDIzZw7T2ce9lm/P9g7Hq43cG8I5AazP5/zCdx77j77rLX3+q619tprERiBhogCAAgAYBNCbDgBzfFMSghB+AQ3TgtCiOX8bO/evYtmz559vmma50+bNm0SAFwEAG5d18+bMGGCy9mHoijo9XqbAEAzDKNeVdUYALT09fXV3X777S27du0yHX27V61ahbfeeiuF8ZbKCxcAACFkkDYVFRVF8+fPP7+4uPjy6dOnTxcE4azCwsJTTdOc5nK55rrdbgQAcujnSDRNi+Tl5flUVRVdLtfOWCwma5pWq2naroULF0aO9KxPOq1ramomT5ky5WKv13vZ9OnTJ9q2fU5hYeEswzBKBEE4y+v1cloDAKBpmgQR291ud1xV1X6Xy9Wi63q8r69vJyGkPoXeAvut/UmXOeMtNxuprKy8bjg/zM/Ph5kzZ/bU19eHbrvttljKIjtuEx4RCQOvwUW8ffv2KZMnT545MDAwU5KkrN9D1/XYjTfeuBsRyVhaqEzAIB/zypUrS6699trLp02bdkNxcfF1lmV9yuv15h3LM3Rd1wGg3bKsjbFY7L09e/bU3HzzzbGhePEJB/LBeb9mzZrTLr/88quKi4uvI4QsRcTT8/KGzwrbtsG2bb+u69s0TVsbCoWqzznnnNZPIh9S531DQ8OCOXPmXJmfn/8Fr9f7GbfbPZsQckzPsG0bKKV+y7K26bq+trGxcftVV13V5OT3+Lwfb7m4OIbddF23JEmKGobxvizLd3344YfzHFaJ63hp5AAAnZ2dC5PJ5P/Vdb1WVdWEruvDfg9RFGsdgmJMCDTnWFtbWy+klD4qy/JAmtejiGixi7JrqEbT3H9YU1XVryjKk62trZc6layxQrvjxAvi8HRcIUnSC5IkyUPxglLK6WwPwQc7DS8Ou1dRFEPX9ddN07zOOZby8nLhJKf3oAxIJpNXqapaoaqqnoZ+lpPWlFJ7yEl/6Luj0ZsqirJ+YGDgi1y2pfJ+DNKScFlyhIuk3O9O+d6dbu0foW/3yT5HR5up1jFchzVZlpVIJPLwU089lZe6+EZqIe/YseNUWZZf0HXdSLM2sx2/zv6+N1YA3UlTwzA+HYlENqYoMxQRzaMARjbNdvQ5yHPLsjAej1ft37//ZsfY3J9Aq5wrmDfLsvxhClBYnBe2PRKs+AioUhTrqt7e3pOaDwwgCACAz+e7KB6Pbxxi7Y8IoY9Eb8Mw6lPo7foEzHUh07UwEv2Nt1Gw0NmE55PedGiz9Xv27PnMSE12LqBCodC1kiQFHc93AtdwFrLFBO8HuT7JnNpyMBg8S5bltw8ZHx/R4khWyEg19gwzxXrZkEgkzuKC9xNgJQ6CS0tLy/nxePx955pgQH68eWEzC3TwOZIkrW5ubj79ZAMZp5UYj8d/YRiGlQK4x33eO541uOji8XhFc3Pz7LGmRPG50d3d/X1JkhpjsdieaDTaGAqFaiORSG00Gm2Mx+N7kslkY21t7X9y+q9fv35yPB4vj0QiDYqiNMfj8aZwOPznzZs3n++QUS4AgLa2tm8lk8nqWCzWEI1GGxOJxL5oNLolmUz+YsOGDbNT+TrecgPQPzbpLcsymbUudnV1XXWsQMknSDAYvJ0JSqSUmiO0iMcEoDuEsxAKhe4zTTPhAFdrhKy/7Bh96JncpYmU0kQkElkOhwIVT1qrxfleoVDoPl3XlRQLcTTa4LNVVQ319vb+18ngEnYqT1u2bJkky/KrzDvElaZRafRQsxARNU3rHRgYuHYszXk+zsbGxv/q7Ozc1NHR8X57e/smwzAsWZatAwcObOro6Pigs7Ozat++fV8BAIhGo1dpmhZgCvzbiLjCMIy/G4aRRETs7e29m/WdBwDQ3Nz8a0TErq6uTe3t7Zt8Pt8mVVW3si3OeFNT02XjlnruA7rTckZVVaOyLM8e7h4r/01fX99nTdPUmPVDR1gQ5jSgc81/y5YtZ0Qikc2pY8+RNjgWTdM2dXd3n3Iyun75+2zfvn1mIpHYkIO8GPScRKPRlanehDEK5q6KioqC/v7+Bu7xPkEWecb0Nk2TNjU1/XCsz3lErA6Hw9Wpn2/ZsmURpVQyTXN7U1PTXOd3FRUVRaZpvoCI6Pf7b+Gft7W1PYCIVmpfLS0tZ1uW1SdJ0t7y8nL3OKCPDUDnVjTG4/FKACDD2GMhiCg8//zz+clksoNp5tbxAKJcBfS6ujoPAMD+/fuXKIoScQgRG3OvDbriKaW+rq6uK08mUOfvsW3btisVRWlh8zHneEEpHbReJUlaVVFR4Rqr2yBcZsiy/DKjt5Frk96yrMFA076+vjvGmKUuIKILET3sb100Gq1j//YiYh4iknA4/IphGFp1dfV09jsPC4bzsK48hmG0JhKJ/vLy8nwG6A8yEpWw/tzceu/s7OTfFY+73scIoDuCgjASiXw+24nO7xVF8Yep1scnAdA5gJimeaNhGPJI0oC5y23nNYJuew7qsqqqS08GUK+qqnIDAGzdunUpj17nCusIKUKp10g0g1mPrzCFekxZ6nz9h8PhHx4DvZ0BnaZjv915pfs+a1GHiJZpmmpDQ8OYcyXzsSLizmg0utOxZsmaNWsKDcNQg8Hg6nRrmYO6YRjfR0Ts7+8/hwH6wymA7uL3BoPBR9l3ReOAPoYAnS8QURSry8vLhWwmObMq8uPxeJdj4X0iAJ0LM0S8iQvm4b4/A2qn0BoKNGyHlX2skdmcrrIoiteNJatlKF5s2bLlSlmWZaeiOhxesC2jo4GHM9B02EFflFIDETEQCLwKAFyokrEAMIhI9u/fP0tVVflox87S0e8Y99itbNcbf56iKC3d3d0F3DMyxgEdELGYbeH8kh87S10fTFn8DCLSurq6GwAAWltbH0HEj+X0SCQSCxAxKknSlmwxYbyNMqAzAWbrum719vZ+KlPQ5PfIsnzJCB6/GhOAzgFk7969n3O4dOkwrZO0LmHbttGyLIlSGkbEsGVZ4hChCfYxuPgpsxCV3t7ez41FUEdEgRACNTU1p2ia1jVcME93MoA3VVUREUOU0ggihlRVtY4AGMOZBwYiYnd39yNjxVvC54mqqo9n65liLnD+bzUWizXJsvwiIv7Q7/f/KyJeiIgX6bp+ESJeGAqFrjEM4/uKovwhmUxWW5YVTqF5NnPfRESMxWIrxprrfShAf/fddyfoum76/f5XhrDQ3YhILMu6lc2z8wAAWlpaHmA0eR8RN5imuU2SJB/bCjrQ09NzFiFkPChuhNtxXdyMYej1el1FRUWnA0ArfJR28UhNAADb5XItYf+2jvdYcwhA6J49ez41b968NS6Xyw0ANqNBxt0AAGX0cgMAJJPJPrfbvUUQhBqXy9XQ29ubLCkpiU6ePFkBAIzH4wWRSGTqvHnz8pLJ5KUej+eziHhVSUnJKbwP27apIAhChvwDABBs27bdbnfB1KlTV3d1dV1ECDnI3tEeA7wgACB88MEHwsUXX/zPvLy80yilFuNJVrwQBMENh1Lugq7r+woLCz9UFGX7xIkT9+3fv9+4+OKLA4y2dmtr69T58+cXEELm27Z9qdvtvgIALs3Pz/dyPhBCXFlkQnMDgDVz5sz7Q6HQu4SQTZjDWc7wULZGWlNTcwoh5E5Gw0yB0Xa5XIKmaaJhGH9CxOcmTZp0kPVxpLaJ/0MUxemiKP5bUVHRfxcXFy9w8DETgrts27YLCwt/1tvb+xIAtI2V+Z6OlmyeyKqqriktLb25oqLCRQixmOuc08QihKBhGPcpihJft27dQW4osn5M27bR7XZHEbFTVdVfrly5cvVPfvITlfHahvE2ogvIPM6XiohmMpm8n2lz+ezvka48RHQnk8mXWB/acRqbxs5vbxxtC51H9FZVVRWJotg0nOhpSumgm1zTtIhpmo+3trZefc8990zMdjz33HPPxKampqt0XX9M07TwMUR0W8xl13TnnXcWjpWjVNy6isViDwwzfmGQTqIohhOJxDJ2XjfrOdbU1HSWpmk/MgyjK2VvOBtviS2K4sGGhoYJucwDTvfe3t4vZjPfTNOkzOW9obW19YwUo4IHZbnw45nLXA65M0iTm2++uTCZTP5f0zRN5r2ys7TSHxhDHhFuoW+PRqPbHdseAiEE2traLrIsy7Ysa3VNTU1B6u9N01yOiBgMBr/BP2tra3uAUjqk0jieLW4MutxTwGZ5tmNLJpM7TtDYdo42oPPAq2Aw+PgwAcRkQG6KovhgTU3NKWn2ulKFGuER0CnC7TCLaOvWrbPD4fAj+kcp6YY1NkmSfjsWXJF8fHv27LmabXtkte3A3fKmaSY1Tbvv9ddfn5UCMO6qqip3Kh/w8HSZrlSQ6evrmxqLxR7Qdd3KVrlynDr5dS7zgANgIpF41HlyIhPlSRTF2nvuuSfP4QoezlFZUlVV5eYekL6+vi9blqVnEctAEdE2TbNj69atxWMhGNEB6Hvj8fjelM8EAICurq4vmaaJmqbF+/v7X4nFYj/v7e19ThTFHkb7ZQzI8wAADhw48BijRymPiE+nOI23EfaKI+LTJ8J909vb64rFYnlp4iTSNq/XC3PnzpULCgogC5db1uMCADeltM3tdj+Jo1SchbtAI5HI5aWlpR8gosflcmXj3qYA4NI0bWd9ff3Prrjiig+5UFu1ahWWlZVlXSwHEcmqVauEsrIywqu47d27d/FZZ531+/z8/CuYCz5TvqBt2zYACH19fZeddtppO3Pc7SsQQuxoNLp70qRJF3H6ZsQI5pa3LGtrKBS6c/bs2c0OoOJ8yIoX5eXlwrJlywar6bW1tS2ZN2/e39xu9+m2bdvMXZ+J+x81TVO6u7vPXrBgQf8h/SK3XJ6c9rqub/B6vddnSHsbAOzu7u7L586dW4eIbmflwWPYcvEQQoz+/v7/nDVr1t8ppTZblxmtx3379n3t/PPPr8AcL+TCad7b27vaNE06b968MudWAf93fX39ooULF95BKb3Z6/VOZMeIt/j9/mfmzZtXhYjCpk2bhKVLl1p79uz5zrRp035GCLl41qxZMo6xwlfj7SgtkUgsG4bxfPknxEsiAICgKMqOYQRemYiIyWTyFa4dj7QWzKwMNwBARUWFNxKJ/IW7+LMIVuKZzD4sKytzHY/iPSNpnQeDwTuGy4tAILC2vLzcO9K8YHzwAAD4/f4zDMM4mCUfuJX+ZC5a6dya/cc//jFB1/X2DE93UEREwzAa8DgUCeLzXhTFd7PwipiIaAeDwT+MFbc7N/COZsUP9/vxdgJdXMf5ykdENwP0wT31o1w6+3udc0/9OF6u0QaQWCz2b8MFEFEUH3AIxOP2Ls6jOIqilGfrfufv1tXV9aVcBpSqqip3MpnscBz5yybnwprFixd7jicveMKhnp6esxRFERmg2xmM0UZEW1GUxObNm6c5LNGcoT8AQHd392TLshKOeIGjrgFd1586HuDJrGtob2+/LgtA52lh3x1LYEcIAbbVQNKBOz+25gzIHEp+Mot8THmrs/CIfrIVhhQL3cxwHwoRcWkuCv6Rts7Lysq88Xh8j+P8ccZBV4FA4E1OoxMhnJ1WYjgcfjFLJcRi+4t1dXV1nlwTdHyeJZPJW7J8L4qImEgkmsvLy/NPxHEczoOurq67stlP556S/v7+7+Wa9cjnbywWK7UsK5INoFuW9T9OT9JIK3kPPfTQNFmWAw7F6KjzQdf1g1VVVUVjZB+dOMHZEUzoSgfq6d7H0QdJtfhTv0vXd5p7hTTPPaJBdpT70pV5daX83sXimcbBfRzQhwcgoVBoaTbJY7iLVRTF/eXl5fknOmoZHTm2VVXdl2XiG4qIGA6Hb8g13iKrJx6LxXZmAZI2IlJVVeUdO3Z86kS+k+O8dk021qNt26hpWnWuWY98Djc2Nk7WNC1TC91CRJRl+Z3jRXtOI03T3suQznzMcUQsyTVPSGo7WsQ5e38yGs8+XrzMdZ6MA/oYtc4RkcTj8beyBRDTNM3GxsYLR4s+fA98165diw3DoFlkluP7i6tyibd8ocfj8TMty9KySIfL86b/7ERbvJx2Bw8e/EKWSpVtGIZZXV19di6Cenl5uVfTtD0ZvpPNMsMlDhw4cCo6SniOtAzTdf3X7HnGECl7D0spSynVfD7fhblG43RKFAC4Y7HYHaIofhgMBqOBQCCYSCTeaGlpudF5Xzwev1WSpJdXrlw5y6HcC4w+F5im+VJHR8ennPKNe11kWX4xFotdCAAgiuJDqqr+xjmPeT979+49GxFfbm1tHSz2EggEvoqIL6uqulbTtPX8MgxjvSiKr7W1tU1kyu2/UEpf1nX9LXbPOsMw3kkmk4/v3r17odPrAgAQDAZvTiaTHwSDwUgoFIrIsvx+Mpn8dmVl5UR2zzjojwN65gupurp6uqZpUobWyKDLVJKkJ0fbZcqfHYlEfu8cWybWi6qq0aqqqqm5oinzd1FVdXk289S2bUwkEp333ntvwWic7+YBlZIkZeNV4Ns1X8lBL4kLAECSpDVZbHtwK/2ffD7xY6AjOTcQsTzbNMyiKF6fqzKMz9eampr53CtlWdbWYDD4fDKZfJ4HJgaDwRfWrFlTiIgkmUxeiYjo9/u/DACEHb/kdTdWsbX9MKebI6jwB4iIjY2N8wEATNPcyfr5leNeFwCAz+dbiojY0dHxEB9rMpl8jI2vAhH/SSl9hVL6T0T8p6Zpzx08eJB7Qn7K5OMHlNJ/UkpfVRTlHV3XDU3T7Obm5n/lgN7b2/srtjWyxbKsHyPifZTS9YZhUL/f/xmn4TLexgH9iI0LHFEUv57F3rmNiLYsy8m1a9fOxFGuosXOr5O1a9fOVFU1iZkXF7FYtPU3RlspcSpYixcv9oTD4X2ZRo5zsEkmk6O2H82f2dPTc38W68tkAPjbXKF/6vsMDAz8PJugS57yVdf1p30+X77DEjvmEp18TMlk8leyLBuiKCqiKBpHuTRZlvVoNLok1wFdluVdpmnq+/fvvz71nu7u7p+yOf4UwKGATE3TEoqirHHSZv/+/VMURQlqmjag63r3ypUrCx3Wu6AoygHDMN7h/RqGwU8NYG9vbxnry8s8Tlcionnw4MFf8PtFUVyBiObRPGyIeBcimi+++OJ5zu9bWlqmIuIOTdMiAAA1NTUFhmHY8Xj8z6l9tbe3T8ePKsmNqXbSp1PN1XbNNdcgABDbtr/O/kIGx4kpHDo3/9ebb77Zj4iu5cuXj9r51uXLl9vLli1z3XzzzX5VVZ8DgHshgzS9tm0DIQRY/udXIMtz2cdDMSGE2Fu2bJlVVFQ0HwBAEISjWdooCIJL07Tg/v37X2KW+WjwwgYAIIS8a9v2QxnmBiAAAC6XazH7d86cRV+1ahUyV+jm6dOnQ4Zn7MHlcgm2bdter/f7M2fOvKylpeUhQsibbD5yL5BrOHkZ+Jn29evXPzVr1qy/hcNhdLlcR5wfXq8XXS4X6e3tDbI+cuocuiP3xa2TJ0++OBwO/+vChQs3OtK6AgAgIeQ3iURifnFx8Q/7+/t/N2vWrO5kMvnKxIkTb29sbJxJCPEDAJx66qk3AECpKIpfnTp16povfelLnyWEbAQA7OrqOrOgoGC+oig/c9C0xLbt/Zqm9U2dOrWisbFxESFkv2N+ugkhTt4LAOBOl2OAp2mGj9Jku08//fSpiOg+cOCA66yzzgJCSNiyrJV5eXnP+f3+82bMmLEfAIhpmqGUvjyEkOA4Qo1b6Fm72x999NHieDweyjByllvocn9//8Ljceb2WLT8UCh0NjtumOnxKVRVtX/NmjWFo+125/Orq6vrS1mc6zaZO3L1aM9RRCRtbW15hmG0cW8Pq4s+1EUppbamaQNbt27NtZrUBBHJvffeW5BIJNrZ/njW+Q7YsbHaaDT6w76+vrPT8ZxnTYRP4D4plx0dHR1bTdPsd7jPidOLiIjCrl27LmH0vJf99rMsve3tnGeyLNeIorgLAEBV1QFN057n/cRisR8rimK/9NJLkxwW+m5E3Pzoo48WW5bVZ5pmd21t7UREJB0dHUuYy/1/HBb6A4iIra2tV+/cufPS+vr6S3fs2PHp+vr6S9nv+D783YiI27ZtuwYRXY2NjV5u+eu6/h027ovZ/99l7vk/xWKxa7dt2zbDqeSPW+jjLWOhBQD4ta997dSSkpKJzNrLxDp3JRKJPbNnz96fK0UfCCE2IpKpU6cekGW5fcKECQvhKAVl2AFV9Hq9pddff/1MAOjgNBlFfsDEiRM/zazzTAriEAAA0zQrHWd3R6sJCxYs0JPJZLPH4znr0Csc0cNAAADy8vJKzj777BIAEJctWzaa9D8MazZt2uR+4okn1B//+MePT5w48Rk29zO11F3c45CXl3dZXl7eZRMmTLAURanXNG1tMpl8v7q6ej8hJOaYj2Dbtpu9/5DWOyISRqesvFi5LIhKSkoK3G53B8vgedi7X3PNNZQQgt3d3U0AgC6Xi6cwrtV1vXvChAlfBYC/rl69+oz8/PzLBUH4JiKSgYGBd6ZMmfK1ysrKu2666Sa9qKjoO6Io1t52220xZgGbhBBq2/bE++67T7ztttvKZsyYUX3++edXEEL+paOjA9N49SjzBGx0bBHZgiAIbrf7OkLIJuf9PT098csvv5xyr1lDQ8M8t9t9j6Io/vvuu28fU2huicViK4qLi++YMGHC9y655BIwDON9j8fzW0LIuvHsduMWelYWYTgc/kqW2afQ5/M9ebwTyAyXx6FQ6IkseGwxbXnUA7McUbrvZHMsiVIq9/b2nursYzTpHwwG/zscDsuBQCAZDAblI12hUEgKhULizp07LwXIreAf7n269957C0RRbBtmUSBn7fnDmizLfsMwXlQUpezAgQPzh7De3XgSZz/j79bT01NtmmZnujXIEkkJtbW1C9nJiEGXeSgU+jsriOOORqP/oWkaraurK2EW+cX8aOo///nPU1ldA55MyssU4Z2IuJN7BHp6eu5kv/lFfX39olQLPZFIPMjYdyYizkTEWezvTET0OgIXf8C8CfWWZW2llFZbllUjy7JoWVY4EAhc6eAxATiUfz4UCi1WFOXnyWSyi1ntt49F7Bm30EfRIvR6vefy9ZWJFQYAOGfOnDWEEMw0J/6Jkg8AAKWlpWsB4L8ztKYQAMDj8ZwLAKtHy8JlixorKiqKEPFcJ3+GarZtoyAIRNf11nvvvbd/tMtA8j3FG2+88U9Lly59VVGUjH5n27b9zDPPBAEAbr311pzZ42XzmzzxxBPq/fff/1/5+flb3W43nzMZzxO2/y5wy5v9dRUWFs4AgNs8Hs9tp512mi7LcrMgCJv6+/srd+3atY0QIqVRmI5ovY/BJgCAXVxc/Irb7f59W1vbFwkhbzPAtR3ONDMUCn0dAIiqqm/yHxcWFj7tdrv/c+fOnd+44IILviFJ0q5LLrkkwfa4d2ua5rNt+8tXXXXVKYZh0FdfffU9Pu3S8DqPEPLngYGBC2fOnPmgpmmns+9cDl4CAEB/f//AKaecoqQqHmVlZYfJHNM0uzweT9C2bbRt+8LCwsKi3t7eK0899dQ9ztz6TLExCCG7AGAXAPxWUZR9eXl59wDAX3PEazVuoY8FC12SpNeytAhFURSnO4AoZywqAAC/3z+DUprRETweIZ5IJF4bTR7zsW/cuLFEkqR4NtnJJEl6/WScn7m2TkRR/L5jnVA8xsbiCKx0607X9Z5IJLImFAp9PxAInJlOnp0Mljv3glRVVeVrmlavKIrY09NzQep9ra2t32AnUiqcli0iCpZl7TMMo8WyLN00zX9j3+cDAPT19f1OVdWQqqot0Wi0yvFbFwPc7Yi43ekRAQASDAarOK/b2trK+TjYHrqVwXvdhYiWM8q9srIyT9O0dlmW1znevUiSpJvS9aFp2l7Lska9Aue4hT6G1hMAQEFBweQs7ie2bftaW1tjuba3wy2qAwcOxKdMmdItCMI5R7OmuMZNCJmShZfieHlLsKioaG5+fn5hNuMghLRlYtGPhoKSDe9y1o1FCGUW3x9FUYSioiJeGTLj6ndDzD3i+D06LHjB6/XOmTx58hwA+CIDqqZEIrGNUrr2T3/603vcG4KIrlWrVuWUZ2MYaxaWLl2qSZJ0o9fr3TBnzpwGURTXGYaxwzRNb35+/g0lJSWLo9HoB6+99trdDNxsAHARQqxoNPrOpEmT7tM0LbRr16532dwzGQD/bfbs2fcCwFSPx/MrxzrhFnqRc9ouW7YMERE2bNjwtRtuuOFdALiQEOJ2eJO8AOASRfEx27YtR8wRAgCpr6//29VXX90GAAUA4DrjjDNmIGIzAHgJIUpnZ+etc+fO3RWJRP4gCMI97e3t884444x3kslkv2mab1iWFbZt252Xl3dDXl7eeaFQ6NZcW9vjFnoOa8cVFRVeViEqk6hqi1WUej9XtUY+JsuyNmbodeAJcnaWl5ePWo1kvnf85ptvfi6LpCEmS5JR7pzj4+34ypBQKHSnwwNkZngyJGsDnp0S+Nj8NQxjX39//2Otra3nOOf9WLbYeTT3ypUrS/x+//+jlO6IxWIJWZYHJEmq8vl8t6cqi3zN9PT0XIaIm+Lx+GNOGcDv0zTtr4qivP/uu+9OcHoFmIX+Z0T8c8rvuEdmESJubm9v/y/+7Fgs9i1E3EwpbaCUNlmW1WRZVhMi7qOUNm3fvv1y1sdXEXHzli1bLnDwxwUA0N3d/XNK6VZJkmaVl5cLXV1dV8qy/CyldJ8oiqphGF2U0rdbW1tvyjUv6Dig5zCYAwA8++yzk0VRzCpftSiKa3KVHnxR9vb2VmUC6FwYh8Ph+Le//e3Jo7WAuHBat27dNby6WgYpX01ExD179iwbB/QTK0f6+/svkWW5PoUXFI9Ps1nfhz3DMAzVMIwXQqHQNY7xuca6THI0V4o1f8LW5vF6jrPfdM+455578k7EOI53G69hO0qtsLAQBUGwMp2PAABFRUW+XHcDaZqWrQvX9nq9o+72LS4uHiz3OMbKPn4iGiHEQkTX7Nmz6+6///7PhEKhclVVg3Bo25C7gi3btkdyLvGEJYPPsG3b8ng8+R6P5/9MnTq1SlXVN3bv3r2QbQ+QsQgEfMvMER/AA8Zc/Gx6uq0Z5ml0DeWh4N6LISqzpfVssLF87Hfcuj/CRVK8AGSofvm7OE8z/OEPf9Adn7nGavDjOKCPrmac7U/GTDpC27bHGTzeRhp4KBe+06dPX1FTU3N+IpFYput6Bwdetj+OcChDHI9sHzF5KQgCj3inAGDn5+d/edGiRXWiKP6IEIIcOMYifTdt2gRwKLHPINiyjJaYCuQ8iK2srMzmHpTU92YnP9DZp6NvYdmyZZCmX2cf/Hdu3l/qBR/VMSeOYirCkWSrYwzoGB859AhCU7P6DaV8HEXBEJxbEEdQelyOQENylLKywhH6IYgojLsKR6l5PJ5sajfzPampTos9F5vX6yVM8mWq1AiGYYy6VROLxRARuXsxIys903ccbyMK6jZP9UkICQDA8pqamscWLVp0TV5eXplt2zcVFBTMgMMDfilLrTxSWeEGg+oopdTr9RZ4vd4notHoTW+//fY3CCGRiooK11gJmHNY4NZRvgdHQivnvTyoEFITXrHfpZNXH7s/m3sd/0+lsXMsh3kWjnS0lB9fTT/l0v8u06Oq6d4LEYkgCJhm/DTd2J3PS5dUjD9jHNBHyb21atUqKS8vrxMAzocMz9cKgpDzgD579uyMthFYNjZXfn5+W3t7e3K0M99RSt3ZutrHAX301hAAUAewqwCwDgDWvfDCCxMvv/zy8yZOnHhzfn7+F7xe77l5eXkuB68oWz+Cw7obdmOZ6RAArEmTJl3/la98ZcOiRYs+f8kll4RzJZtjhmDuicVi/0EIuX3ChAnTbdumhmE0A8DThJAPHBas/d5778248sor79I07cuFhYWlpmlKhmFs7erq+iMhpJG7vAkh1Ofzfau0tPRblmUVwyEPI7rdbs3j8bzZ0dHxHCEkwPOzt7W1fWvKlCnfopROJIS4CSHocrnkgoKCtxobG58lhIT5eHnuh+bm5s/PmDHjzgkTJpxNCMnTNC3s8Xj+cuWVV/6NEGJyHmzdurV43rx5L+fl5U2hlE5kxodNCDmYn5//Z0LIOq7Mp9LG7/f/XRCEidOmTfsaAJjs+d5IJPKGy+Waa1kWAoBFKRVdLlcxIro8Ho9gmuau6dOnfzMUCt2p6/r/efXVVz//k5/8RHXOC0S8LZlMfrugoOAUdoy3t7i4+HFCCD81wDGjIBgMrjdN84+EkApOM36mvrOz89slJSXfPBETZjwoLo1VykDkgwwDyCjLfb7zzjvv9OTiPh3PJ25ZVnOG0eK8UlmVkyajxQufz3chpdTIsA46r1b2sHOOj7fRm3tDuCpJe3v7uYlE4j9FUaxQFCWSjpcson0kIuYNNqd3r1mzZupolNMdBt3I5s2bp8Xj8V1sTtfpuv4IIv5G07QORMT+/v5f899EIpHLFUVJUkpRVdVViPhgMpl8yTRNiZ1Xv4v1nQcAoKrqI4w2f0bEh3Vd/60kSZsRERVFiQaDwYs5jaLR6KPs3scR8WHTNJ9IJBJbWaa5vp6envMdeCCEw+H/ZVnhuiRJ+iMiPijL8oeMB7uSyeQ03nd5eXmpoiioqmoUER9CxEc0TfsHIu5l7/0XnrueP4Olsf0CZ244HP4mA32BZaf7BSL+GhEfUhSlkuUxWIuIDyLiY4jIqzD+BhHxueee43UThMrKymmJRKKKyfVduq7/mlL6iGmaLez0z4vOjKCIWIqItq7ridra2gscY3QDAMiy/OgJyTY2DuhpacKPZ7yWYc1nm02WeFdX1ySHiyhnBAMAgCRJMy3LkrNJLBONRsdsYhlZll/Jpfnp2IfL+MpFgDmW8TsCtT6mZL311lsz/H7/LbIsP6xp2m7TNNMpmTyi3T4WUI9Go2/ksuzie64VFRXeSCSy27Is0e/3X5d6XyQS+a6maTcDADQ1NZ1lmqZomua2qqqq0533bd26tZiBNgaDwSX8c1mW0yaEaWhomIeInYqi7C4vL3cDAMRisbT37tix41xZlmVJkmp52en+/v6H2YmDe1PvP3jw4FWImNA0bXdFRUUBAMA999wzUZIkw+fzbUy9PxQKfRcRMRQK3cYxiwN7IpHYmUgk3lUUZbUkSa1DGR+IeAEiWhxsU75boWma9fTTTxdx2sdisQ8Rkcbj8RtS7+/u7v4OO9X0jKOPSYg4wMC+2aEwehmdl2eSeGcc0I8jTSRJ+lWWNDER8ZJco4kj+9ONWVTHMpmW/qvRtHI5MFRUVBSpqtqViXfB4THZzcBjPCw+R73zLBuaO916aWpquqi7u/vnkiS9aRhGaAjr3R4uqPf19d2Wq/LLUU/i24iIPT09X2Wfexigpa5Houv6a7qu6zxnO7/Pea+iKK2IuJ9/pqoqz8FeWldX52H95zEQWsbyOUxmgP7QUPcGg8HH2Hee2traebZto6Zp/+AA6xiLh91/NbOq/wsA4Le//e1kSZKsnp6eLaxvL+tfAACXruvxzs7ODxw0IIh4EavwdtX+/fsvRkRsamq6zuERciNiHvt7LSJie3v7tY7P81h/D+q6js8//3wp80R8iQH2bak053wJhUIrGF+4V2ISpVQJBoPvm6ZJY7HY2hRPyAocdxWO3noCANA0bd+ECRMgw308GwDcfr//ekTcBbl1dI1b6J8vLS0lgiBkUh2LJ6LZ56TJCR84i0q+9dZbJV3XGwHgtKONRRAEgojgdrs/de21184ihPSO5n4p30dTVfX2/Pz8OyGzTGoIAEJNTc0PPvvZz+7Mhf3e5557rviKK64oCoVCwNbFkE2WZZg2bRrYth0599xzjaHeke0P2w5vDN/ftRYtWlQPAPUAAC0tLVMnT5681LbtmydPnrxIEISLXS6Xm+298/mc0ZqzbdslCAKWlJQ86PP5XgcAPQcrdyGj47cnTZrUNWfOnDcZHliOcXKXr/2Xv/xlAiJ+1bbtv7Gc7R5CiOmYgx4AsGKx2PMFBQWPdHR0LASAvQ45QBcvXmw5aWhZlgcAoLi4OJUuznuRrVMv+2vqur6EEII9PT2POvbrLef2CyGkRpbl8MSJE/8DAP5mGAbvB1nfApsf9uLFiz2EEHC73cZHYoGgKIqPEEK6X3755W2zZ88mp556atecOXMeIYRcyjbxqeMvZbynbG/7Y3FRpaWlAABQVFT0fyzLitfV1b3K6DtIc2YguDZv3vzslVde+cvJkyeXMTqCIAgFkUhkTV5e3u9KS0vXSpL0K0LICkQUNE0DgPHUr6O6mKZMmXLAISyOFhhHAADcbvc1hJBHEDGXgm3okiVL3Ij4L06wPhqY2Latut3u3aMJ6I7x2pqm1Xu93psyGAtBROp2uwtVVb2REPIsfHQWejStri8AwGWZ3m/bNpSWlgYBAFKPEJ1ojxUhxFq6dOkP58yZ84u5c+dSZ2GOoYYvCIJg2/aNAPChs+DGkZQ3tt7A4Trlgj0MAKvYBZIkXajr+jcLCwtvzc/Pn83oZQsZREKycdEJEyacnkwmv0UI+V8muHMu6n3ChAl5giD0srmbqnQgAFBCCPp8Ppfb7UaXy9XuOPKVanBAQUFBLQDQSCRyCgMiHtilgCPN7o4dOz49ceLEOxVFqT7ttNMSjG6Y7t5gMHhRaWnpXfF4vBoAIBAInDV79myYP3/+QcepB6eCjohoy7Lc6vF4JgMA+P1+BABimqbtnAdLlixxr1q16j6Px1PidrtXsm5MRJwDAJ+PRCLfWr58uQUA8NWvfvUnU6ZMea2pqWkRIaQp27gf0zSReTHOLC4ublm6dClNVfTKyspsRu8QIpLCwkKXY75CIpGYec455zwVjUb/d9KkSctjsdheQsibqqp6MhG84+04Avr999/fE4vF4nAoT3smoAOlpaUXxuPxSYf4O/quXj6pn3nmmXOKi4vPYOPKBNBB07Two48+GsgBQEcAAFEUd2SokAxGuHu93i+yWJTRHL/91FNP5RFCzoNDR7QsJrCGuiw4dOIqIAhClAH6qFuP+fn5BV6vt6CwsLCw4OhtQl5eXkFBQcGwZRg7y2w5ksLwpCJQVFTUMGXKlHtXr159biAQ+KmiKBID84yUNjY/0Ov1/ofT0sy1ZlmWatv2DEIIbtq0KR0tXYgobNiwwbAsCyzLmuM4/52qx6BlWRfAodMrQf4IAIDu7u7mvr6+9mAweECSpKaFCxdWi6IoxmKxbzvGQgEABgYGmgcGBtqDwWC7KIq+adOm7dY0rXfPnj13MEOoixACgUBgNiIKq1atEj7OWuKyLOsMSqkEADB//nwXIkpTp0697ODBgwf6+voORiKRA+vXr2+cPHnyA6IoPjFz5sw3mecBVVVdRikVN2/evL2ysnJOZWXlnA8++GCPpmnizJkzVziNrEybx+Mh7D37EPEs7l1IkeMEEYVIJDLJ5XLZtm2bqXMWEYVLL730XlVVq0pLSyt6e3sXuFyu4AnTvgHG99DTuUkBgEiS9EaGgXGD98Tj8e85aTvK7+FmWmc2tdBNFji0Ohf4y/NZ19XVnabrupphYJzN9tEDtbW1E0cryIwrT93d3eeyvdtM9nwtFjlcU15ePuq5yPkc8vl897Lxm+zvkS4LEW3TNG84HnPImdAEAOC99947P5lM9maR759XSIwPDAzkYoVENwBAOBz+ASJid3f359nnXsd+7mHzQtf1Sl3Xldra2okp93rYkU+iKEqLZVntdXV1HgAAVVWXM3qsR8R1lNJK0zQ7KaXR+++/fxLAoXrkAACxWMx5byUiVpqm+TfLssrKy8sHi7ls2LDhHBZ/8zv+Lo7LCwAQiUQWsQC9/wYAeOmll6Ymk8mkrutR1vc6TdPWIyIGAoFXHf2QmpqayaqqxgzDQL/fbwaDQZtdlqZpaBiG1dDQsICteQ/77RJExLa2tiV8PjpqtD+o6zq+8cYbpQAA/f39/8ZOD3wzDc29AADBYPC/WeAtj5kqsW0ba2trH+Tzs66ubqqiKH5KaVMkEvnHeJR7bgDh1zMsZsLpYicSCV9FRUXBaB+L4ZGyu3fvnqZpWswhbDMCFEVRvpFDiglZvHixJxaL7cuwYI4zUn/UFCwuhAKBwE+zVag0TXs6F+jvOJpzTbYFciRJuu94voNTaL/++uvniqIoZRoFz+eQpmk35Zoc42t3zZo1haqqNhmGEWptbf1YhLYoit/v6+v7dwCArq6uSyzLQlVV3+IBXk4LPRwOv+wMsGNKwIrU6OvGxsaZuq7Lmqb9kQMaw4gVR4rUdhZakWX5N8y4uTv1vra2tjMtyzqoqmr3Cy+8MJEp7RNlWda7uroOi3KPRCI/o5TigQMHLuefxWKxhyil2NTU9Ln29vbFXV1dg1dLS8u1qqra4XD4cefYEfFqRLRaW1uvTgPoh0W5r1y50iNJ0lZFUXD//v1LUscfi8Wus20bE4nEm453L6KUWjt27FjB/p/HthLO46c1LMsyxwF9FBcUAEB1dfV0XdfFDK1CJ4jcPdrCmD87Ho//JlMvg8NyCScSiSm5Yrnwd2FHZzKap1xgJ5PJzvLycu9oKFjciuJnezNUDC1mld2WS4CuKMoSR0GUTHMB/ONEyAgO6pIk3Z/FXDfZ0apf5Irimm7uHDx4cIGiKD5ExFgs9m5HR8dzHR0df4nFYtuYBfss/00wGLzVsiwURVHu7+9/ub29/c/9/f3Py7LcjYg4MDCwzAk4qqr+hkeuM5DLZ8+8jR0V+57jHHrqvYOR32lytXtisdgLbA7s7u7ufv7AgQPPh8Pht2zbRlmW+w8ePLiAj/uee+6ZyOZ8Pesvj/M0FovtkGVZjkajJU8//XQRpRRN0/zrUHSTZflZRMSqqqrTHeO6DhGxpaXlujSA/njKOXRSVVV1OqV0B0sm815HR8dfOzo6/qpp2gfM2Hk/HA5PdCi7xYiItbW1v3Eo8vykwi18wo0D+ugvKBKPx99xuBGPBiI2IlJd1wOrV6+ecqQ8wcez8SplDQ0N51qWpWZxdtdERDsYDK7OJd46qsV9yjTNTF3Xg+AYi8XuPdFCmws6WZY/g4gGpfSoleLY97ZhGLSysvJ857uPtnLr9/tn8AQlGdCfMmHuKy8vLzzeihRX1jo7OxdSSvUs5jrG4/E/56oc47xfu3btpEgkssyyrDrLsqKGYQRlWX4nGAyWpQApbNu27XxVVZ8wDKPNsqyIpmm9qqq+6PP5rnHcy5W025gLPT/1O0rpg5qmveLz+fKZYXAbpfRN571DjZtndQwGg98QRfFtTdOClmVFFUVpiEaj//P6669Pd75feXl5viRJq7q7ux9yvg8ikkgkcioirrMsq2zHjh0XIeKa9vb2syoqKlzsiJvgOBonIOLpiLimv7//Jocn4jxEXNfW1rYw1ZuAiN9SVfXN8vLyfOeYKisr80Kh0E9VVd1MKY2aphkTRXFzMBj8zpIlS9zOexGxgFK6pr29/espXi0X8zT8HBHXjwN6DlgmoVDoi1lYV4P3xePxN51u1xPsrnOXlZV5TdP8cDhj7+vr+1IOuiEFAIBkMllj23Y2Hgeqqqq4bdu2008kQPK1JYrieuZyy8g6t20bFUWpY1kHhRyhPSkvL/eqqrovC7c7pZTabW1tn3ECxfFUOmKxWCmlNJJN2eP+/v7NuaA4HW3ej8S9mfY1AvKKjNRYRqPxuJ2RoNEJfc9xQD86M8rKylyiKNZnA4xceB88eHCFg87kBIyXONzTLwwDzG1RFHcdqeziaLvdJUn6zywA0hkT8D4DSXcmC3YkxtrR0XEr89pkNVZZlkd9yyadcitJ0ktZbHlwuj9zvN/FCeiImBWgBwKBUU1vnM26do5xqMpfDmvVWd7UfYR7j1hpzAlyR5H1xPGXV1g7LLGN4z3IEM/7WA7/1OcioutI69dxIiJdeVeS2v9QyuYQNOeJkNKOf6hxnTB5Og7omdEnFot9KxtwZNu3JiLi3r17yzOZiCPkdhSYq6s8C34eJuCcKRZzUbDV1dV5JElqySLrHVJKTZae96mjCbKRmjO1tbXzNE2LsHHaGXoTbF3Xxc7OzlkjZCmN6Dv19/f/JNN5xbYPqK7r9u7duz99PGUF52V/f/9cRJQyDADlFvraXAZ0BmhuQgivNkjSRbk7wdxxrzAUgPK+hmuB8mek+yzdxU+aDFVkyXks0TF2VzpDiH9/pLGlAXReO55/787GYzEmMk6OA3rGwkLgBRIyBXUm0EwWWbo8RVsmIzi+w0q9RiKRv3ALKYNCJocJN03TtueidZ5qKfb19f0gi+Cnw/ZMdV1/BNhZ9hFWWgYjrn0+3+nxeLwjC/f04PjC4fA/c21d8fng9/vPME1TzeLEBGVJRHZVVFR4mSB1HQ85RggBXde/kW1QnKqqD+ayAnsc3e3H7FYf5ndZg+VQ32cipz5RqZ/HAT1zEAmFQtdYlmUjopkpUDLLjAffvO7z+WamALtwLELWKYTa2trO5Gc3swFzdp9lWdZg4YZc5il7bw/fBskG1Pm9yWRy/datW88cCSWLRcUOlndtbm7+lCzLB7Pc7rARkRqGofj9/jOOZoGM5jpIJpNrENHOdstDluV3KioqvCOt1DqProXD4Z2ZHmt0xLp8PxcB3XHSZm40Gn02Eon0BIPBQDgcPmgYxspoNHo+UyIH96t1XT9fFMXnA4FAfygUCiQSiT3xePyXK1euLHSsHcLk2er6+vq/pQIj9yJWVFQsTCaTrY6qZIcFevX39/+ks7OzHgAgHo+vSiaT4Z6enkBXV5ff5/O1dXZ2+ru7u0M9PT3hQCDgAwDQNO2WYDDYXFVVVeR8FuvjBlmW1wYCgVAwGAyKorjV7/d/B1iaZEdOh4K+vr69qqre4eSb48jcnZFIpPmFF15Y6Oh7kiiKy0VRPBA41PpFUXxeUZTLmQeEnCxgNQ7oWQgzv9//h2G4sgeFh67rQUmS7uNVhpwWNi8PyBddyiU49m8OE4Y1NTUF/f395ZqmRYc5NpOB3GNjgZ98fNFodIllWTal1MzCE+H0RkTi8fj3eJINp5KUAS9cqfuSZWVlBaFQ6G6WHCMbMB/cEojH40/lKg/4mFpbW78wXEVK1/UN3d3d853yZ7gFdLgixccVCAR4bAXNQokyRFFclGsudz7vAoHATFmWOw3DiJqm+Tgi3ilJ0h8Nw/ArilLB7uXJTsoZrbtkWX5uYGDgScuy1jIvRFs8Hp8PAMDnOyLu7enpaUx9d35CZu3atUsZnZanACf/+2uWg92DiD9HxJcQ8e+GYbzHfvceIv4DEV9ExOfYb3g+Bn5EzNXd3V0giuJqxrs2URT/pCjK73Vdr2FrYtu6desGj6DV19eX6rquU0qNWCy21OGudzOlZgUiYkVFxbXsfUp4MKcois8g4h26rj+iaVq3KIpN5eXlbszh+IlxQD9O2jIiumpqago0TdszDHfvYQLeMIxmv9//cCwWu3C4YwoEAhf4/f6HDcNoSfeMbAStYRgN7AjImKhO5rASnnRW0Mr2vZkQqff5fD/Zt2/fqcMZiyiKM7q6uu6KRqPNadYIZriebFEUB15//fXpmMN1ullJT5ckSTuGobRwRSoWjUZ/iYhFqTzlQVQcqPn2DyK6HMrsxwRwIBC427IsnUfWZyrDZFnuKC8vz8fcK1XrZttnTyEi1tfXn+L8vqyszBWNRkscysz3GI2XpfYVDAYXWJbVbZpmp8/nK3Uctdre2dm5fShAX7NmzZWMTr8cAtAfCIVCdMqUKcXO573yyisXMA9JulKlP2LfFTus538gIvr9/n9Pvb+pqelG0zRRFMXNfFwsU5yfvW9g9+7dZzEPZR7zAvySUkrfeOONawAAent7b2dn3C9N7b+hoWHeSeWWHwf07IQZXyC6rsvDENyYep7dNE1T07Qt4XD4N3v37v1ud3f3p/fs2XNeQ0PDBC68Kisr87Zs2bKoq6tr8Z49e+5QVfUhTdO2GIZhpkaoZzkWioi2pmlyIpFYkGtWShYKVsNwlJlUXhiGkVAUZa0kST+rq6v7956engva2trORER3Y2OjFxHdPp9vZkdHxwV1dXVf6Ovr+2EikXjFNM3IMfLBYMGIX8r19cTHtnv37puOxVPFWls4HH6ss7PzuoqKipJsx9Ld3T05Go3eJknShzwQNQtPjckSrbyYizTn4wkGg2ssy1J4TXKH4sNBmWzcuLGEUprQdX2dcwuCz1sGjIuY8vr/HP3s7Ozs3DkUoL/99ttXMVr9zxCA/mAkEsFp06YVIaLL5/PlI6K7urr6WvY7Z6lSfsb7XvZdCfP2XMBijB5NVer4Nkp7e/t3neujsbFxsq7rGqW0Utf1mKqqjVVVVfncU6Fp2v8gIr755ptLAQAOHjz4C9u2cePGjaelyA/hZASpcUAfxkKLx+Ofo5RqiGhlGmmdhoZpaW2aJrICAZ2U0k7Lsro1TUu7981ctVk/n8UCWKZp0ng8/rmxyEc8VFIUent7TzUMo2uYoI70UEvLC8MwdETsRMQuSmmnaZrxoazPYc4DAxExEon8Lhf3cY+0BiKRyN+d2wXZKFKp+++apvVblvWGJEm/6O3tvZulXP5qPB6/NB6PL0bEWxRF+brP57s7mUz+wrKsdZTSoHNKZ1kbnVJKzVgsdlEuKrIOQL+aHf3bL8vy92pqas5Lvbevr+/LTG7cmBpXkyKzWk3TbOKAjYh1xwjoD3FABwCoqqpyAwBs3rx5CftdurzpHNAncWsaEe0DBw7MTz0mx5X2NWvWFJqmmezu7l7LnlPK+vjxgQMHLmZg/xp/Dw7oq1evXgIA0NLScrZhGIqqqklZln/U3Ny8uKyszOt8zjigf0IB3Ukzn8/3PWd2OBxe41aiiR8VvTjSvfy+4ViCg4F6HHx8Pt+PxgqQHEnw7dix4wqH18QaAV4cib62QyEzj4EPPN/5araPN1a2OwgiChs3bixRVbVpmNtPTqV2uGuH8zrbZ5sspeeqXJZfPGAskUjcKEnSdsMwbBaH0BcMBh/fs2fPHDb+nyEi7enpSZtZkG/hyLL8niiK9ksvvTQpS0D/1RCAvuxYAd00zUfY/9Nmn3N4IrZ1dHTsAQCoq6srYfrgowAAfr//XuZtecC5h75q1aqrHFsyn41Go9WGcWhnTlXVhKqqT7S2tp5yIkF9vHxqDjZCiIWI7nnz5v1ve3v7D1kJPcG27eHUUyZwKIrTzS6Ch1L+2s6LfUYc96U9n3m0Zts2FQSBEEKEjo6On86bN+9JduTHGqO8oIjovvTSS2uSyeTNmqYpAOAaAV5w+mIKL5AtfsHJs2wfRCm1BEFwx2Kx/c8+++ztK1assJYtW4Yp9a5zleYIAHD99dcn8vPzb9A0LSoIwnBozmko2LaN7PcWu3gpWV5321la1nJ852JXpvMfAUCwLEvt6ekpZ7zMSZovX77crqqqcpeUlKwrKiq6LBQKTQeAL9u2/cG0adN+umDBgncrKioKotFoFwAIxcXF0/GjGvIpLCOIiNM8Hk/Xhx9+KGXyfF4fHACsFMBDRCSKopwqCAJduHDhsN/RMAwTAOyGhoYpjqQyTsuZ1NXVeWzbXjBhwoQgAIAoivweExGFmTNnPpFIJJ6dOXPmL4PB4FUulyvgfEZjY6N3xowZ1ZMnT/5sdXX1NEmSrieEvJKfn/+j008/vba+vv50pwI1bqF/wiz0VNrFYrGljshmE3O38WIUiXg8fsNYtsyH4kVdXd1VlmX1cAs4y+j3E9GcxxjrXnjhhVm56PLN0juyRJZlcQzMf9uyLIMFSH1nLMkuvp/s+P+XWVKcJY8//vgE0zTNYDC43mGRu5176Lt27Zpv2zaqqvqIo4+dXV1ddexeZ4lQDyIKa9eunWRZFuq6zjP95Tn3thVFaZZlud558iNTCz0Wi5UCAITD4c+w3Au8QI4HU0qV9vT0/BvL6PdNgENR7sxCf9BBG088Hm+ilAZisdiLiIivvfba1elkBG+9vb0XsX5XnDSycBzQR4Z+gUDgTFVVtztc8FYOCTKL80xRlN3hcHjhycg3zouenp45mqbV5RovnG5pSZJeqKqqyh+rYJ4K6t3d3ecZhrHXERdAcwnJ2RaTyfaaH8p1Ac4tYp/Pd01HR8enUr/v6+u7BRGxs7PzOgCAgYGB+xERo9Ho/Wn6OhMRD6iqmti7d+8Mhxt7x8GDB6uPNI5kMvm+rutSVVVVqfPzzs7OK9je9f2cltxV/+GHH17N1ly6UqU/Yt/xKHcSCoU2ICK2tLTcmvr8RCJxma7roqZpO7hLv7Gxscg0TQsRH2B9egkhUFlZOUeW5QRPqvHOO+9cCwAQDAYvkiTp4tS+a2trL2DHde8aB/RxQP+YUKusrMwTRfFRvtfFhMhogsng803TRFmWH3v88ccnnMw84+9VU1NT4Pf7HzNN03bMazqKfODeESUcDv+Ij/dkcPM59k6nSZL0RopHaLRdJLYzaE+SpPsdIENyfR739fW9zSzYdwYGBlb09PSs8Pv9f9V13dY07V0W3e0BACEWi/2BHcVr7e3t/UNfX98Doii+Tim1ZFlONjY2Xum09hFxlyRJsqIov9N1/Uld15/Qdf23iPhkQ0PD5xl4LlRVVdJ1PdnT0/O3vr6+FfF4fBUDwvra2tqJfI/eAeiDUe5pAP0+9t1ErsxWV1dPtyzrPRbXsNPv9z8WCoWWJxKJD9h+9z5ZlmdzflVVVRWxPnjejMFcBHv37l2i67qNiPjWW2/9CwCAJEm/YjTc3Nvb+3BXV9cDsVjs94ZhUF3Xm9euXTsJx0pq13FAP2F0HBTMgUDgCl3Xq1KiqLONwh2uJWIzS5A6hNiHjY2N16Yb68nOi7a2tiWiKG5N5cUJABrb8SxkSS0279q163KHW5ScRDQflAE+n+9u0zQ7nMF/TLk9keB+WEZHwzD8/f39/zFW5j8HmMbGxqL+/v67dV2vMk2z2TTNZlVV9wQCgeVr166dxJVCPpfa29tvjMfjayil+03TbFYUZU8oFHqgrq5uVuq8o5T+HhG3W5bVRCltZlcjIjbX19f/gI9ly5Yti+Lx+LOU0ibDMJoNw2gIhULL1q9fP9npTeB03bRp00WIWI2IFzmeySPry9h3ham86OjouMOyrPWWZe23LKtZ07StkUjk52+++Wax896ampoCy7KqEfFO59zjf3t6er6LiNVvvPHGhQAAzz//fH5jY+N3ZVl+h9Flv2ma+yORyB/fe++9ExoUd8IAPR6PlzNrTnNEjg51GezvNeOA/rFFOEiLSCRSJsvy5iGicu0REnC2Izo79SjQ1s7OztucQhc/IXmNU3hBurq67rIsa2eamIKRBHfb6RXhTVGUxmAw+O104HcS0pwAAGzfvn2K3+9/RFGU8HGm+RHXgWEYuqqqT0qSNOtkl1V4HMqVHs2DNBLyJJM+8DiWKj0pj62Fw+FHso6wMs3PneyLZLgLyzlJ+vv7bxJF8XXLsgJD7O1xi9rOIIhrEDTSnXu2LCscCoXe7unp+YJzwnJ32CetVVRUuJzVnRRF+Xo8Hq80TVM6whEoejQ+sBwA9lAWv2VZtqqq1X19fXd885vfzHcA3kl/coW74AEANmzYMDuZTN6fTCZ3sNwHQ20LZWTBs2h451HRtOtAUZSBZDL5l56engvGsiKFH1UJ4xnzBDxCBTV+ljv13nTA7AhmS3eRFHnmzuT5RwPWI6yBwTS+Gb7nkB6uNMWlhuz7RG95nZD62YQQ3LFjxxmnnXbaPEmS8GjPtSwLioqKgFK6e+7cuTHexziUp3VD2pw2yWRyqmEY/+pyuf61sLDw04IgTHG73XnH8gzLskzDMCKmaW4nhKxxuVyVRUVFfofmKRBC6Dgv0OWkQzQaPQ0Rv+Zyuf7F6/Wem5+fP32oso6ZNsMwYoZhtHu93kpJkl6bMmVK41DP/yR4SFLn3sDAwLklJSU36rr+xby8vHO8Xu9Ul2tkMNayLN2yrBAi7nC5XK9UVlZuvOWWW+Lp1uF4G2+j1cg4CU4aYAencNu7d++kSZMmnVpYWHhFfn7+xS6X60LLsuZRSqd6PB7Mz88frBuMiKDrOpqmSQRBiHk8nnZKaYNhGLsNw9ixadOmzltvvTV6pOeNt8Nog4QQm3+2fv36yZdeeum5brf7s4IgXJSXlzc/kUic5/V63fn5+eDxfHRiyLZtUBQFLMvCwsLCNsuyegBgp67r1YFAoP6cc87pd4Lapk2bXNdccw39pIJJeXm5sGzZMkEQBIvlUuBW/NQFCxacXVxcfJ7L5bpIEIQLAWC6aZpzAQALCgqI2+128g1M0wRN08C2bcjPz2+llEY9Hk8tpXTHwMBAUygU6vrMZz6TPBKvx9t4G832/wHhnelguLHwdgAAAABJRU5ErkJggg==";
@@ -465,7 +465,374 @@ const CSS = `
     .step-lbl.curr { display: block; }
   }
   ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: var(--cream); } ::-webkit-scrollbar-thumb { background: var(--sage-light); }
+
+  /* ── ADDITIONAL DESIGN TOKENS ──────────────────────────────────────────────
+     Status-badge & action-button colours that previously lived as inline hex
+     in row-action JSX. Centralising them keeps the palette consistent and
+     makes future re-themes a single-file edit. */
+  :root {
+    --teal:        #0d6e62;
+    --teal-tint:   #e0f5f2;
+    --slate:       #2d4a7a;
+    --slate-tint:  #e8edf5;
+    --purple:      #6d28d9;
+    --purple-tint: #f3f0ff;
+    --amber:       #c2410c;
+    --amber-tint:  #fff7ed;
+    --amber-bd:    #fed7aa;
+    --green:       #16a34a;
+    --green-tint:  #f0fdf4;
+    --yellow-tint: #fefce8;
+    --hairline:    #e8edf0;
+  }
+
+  /* ── FOCUS-VISIBLE ─────────────────────────────────────────────────────────
+     Keyboard users currently see no focus ring on most action surfaces.
+     Apply a consistent 3px sage-tinted ring across primary interactive elements.
+     Mouse users still see the existing hover state — :focus-visible only fires
+     for keyboard navigation. */
+  .btn:focus-visible,
+  .hn:focus-visible,
+  .add-btn:focus-visible,
+  .at:focus-visible,
+  .tbl-act-btn:focus-visible,
+  .copy-btn:focus-visible,
+  .bsel-change:focus-visible,
+  .ci-rm:focus-visible,
+  .pw-toggle:focus-visible,
+  .track-btn:focus-visible,
+  .s1-search-btn:focus-visible,
+  .search-clear:focus-visible {
+    outline: 3px solid var(--sage);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .cat-card:focus-visible,
+  .pay-method:focus-visible,
+  .lot-card:focus-visible,
+  .plan-card:focus-visible {
+    outline: 3px solid var(--forest);
+    outline-offset: 2px;
+  }
+
+  /* ── TAP TARGETS ──────────────────────────────────────────────────────────
+     iOS HIG and WCAG 2.5.5 recommend 44px minimums; existing buttons range
+     from 24–30px. Apply a min-height + extra padding on touch-friendly
+     surfaces. Desktop layouts are unaffected because none of these had a
+     fixed height. */
+  .tbl-act-btn { min-height: 32px; padding: 6px 12px; }
+  .hn          { min-height: 36px; }
+  .ci-rm       { min-width: 32px; min-height: 32px; padding: 6px; }
+  .copy-btn    { min-width: 36px; min-height: 36px; padding: 8px; }
+  .bsel-change { min-height: 28px; }
+
+  /* ── STICKY CART SAFE AREA ─────────────────────────────────────────────────
+     iPhones with home-indicator gestures clip the bottom 34px. env() shifts
+     the cart up so it stays tappable. */
+  .sticky-cart {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ── MOBILE CARD FALLBACK FOR TABLES ───────────────────────────────────────
+     Under 720px the .tbl rows reflow to vertically-stacked label/value pairs.
+     Each <td> exposes its column header via data-label="…" or aria-label;
+     where neither is present the row falls through unstyled (still readable
+     because we keep the natural <table> semantics).
+     Layout: each <tr> becomes a card with rounded corners + subtle border,
+     each <td> becomes a label/value row using a flex layout. */
+  @media (max-width: 720px) {
+    .tbl-stack thead { display: none; }
+    .tbl-stack tbody, .tbl-stack tr, .tbl-stack td { display: block; width: 100%; }
+    .tbl-stack tr {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 1px 3px rgba(28,51,38,0.04);
+    }
+    .tbl-stack td {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 6px 0;
+      border: none;
+      text-align: left;
+      font-size: 0.84rem;
+      min-height: 28px;
+    }
+    .tbl-stack td::before {
+      content: attr(data-label);
+      flex: 0 0 38%;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-top: 1px;
+    }
+    .tbl-stack td:not([data-label])::before { content: ""; flex: 0; }
+    .tbl-stack td.tbl-actions { flex-wrap: wrap; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--border); margin-top: 4px; }
+    .tbl-stack td.tbl-actions::before { display: none; }
+  }
 `;
+
+// ─── CONFIRM / TOAST PUB-SUB ──────────────────────────────────────────────────
+// Module-level helpers that replace `window.confirm` and `window.alert`. They
+// dispatch DOM CustomEvents which the <DialogHost> below listens for.
+// `appConfirm` returns a Promise<boolean>; `appToast` is fire-and-forget.
+//
+// Why pub/sub instead of context: this codebase keeps everything in one file
+// and a context provider would require threading through 6,000+ lines of
+// existing components; events let us drop the helpers in at any call-site.
+let _confirmResolver = null;
+function appConfirm(opts) {
+  return new Promise(resolve => {
+    if (typeof window === "undefined") return resolve(false);
+    if (_confirmResolver) _confirmResolver(false); // stack-resolve any prior dialog
+    _confirmResolver = resolve;
+    window.dispatchEvent(new CustomEvent("tocs:confirm:show", { detail: opts || {} }));
+  });
+}
+function _confirmAnswer(answer) {
+  const r = _confirmResolver;
+  _confirmResolver = null;
+  if (r) r(answer);
+}
+function appToast(opts) {
+  if (typeof window === "undefined") return;
+  const detail = typeof opts === "string" ? { type: "info", message: opts } : (opts || {});
+  window.dispatchEvent(new CustomEvent("tocs:toast:show", { detail }));
+}
+
+// Host component: renders the active confirm dialog + toast stack, listens
+// to module-level events. One instance is rendered at the App root.
+function DialogHost() {
+  const [confirmState, setConfirmState] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
+
+  useEffect(() => {
+    const onConfirm = (e) => setConfirmState({
+      title:       e.detail?.title    || "Are you sure?",
+      message:     e.detail?.message  || "",
+      confirmText: e.detail?.confirmText || "Confirm",
+      cancelText:  e.detail?.cancelText  || "Cancel",
+      danger:      !!e.detail?.danger,
+    });
+    const onToast = (e) => {
+      const id = ++toastIdRef.current;
+      const t = {
+        id,
+        type:    e.detail?.type    || "info",
+        message: e.detail?.message || "",
+        timeout: e.detail?.timeout ?? (e.detail?.type === "err" ? 6000 : 3500),
+      };
+      setToasts(arr => [...arr, t]);
+      if (t.timeout > 0) {
+        setTimeout(() => setToasts(arr => arr.filter(x => x.id !== id)), t.timeout);
+      }
+    };
+    window.addEventListener("tocs:confirm:show", onConfirm);
+    window.addEventListener("tocs:toast:show", onToast);
+    return () => {
+      window.removeEventListener("tocs:confirm:show", onConfirm);
+      window.removeEventListener("tocs:toast:show", onToast);
+    };
+  }, []);
+
+  // Escape closes confirm dialog as a "no"
+  useEffect(() => {
+    if (!confirmState) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { _confirmAnswer(false); setConfirmState(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmState]);
+
+  return (
+    <>
+      {confirmState && (
+        <div role="dialog" aria-modal="true" aria-labelledby="tocs-confirm-title"
+          onClick={(e) => { if (e.target === e.currentTarget) { _confirmAnswer(false); setConfirmState(null); } }}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.42)", zIndex:1000,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
+          <div style={{ background:"#fff", borderRadius:8, maxWidth:460, width:"100%",
+            padding:"22px 24px 18px", boxShadow:"0 10px 32px rgba(0,0,0,0.25)" }}>
+            <h3 id="tocs-confirm-title" style={{ margin:"0 0 8px", color:"#1c3326", fontSize:"1.05rem" }}>{confirmState.title}</h3>
+            {confirmState.message && (
+              <p style={{ margin:"0 0 18px", color:"#333", fontSize:"0.92rem", whiteSpace:"pre-wrap", lineHeight:1.45 }}>{confirmState.message}</p>
+            )}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+              <button autoFocus onClick={() => { _confirmAnswer(false); setConfirmState(null); }}
+                style={{ padding:"9px 16px", minHeight:38, borderRadius:4, border:"1px solid #c8cdd1",
+                  background:"#fff", color:"#333", cursor:"pointer", fontSize:"0.88rem" }}>
+                {confirmState.cancelText}
+              </button>
+              <button onClick={() => { _confirmAnswer(true); setConfirmState(null); }}
+                style={{ padding:"9px 16px", minHeight:38, borderRadius:4, border:"none",
+                  background: confirmState.danger ? "#b91c1c" : "#1c3326", color:"#fff", cursor:"pointer", fontSize:"0.88rem", fontWeight:600 }}>
+                {confirmState.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toasts.length > 0 && (
+        <div aria-live="polite" style={{ position:"fixed", bottom:"calc(16px + env(safe-area-inset-bottom, 0px))", right:16, zIndex:1100,
+          display:"flex", flexDirection:"column", gap:8, maxWidth:"min(360px, calc(100vw - 32px))" }}>
+          {toasts.map(t => (
+            <div key={t.id} role="status"
+              style={{ background: t.type === "err" ? "#fef2f2" : t.type === "ok" ? "#f0f7f3" : "#f7f7f4",
+                color: t.type === "err" ? "#7f1d1d" : "#1c3326",
+                border: `1px solid ${t.type === "err" ? "#fecaca" : t.type === "ok" ? "#bfd9c8" : "#e0ddd4"}`,
+                borderRadius:6, padding:"10px 14px", fontSize:"0.86rem", lineHeight:1.4,
+                boxShadow:"0 4px 12px rgba(0,0,0,0.08)" }}>
+              {t.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── ERROR BOUNDARY ────────────────────────────────────────────────────────────
+// Catches render-time and lifecycle exceptions in any child subtree so a single
+// thrown error in Admin (or any tab) doesn't white-screen the whole app.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("[ErrorBoundary]", this.props.label || "(unlabeled)", error, info?.componentStack);
+  }
+  reset = () => this.setState({ error: null });
+  render() {
+    if (!this.state.error) return this.props.children;
+    const msg = this.state.error?.message || String(this.state.error || "Unknown error");
+    return (
+      <div role="alert" style={{ maxWidth: 620, margin: "32px auto", padding: "24px 28px",
+        background: "#fff", border: "1px solid var(--border, #e8edf0)", borderRadius: 8,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+        <h2 style={{ marginTop: 0, color: "#1c3326", fontSize: "1.15rem" }}>Something went wrong</h2>
+        <p style={{ color: "#555", fontSize: "0.92rem" }}>
+          The page hit an unexpected error. Please refresh — if it keeps happening, contact{" "}
+          <a href="mailto:info@tocs.co">info@tocs.co</a>.
+        </p>
+        <details style={{ marginTop: 12, fontSize: "0.78rem", color: "#666" }}>
+          <summary style={{ cursor: "pointer" }}>Technical details</summary>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: 8, padding: 8, background: "#f7f7f4", borderRadius: 4 }}>{msg}</pre>
+        </details>
+        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          <button onClick={this.reset} style={{ padding: "8px 14px", borderRadius: 4, border: "1px solid #1c3326", background: "#1c3326", color: "#fff", cursor: "pointer", minHeight: 36 }}>Try again</button>
+          <button onClick={() => window.location.reload()} style={{ padding: "8px 14px", borderRadius: 4, border: "1px solid #1c3326", background: "#fff", color: "#1c3326", cursor: "pointer", minHeight: 36 }}>Reload page</button>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ─── apiCall HELPER ────────────────────────────────────────────────────────────
+// One thin fetch wrapper used by every component. Centralises:
+//   - Authorization header from sessionStorage (when method !== GET or callers ask for auth)
+//   - JSON request/response handling
+//   - Network-error vs HTTP-error normalisation (caller always sees an Error)
+//   - 401 handling: clears the session token + dispatches "tocs:auth-fail" so
+//     the App can route back to login without prop-drilling onAuthFail
+//   - AbortController integration: pass `signal` from useEffect cleanup to
+//     cancel in-flight requests on unmount/dep-change
+//
+// Usage:
+//   const data = await apiCall("/api/orders", { method: "POST", body: order, signal });
+//   apiCall returns the parsed JSON body, or throws a tagged Error.
+async function apiCall(url, opts = {}) {
+  const { method = "GET", body, headers = {}, signal, auth = true, raw = false } = opts;
+  const finalHeaders = { ...headers };
+  if (auth) {
+    let tok = null;
+    try { tok = sessionStorage.getItem("admin_token"); } catch {}
+    if (tok) finalHeaders["Authorization"] = `Bearer ${tok}`;
+  }
+  let bodyToSend;
+  if (body !== undefined && body !== null) {
+    if (typeof body === "string" || body instanceof FormData) {
+      bodyToSend = body;
+    } else {
+      finalHeaders["Content-Type"] = finalHeaders["Content-Type"] || "application/json";
+      bodyToSend = JSON.stringify(body);
+    }
+  }
+  let res;
+  try {
+    res = await fetch(url, { method, headers: finalHeaders, body: bodyToSend, signal });
+  } catch (e) {
+    if (e?.name === "AbortError") throw e;
+    const err = new Error("Network error — please check your connection and try again.");
+    err.cause = e;
+    err.kind = "network";
+    throw err;
+  }
+  if (res.status === 401 && auth) {
+    try { sessionStorage.removeItem("admin_token"); } catch {}
+    try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {}
+  }
+  if (raw) return res;
+  let payload = null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    try { payload = await res.json(); } catch { payload = null; }
+  } else {
+    try { payload = await res.text(); } catch { payload = null; }
+  }
+  if (!res.ok) {
+    const msg = (payload && payload.error) || (typeof payload === "string" && payload) || `Request failed (${res.status}).`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.kind = "http";
+    err.payload = payload;
+    throw err;
+  }
+  return payload;
+}
+
+// ─── CART PERSISTENCE ──────────────────────────────────────────────────────────
+// Mirror cart + contact + selectedShipping into localStorage keyed by plan id.
+// Survives a page refresh / accidental tab close during step 4. Stale entries
+// (different plan, expired, malformed) are silently dropped on read.
+const CART_TTL_MS = 24 * 3600 * 1000; // 24 hours
+const cartStorageKey = (planId) => `tocs_cart_v1:${planId || "_none"}`;
+function loadCartFor(planId) {
+  if (!planId) return null;
+  try {
+    const raw = localStorage.getItem(cartStorageKey(planId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (parsed.savedAt && Date.now() - parsed.savedAt > CART_TTL_MS) {
+      localStorage.removeItem(cartStorageKey(planId));
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+function saveCartFor(planId, snapshot) {
+  if (!planId) return;
+  try {
+    localStorage.setItem(cartStorageKey(planId), JSON.stringify({ ...snapshot, savedAt: Date.now() }));
+  } catch { /* quota exceeded — ignore */ }
+}
+function clearCartFor(planId) {
+  if (!planId) return;
+  try { localStorage.removeItem(cartStorageKey(planId)); } catch {}
+}
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -526,6 +893,16 @@ export default function App() {
     if (window.location.pathname === "/privacy-policy") {
       setCurrentPath("/privacy-policy");
     }
+    // Listen for auth failures dispatched by apiCall when a 401 comes back.
+    // Clears the in-memory token + sends the user back to the login screen.
+    const onAuthFail = () => {
+      setAdminToken(null);
+      // Don't bounce the user mid-checkout — only force login if they were
+      // actively in the admin area.
+      setCurrentView(v => v === "admin" ? "admin" : v);
+    };
+    window.addEventListener("tocs:auth-fail", onAuthFail);
+    return () => window.removeEventListener("tocs:auth-fail", onAuthFail);
   }, []);
 
   // Call stripe-confirm endpoint after Stripe redirects back with ?stripeOk=1
@@ -584,6 +961,34 @@ export default function App() {
       setSelectedOCs([]);
     }
   }, [selPlan]);
+
+  // ── Cart persistence ───────────────────────────────────────────────────────
+  // Restore cart + contact + shipping when the user picks a plan, then mirror
+  // any subsequent edits back to localStorage. After the order is placed (step
+  // 5+), the corresponding entry is cleared by `reset()` below.
+  // Tracked separately from the 1st useEffect to avoid stomping selectedOCs on
+  // restore — the OC effect runs first and clears them, then the user re-picks
+  // their lot which repopulates selectedOCs naturally.
+  const cartHydratedRef = useRef(null); // last-restored plan id, to avoid re-hydrating mid-session
+  useEffect(() => {
+    if (!selPlan || cartHydratedRef.current === selPlan) return;
+    const saved = loadCartFor(selPlan);
+    cartHydratedRef.current = selPlan;
+    if (!saved) return;
+    if (Array.isArray(saved.cart) && saved.cart.length > 0) setCart(saved.cart);
+    if (saved.contact && typeof saved.contact === "object") setContact(c => ({ ...c, ...saved.contact }));
+    if (saved.selectedShipping) setSelectedShipping(saved.selectedShipping);
+    if (saved.orderCategory) setOrderCategory(saved.orderCategory);
+    if (saved.payMethod) setPayMethod(saved.payMethod);
+  }, [selPlan]);
+
+  useEffect(() => {
+    if (!selPlan) return;
+    // Only persist while the wizard is active (steps 2–4); after submit the
+    // entry is cleared explicitly by reset().
+    if (step >= 5) return;
+    saveCartFor(selPlan, { cart, contact, selectedShipping, orderCategory, payMethod });
+  }, [selPlan, step, cart, contact, selectedShipping, orderCategory, payMethod]);
 
   // When lot number or plan changes on an OC order, auto-assign that lot's OCs
   useEffect(() => {
@@ -658,6 +1063,8 @@ export default function App() {
       setCart([]);
       setStep(6);
       setPlacing(false);
+      // Drop the persisted draft now that the order is on the server.
+      if (selPlan) clearCartFor(selPlan);
       try { localStorage.setItem("tocs_last_order", JSON.stringify({ id: finalOrder.id, date: finalOrder.date, email: finalOrder.contactInfo.email, total: finalOrder.total, payment: finalOrder.payment, orderCategory: finalOrder.orderCategory })); } catch {}
     } catch (err) {
       if (setErr) setErr(err.message || "Network error — please check your connection and try again.");
@@ -665,7 +1072,13 @@ export default function App() {
     }
   };
 
-  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false); };
+  const reset = () => {
+    // Clear any persisted draft for the plan they just ordered against, so
+    // returning to the portal starts fresh rather than restoring a paid cart.
+    if (selPlan) clearCartFor(selPlan);
+    cartHydratedRef.current = null;
+    setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false);
+  };
 
   const handleAuth = async (token, user) => {
     try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
@@ -711,7 +1124,12 @@ export default function App() {
   const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment"];
 
   const handleDemoReset = async () => {
-    if (!window.confirm("Reset all demo data to the initial seed state? This will log you out and clear all orders.")) return;
+    if (!(await appConfirm({
+      title: "Reset demo data?",
+      message: "All orders will be cleared and the seed data restored. You will be logged out.",
+      confirmText: "Reset",
+      danger: true,
+    }))) return;
     try {
       await fetch("/api/demo/reset", { method: "POST" });
     } finally {
@@ -765,31 +1183,40 @@ export default function App() {
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : currentPath === "/privacy-policy" ? (
-            <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
+            <ErrorBoundary label="PrivacyPolicy">
+              <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
+            </ErrorBoundary>
           ) : currentView === "portal" ? (
-            <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
-              setSelPlan={setSelPlan} lotNumber={lotNumber} setLotNumber={setLotNumber} selectedOCs={selectedOCs} setSelectedOCs={setSelectedOCs} data={data}
-              cart={cart} setCart={setCart} total={total} addProd={addProd} inCart={inCart}
-              order={order} payMethod={payMethod} setPayMethod={setPayMethod}
-              placeOrder={placeOrder} reset={reset} contact={contact} setContact={setContact}
-              lotAuthFile={lotAuthFile} setLotAuthFile={setLotAuthFile} STEPS={STEPS}
-              pubConfig={pubConfig}
-              orderCategory={orderCategory} setOrderCategory={setOrderCategory}
-              selectedShipping={selectedShipping} setSelectedShipping={setSelectedShipping}
-              shippingCost={shippingCost}
-              stripeConfirming={stripeConfirming} stripeConfirmErr={stripeConfirmErr} stripeOrderId={stripeOrderId}
-              stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled} />
+            <ErrorBoundary label="Portal">
+              <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
+                setSelPlan={setSelPlan} lotNumber={lotNumber} setLotNumber={setLotNumber} selectedOCs={selectedOCs} setSelectedOCs={setSelectedOCs} data={data}
+                cart={cart} setCart={setCart} total={total} addProd={addProd} inCart={inCart}
+                order={order} payMethod={payMethod} setPayMethod={setPayMethod}
+                placeOrder={placeOrder} reset={reset} contact={contact} setContact={setContact}
+                lotAuthFile={lotAuthFile} setLotAuthFile={setLotAuthFile} STEPS={STEPS}
+                pubConfig={pubConfig}
+                orderCategory={orderCategory} setOrderCategory={setOrderCategory}
+                selectedShipping={selectedShipping} setSelectedShipping={setSelectedShipping}
+                shippingCost={shippingCost}
+                stripeConfirming={stripeConfirming} stripeConfirmErr={stripeConfirmErr} stripeOrderId={stripeOrderId}
+                stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled} />
+            </ErrorBoundary>
           ) : !adminToken ? (
-            <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />
+            <ErrorBoundary label="AdminLogin">
+              <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />
+            </ErrorBoundary>
           ) : (
-            <Admin data={data} setData={setData} adminTab={adminTab} setAdminTab={setAdminTab}
-              adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
+            <ErrorBoundary label="Admin">
+              <Admin data={data} setData={setData} adminTab={adminTab} setAdminTab={setAdminTab}
+                adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
+            </ErrorBoundary>
           )}
         </main>
         <footer style={{ textAlign: "center", padding: "18px 16px 14px", fontSize: "0.7rem", color: "var(--muted)", borderTop: "1px solid var(--border)", letterSpacing: "0.02em" }}>
           Last updated {__BUILD_DATE__}
         </footer>
       </div>
+      <DialogHost />
     </>
   );
 }
@@ -2788,7 +3215,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const addPlan = async () => {
     if (!form.id || !form.name) return;
     if (data.strataPlans.some(p => p.id === form.id.trim())) {
-      alert(`A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.`);
+      appToast({ type: "err", message: `A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.` });
       return;
     }
     const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
@@ -2816,7 +3243,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       (o.items || []).some(item => idSet.has(item.planId))
     );
     if (hasOrders) msg += "\n\nOne or more of these plans have existing orders. Deleting will not remove orders but they will reference a plan that no longer exists.";
-    if (!window.confirm(msg)) return;
+    if (!(await appConfirm({ title: "Delete plans?", message: msg, confirmText: "Delete", danger: true }))) return;
     const plans = (data.strataPlans || []).filter(p => !idSet.has(p.id));
     await savePlans(plans);
     setSelectedPlanIds(new Set());
@@ -2875,7 +3302,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const deleteProd = async (pid) => {
-    if (!window.confirm("Delete this product?")) return;
+    if (!(await appConfirm({ title: "Delete product?", confirmText: "Delete", danger: true }))) return;
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : { ...pl, products: pl.products.filter(pr => pr.id !== pid) });
     await savePlans(plans);
   };
@@ -2935,7 +3362,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const deleteLot = async (lid) => {
-    if (!window.confirm("Delete this lot?")) return;
+    if (!(await appConfirm({ title: "Delete lot?", confirmText: "Delete", danger: true }))) return;
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : { ...pl, lots: pl.lots.filter(l => l.id !== lid) });
     await savePlans(plans);
   };
@@ -2960,7 +3387,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   const deleteOC = async (ocId) => {
-    if (!window.confirm(`Delete Owner Corporation "${ocId}"? Lots referencing it will keep the ID but lose the name.`)) return;
+    if (!(await appConfirm({
+      title: `Delete Owner Corporation "${ocId}"?`,
+      message: "Lots referencing it will keep the ID but lose the name.",
+      confirmText: "Delete",
+      danger: true,
+    }))) return;
     const plans = data.strataPlans.map(pl => {
       if (pl.id !== planId) return pl;
       const oc = { ...pl.ownerCorps };
@@ -3055,8 +3487,17 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
-  const markPaid        = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
-  const markPending     = (oid) => { if (window.confirm(`Mark order ${oid} as Pending Payment?\n\nUse this when the invoice has been issued externally (e.g. via PropertyIQ) and you are awaiting the customer's payment. The order status will update to Paid automatically once payment is detected in PIQ, or you can use Mark Paid manually.`)) updateOrderStatus(oid, "Pending Payment"); };
+  const markPaid        = (oid) => {
+    appConfirm({ title: `Mark order ${oid} as Paid?`, confirmText: "Mark paid" })
+      .then(ok => { if (ok) updateOrderStatus(oid, "Paid"); });
+  };
+  const markPending     = (oid) => {
+    appConfirm({
+      title: `Mark order ${oid} as Pending Payment?`,
+      message: "Use this when the invoice has been issued externally (e.g. via PropertyIQ) and you are awaiting the customer's payment. The order status will update to Paid automatically once payment is detected in PIQ, or you can use Mark Paid manually.",
+      confirmText: "Mark pending",
+    }).then(ok => { if (ok) updateOrderStatus(oid, "Pending Payment"); });
+  };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
     setLotOcErr("");
@@ -3175,7 +3616,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         }
       }
 
-      if (!lots.length) { alert("No lots found in the file. Check that the spreadsheet has a 'Lot Number' column."); return; }
+      if (!lots.length) { appToast({ type: "err", message: "No lots found in the file. Check that the spreadsheet has a 'Lot Number' column." }); return; }
 
       // Warn if any OC IDs from the Excel column don't exist in the plan
       const planOcIds = new Set(Object.keys(
@@ -3183,7 +3624,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       ).concat(Object.keys(newOwnerCorps || {})));
       const unknownOcIds = [...new Set(lots.flatMap(l => l.ownerCorps).filter(id => id && !planOcIds.has(id)))];
       if (unknownOcIds.length) {
-        const proceed = window.confirm(`⚠ Warning: the following OC IDs in the file don't match any Owner Corporation in this plan:\n\n${unknownOcIds.join(", ")}\n\nThose lots will show "No OC assigned". Continue anyway?`);
+        const proceed = await appConfirm({
+          title: "Unknown OC IDs",
+          message: `The following OC IDs in the file don't match any Owner Corporation in this plan:\n\n${unknownOcIds.join(", ")}\n\nThose lots will show "No OC assigned". Continue anyway?`,
+          confirmText: "Continue",
+        });
         if (!proceed) return;
       }
 
@@ -3191,7 +3636,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ? "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
           Object.entries(newOwnerCorps).map(([id, oc]) => "• " + id + ": " + oc.name).join("\n")
         : "";
-      const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nExisting lots will be updated (matched by lot number). New lots will be added. No lots will be deleted.${ocMsg}`);
+      const confirmed = await appConfirm({
+        title: `Import ${lots.length} lots into ${targetPlanId}?`,
+        message: `Existing lots will be updated (matched by lot number). New lots will be added. No lots will be deleted.${ocMsg}`,
+        confirmText: "Import",
+      });
       if (!confirmed) return;
 
       const payload = { action: "import-lots", planId: targetPlanId, lots };
@@ -3211,13 +3660,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         } catch { /* UI will reflect server state on next load */ }
         const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) created/updated." : "";
         const summary = rj.added != null ? ` (${rj.added} new, ${rj.updated} updated)` : "";
-        alert(`✅ Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}`);
+        appToast({ type: "ok", message: `Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}` });
       } else {
-        const d = await r.json();
-        alert("Import failed: " + (d.error || "Unknown error"));
+        const d = await r.json().catch(() => ({}));
+        appToast({ type: "err", message: "Import failed: " + (d.error || "Unknown error") });
       }
     } catch (err) {
-      alert("Failed to read file: " + err.message);
+      appToast({ type: "err", message: "Failed to read file: " + err.message });
     }
   };
 
@@ -3584,7 +4033,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <div className="empty"><div style={{ fontSize: "2rem", marginBottom: "0.8rem" }}>📋</div><p>{data.orders.length === 0 ? "No orders yet." : "No orders match your filter."}</p></div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-            <table className="tbl">
+            <table className="tbl tbl-stack">
               <thead>
                 <tr>
                   {[
@@ -3610,10 +4059,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                   return (
                   <Fragment key={o.id}>
                     <tr style={{ cursor: "pointer" }} onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)}>
-                      <td><strong style={{ fontFamily: "monospace", fontSize: "0.76rem" }}>{o.id}</strong></td>
-                      <td style={{ fontSize: "0.78rem" }}>{new Date(o.date).toLocaleDateString("en-AU")}</td>
-                      <td style={{ fontSize: "0.78rem" }}><strong>{building}</strong><br/><span style={{ color: "var(--muted)" }}>{lotNum}</span></td>
-                      <td style={{ fontSize: "0.78rem" }}>
+                      <td data-label="Order ID"><strong style={{ fontFamily: "monospace", fontSize: "0.76rem" }}>{o.id}</strong></td>
+                      <td data-label="Date" style={{ fontSize: "0.78rem" }}>{new Date(o.date).toLocaleDateString("en-AU")}</td>
+                      <td data-label="Building / Lot" style={{ fontSize: "0.78rem" }}><strong>{building}</strong><br/><span style={{ color: "var(--muted)" }}>{lotNum}</span></td>
+                      <td data-label="Customer" style={{ fontSize: "0.78rem" }}>
                         {o.contactInfo?.name || "—"}
                         {(() => {
                           const ci = o.contactInfo;
@@ -3625,9 +4074,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         })()}
                         <br/><span style={{ color: "var(--muted)" }}>{o.contactInfo?.email}</span>
                       </td>
-                      <td title={`${(o.items || []).length} line item${(o.items || []).length === 1 ? "" : "s"}`}>{(o.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0)}</td>
-                      <td><strong>{fmt(o.total)}</strong></td>
-                      <td><span className={`badge ${
+                      <td data-label="Items" title={`${(o.items || []).length} line item${(o.items || []).length === 1 ? "" : "s"}`}>{(o.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0)}</td>
+                      <td data-label="Total"><strong>{fmt(o.total)}</strong></td>
+                      <td data-label="Status"><span className={`badge ${
                         o.status==="Issued"?"bg-b":
                         o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
@@ -3639,24 +4088,24 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-gray"
                       }`}>{o.status}</span></td>
-                      <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
+                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
                         {o.status === "Invoice to be issued" && (
-                          <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
+                          <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
                         )}
                         {o.status === "Pending Payment" && o.payment === "invoice" && (
-                          <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
+                          <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
                         )}
                         {o.status === "Invoice to be issued" && o.orderCategory === "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"#fff7ed",color:"#c2410c",border:"1px solid #fed7aa" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending Payment</button>
+                          <button className="tbl-act-btn" style={{ background:"var(--amber-tint)",color:"var(--amber)",border:"1px solid var(--amber-bd)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending Payment</button>
                         )}
                         {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
                         {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
+                          <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
                         {["Invoice to be issued", "Pending Payment", "On Hold", "Awaiting Documents"].includes(o.status) && (
-                          <button className="tbl-act-btn" style={{ background:"#fefce8",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                          <button className="tbl-act-btn" style={{ background:"var(--yellow-tint)",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
                         )}
                         {o.status !== "Issued" && o.status !== "Cancelled" && (
                           <button className="tbl-act-btn danger" onClick={e => { e.stopPropagation(); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
@@ -3666,18 +4115,25 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                             title="Permanently delete this cancelled order"
                             onClick={e => {
                               e.stopPropagation();
-                              if (!window.confirm(`Permanently delete order ${o.id}? This cannot be undone.`)) return;
-                              fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
-                                .then(r => r.json())
-                                .then(d => {
-                                  if (d.ok) {
-                                    setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
-                                    showAdminToast("ok", `Order ${o.id} deleted.`);
-                                  } else {
-                                    showAdminToast("err", d.error || "Delete failed.");
-                                  }
-                                })
-                                .catch(() => showAdminToast("err", "Delete failed."));
+                              appConfirm({
+                                title: `Permanently delete order ${o.id}?`,
+                                message: "This cannot be undone.",
+                                confirmText: "Delete",
+                                danger: true,
+                              }).then(ok => {
+                                if (!ok) return;
+                                fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
+                                  .then(r => r.json())
+                                  .then(d => {
+                                    if (d.ok) {
+                                      setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
+                                      showAdminToast("ok", `Order ${o.id} deleted.`);
+                                    } else {
+                                      showAdminToast("err", d.error || "Delete failed.");
+                                    }
+                                  })
+                                  .catch(() => showAdminToast("err", "Delete failed."));
+                              });
                             }}>Delete</button>
                         )}
                         {o.contactInfo?.email && (
@@ -5726,7 +6182,10 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
             <div style={{ background:"#e8f5ee", border:"1px solid #a0d4b2", borderRadius:"4px", padding:"10px 14px", marginBottom:"10px" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" }}>
                 <span style={{ color:"#1c6e3f", fontWeight:700 }}>✅ Payment confirmed via PropertyIQ</span>
-                <button className="tbl-act-btn" style={{ fontSize:"0.7rem", color:"#666" }} title="Reset payment date and re-confirm from PIQ" onClick={() => { if (window.confirm("Reset the stored payment date so it can be re-confirmed on next check?")) checkNow({ resetDate: true }); }}>Reset date</button>
+                <button className="tbl-act-btn" style={{ fontSize:"0.7rem", color:"#666" }} title="Reset payment date and re-confirm from PIQ" onClick={() => {
+                  appConfirm({ title: "Reset payment date?", message: "Reset the stored payment date so it can be re-confirmed on next check.", confirmText: "Reset" })
+                    .then(ok => { if (ok) checkNow({ resetDate: true }); });
+                }}>Reset date</button>
               </div>
               <table style={{ fontSize:"0.8rem", borderCollapse:"collapse" }}>
                 <tbody>
@@ -6016,15 +6475,21 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
   useEffect(() => { loadAdmins(); }, []);
 
   const removeAdmin = async (id, username) => {
-    if (!window.confirm(`Remove admin "${username}"? They will no longer be able to log in.`)) return;
+    const ok = await appConfirm({
+      title: `Remove admin "${username}"?`,
+      message: "They will no longer be able to log in.",
+      confirmText: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
     const r = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
       body: JSON.stringify({ action: "remove-admin", id }),
     });
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
     if (r.ok) loadAdmins();
-    else alert(d.error || "Could not remove admin.");
+    else appToast({ type: "err", message: d.error || "Could not remove admin." });
   };
 
   // ── Add admin form ──────────────────────────────────────────────────────────

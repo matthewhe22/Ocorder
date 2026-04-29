@@ -7,7 +7,7 @@
 // so we disable the built-in body parser and read the stream manually.
 
 import Stripe from "stripe";
-import { readData, writeData, readConfig, cors } from "../_lib/store.js";
+import { readData, writeData, readConfig, cors, withOrderLock, tryClaimStripeEvent } from "../_lib/store.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../_lib/email.js";
 
 // Disable Vercel's default body parser so we can read the raw body for
@@ -69,20 +69,36 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Webhook signature verification failed." });
   }
 
+  // Idempotency by Stripe event.id. Stripe retries on non-2xx and can also
+  // deliver the same event twice during failover; tryClaimStripeEvent uses
+  // SET NX EX to atomically check-and-set, so only the first invocation
+  // proceeds. Replays return 200 immediately so Stripe stops retrying.
+  if (!(await tryClaimStripeEvent(event.id))) {
+    console.log(`Stripe webhook: event ${event.id} already processed — skipping.`);
+    return res.status(200).json({ received: true, duplicate: true });
+  }
+
   // Handle checkout.session.expired — customer abandoned or session timed out
   if (event.type === "checkout.session.expired") {
     const expiredSession = event.data.object;
     const expiredOrderId = expiredSession.metadata?.orderId;
     if (expiredOrderId) {
-      const data = await readData();
-      const idx = data.orders.findIndex(o => o.id === expiredOrderId);
-      // Only remove if not already paid — also verify via Stripe payment_status to guard against
-      // race conditions where stripe-confirm ran just before this webhook arrived.
-      if (idx !== -1 && data.orders[idx].status !== "Paid" && expiredSession.payment_status !== "paid") {
-        data.orders[idx].status = "Cancelled";
-        data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), `Order cancelled — Stripe checkout session expired — ${new Date().toISOString()}`];
-        await writeData(data);
-        console.log(`Stripe webhook: cancelled expired pending order ${expiredOrderId}`);
+      try {
+        await withOrderLock(expiredOrderId, async () => {
+          const data = await readData();
+          const idx = data.orders.findIndex(o => o.id === expiredOrderId);
+          if (idx !== -1 && data.orders[idx].status !== "Paid" && expiredSession.payment_status !== "paid") {
+            data.orders[idx].status = "Cancelled";
+            data.orders[idx].auditLog = [
+              ...(data.orders[idx].auditLog || []),
+              { ts: new Date().toISOString(), action: "Order cancelled — Stripe checkout session expired" },
+            ];
+            await writeData(data);
+            console.log(`Stripe webhook: cancelled expired pending order ${expiredOrderId}`);
+          }
+        });
+      } catch (e) {
+        console.error(`Stripe webhook expired-handler failed for ${expiredOrderId}:`, e.message);
       }
     }
     return res.status(200).json({ received: true });
@@ -100,34 +116,44 @@ export default async function handler(req, res) {
     return res.status(200).json({ received: true, ignored: true });
   }
 
-  const data = await readData();
-  const idx = data.orders.findIndex(o => o.id === orderId);
-  if (idx === -1) {
-    console.warn(`Stripe webhook: order ${orderId} not found in Redis — ignoring.`);
+  // Re-read inside the lock so we observe the latest committed state.
+  let lockResult;
+  try {
+    lockResult = await withOrderLock(orderId, async () => {
+      const data = await readData();
+      const idx = data.orders.findIndex(o => o.id === orderId);
+      if (idx === -1) {
+        console.warn(`Stripe webhook: order ${orderId} not found in Redis — ignoring.`);
+        return { missing: true };
+      }
+      const order = data.orders[idx];
+      if (order.status === "Paid") {
+        console.log(`Stripe webhook: order ${orderId} already Paid — skipping.`);
+        return { alreadyPaid: true, order };
+      }
+      data.orders[idx].status = "Paid";
+      data.orders[idx].auditLog = [
+        ...(data.orders[idx].auditLog || []),
+        {
+          ts: new Date().toISOString(),
+          action: "Payment confirmed via Stripe webhook",
+          note: `Session: ${session.id}`,
+        },
+      ];
+      await writeData(data);
+      return { transitioned: true, order: data.orders[idx] };
+    });
+  } catch (e) {
+    console.error(`Stripe webhook: lock/write failed for ${orderId}:`, e.message);
+    return res.status(503).json({ error: "Could not process order — please retry." });
+  }
+  if (lockResult.missing) {
     return res.status(200).json({ received: true, ignored: true });
   }
-
-  const order = data.orders[idx];
-
-  // Idempotency guard — do not re-process already-paid orders
-  if (order.status === "Paid") {
-    console.log(`Stripe webhook: order ${orderId} already Paid — skipping.`);
+  if (lockResult.alreadyPaid) {
     return res.status(200).json({ received: true, alreadyPaid: true });
   }
-
-  // Mark as Paid and add audit log entry
-  data.orders[idx].status = "Paid";
-  data.orders[idx].auditLog = [
-    ...(data.orders[idx].auditLog || []),
-    {
-      ts: new Date().toISOString(),
-      action: "Payment confirmed via Stripe webhook",
-      note: `Session: ${session.id}`,
-    },
-  ];
-  await writeData(data);
-
-  const confirmedOrder = data.orders[idx];
+  const confirmedOrder = lockResult.order;
 
   // Send admin + customer emails (mirrors stripe-confirm handler)
   const smtp = cfg.smtp || {};

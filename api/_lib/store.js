@@ -220,25 +220,62 @@ export const DEMO_DEFAULT_DATA = {
 };
 
 // ── Stateless HMAC token helpers ──────────────────────────────────────────────
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual, randomBytes } from "crypto";
+
+const IS_PROD = process.env.NODE_ENV === "production";
+// Stable dev-only secret — used ONLY when NODE_ENV !== "production" and
+// TOKEN_SECRET is unset. Production deploys must set TOKEN_SECRET; getSecret()
+// throws otherwise. The secret is intentionally not derived from the admin
+// password (a previous behaviour) so that rotating the admin password no
+// longer changes the signing key — session invalidation is now handled by
+// the session-epoch mechanism below.
+const DEV_FALLBACK_SECRET = "tocs-dev-only-secret-DO-NOT-USE-IN-PRODUCTION";
 
 if (!process.env.TOKEN_SECRET) {
-  console.warn("[store.js] WARNING: TOKEN_SECRET env var is not set. Token security is degraded. Set TOKEN_SECRET in Vercel environment variables.");
-}
-
-async function getSecret() {
-  if (process.env.TOKEN_SECRET) return process.env.TOKEN_SECRET;
-  try {
-    const cfg = await readConfig();
-    return cfg.pass || process.env.ADMIN_PASS || "tocs-default-secret-change-me";
-  } catch {
-    return process.env.ADMIN_PASS || "tocs-default-secret-change-me";
+  if (IS_PROD) {
+    console.error("[store.js] CRITICAL: TOKEN_SECRET env var is not set in production. Auth endpoints will refuse to issue or accept tokens.");
+  } else {
+    console.warn("[store.js] WARNING: TOKEN_SECRET not set — using insecure dev fallback. Set TOKEN_SECRET before deploying.");
   }
 }
 
-async function hmacSign(payload) {
-  const secret = await getSecret();
+function getSecret() {
+  if (process.env.TOKEN_SECRET) return process.env.TOKEN_SECRET;
+  if (IS_PROD) {
+    throw new Error("TOKEN_SECRET environment variable is required in production.");
+  }
+  return DEV_FALLBACK_SECRET;
+}
+
+function hmacSign(payload) {
+  const secret = getSecret();
   return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+// ── Session epoch ─────────────────────────────────────────────────────────────
+// All sessions embed the current epoch in their payload. Bumping the epoch
+// (e.g. on password change) invalidates every previously-issued token without
+// having to track them individually.
+const SESSION_EPOCH_KEY = DEMO_MODE ? "demo:session_epoch" : "tocs:session_epoch";
+
+async function getSessionEpoch() {
+  if (!KV_AVAILABLE) return 0;
+  try {
+    const v = await kvGet(SESSION_EPOCH_KEY);
+    return Number(v) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function bumpSessionEpoch() {
+  if (!KV_AVAILABLE) return;
+  try {
+    const client = await getClient();
+    await client.incr(SESSION_EPOCH_KEY);
+  } catch (err) {
+    console.error("bumpSessionEpoch failed:", err.message);
+  }
 }
 
 // ── Safe Redis wrapper ────────────────────────────────────────────────────────
@@ -362,6 +399,14 @@ export async function readConfig() {
     piq:            { ...DEFAULT_CONFIG.piq,            ...(c.piq            || {}) },
   };
 
+  // Once an admins[] array is in place, do not let DEFAULT_CONFIG.pass /
+  // DEFAULT_CONFIG.user resurrect a plaintext default password through the
+  // merge. The admins[] array is now the only source of truth.
+  if (Array.isArray(c.admins) && c.admins.length > 0) {
+    delete merged.pass;
+    if (!c.user) merged.user = c.admins[0].username;
+  }
+
   // Critical env-var overrides: if Redis has an empty value, use the env var.
   if (!merged.smtp.pass && process.env.SMTP_PASS) merged.smtp.pass = process.env.SMTP_PASS;
   if (!merged.smtp.host && process.env.SMTP_HOST) merged.smtp.host = process.env.SMTP_HOST;
@@ -377,36 +422,47 @@ export async function writeConfig(c) {
 // ── Session helpers ───────────────────────────────────────────────────────────
 export async function createSession(user) {
   const exp = Date.now() + 8 * 3600 * 1000; // 8 hours
-  const payload = Buffer.from(JSON.stringify({ user, exp })).toString("base64url");
-  const sig = await hmacSign(payload);
+  const epoch = await getSessionEpoch();
+  const payload = Buffer.from(JSON.stringify({ user, exp, epoch })).toString("base64url");
+  const sig = hmacSign(payload);
   return `${payload}.${sig}`;
 }
 
-export async function invalidateSession(_token) {
-  // Stateless tokens are invalidated when the admin password changes.
-}
-
-export async function invalidateAllSessions() {
-  // No-op: changing cfg.pass changes the HMAC key, invalidating all old tokens.
-}
-
-export async function validToken(token) {
-  if (!token || !token.includes(".")) return false;
+// Decode and verify a token. Returns the parsed payload object on success,
+// or null on any failure (bad signature, expired, stale epoch, malformed).
+export async function verifyToken(token) {
+  if (!token || typeof token !== "string" || !token.includes(".")) return null;
   try {
     const lastDot = token.lastIndexOf(".");
     const payload = token.slice(0, lastDot);
     const sig     = token.slice(lastDot + 1);
-    if (!/^[0-9a-f]{64}$/.test(sig)) return false;
-    const expected = await hmacSign(payload);
+    if (!/^[0-9a-f]{64}$/.test(sig)) return null;
+    const expected = hmacSign(payload);
     const sigBuf  = Buffer.from(sig,      "hex");
     const expBuf  = Buffer.from(expected, "hex");
-    if (sigBuf.length !== expBuf.length) return false;
-    if (!timingSafeEqual(sigBuf, expBuf)) return false;
-    const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
-    return Date.now() < exp;
+    if (sigBuf.length !== expBuf.length) return null;
+    if (!timingSafeEqual(sigBuf, expBuf)) return null;
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
+    if (typeof parsed?.exp !== "number" || Date.now() >= parsed.exp) return null;
+    // Reject tokens issued before the current session epoch.
+    const currentEpoch = await getSessionEpoch();
+    if ((parsed.epoch ?? 0) < currentEpoch) return null;
+    return parsed;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function validToken(token) {
+  return (await verifyToken(token)) !== null;
+}
+
+export async function invalidateSession(_token) {
+  // Stateless tokens are invalidated by bumping the session epoch.
+}
+
+export async function invalidateAllSessions() {
+  await bumpSessionEpoch();
 }
 
 // ── Request helpers ───────────────────────────────────────────────────────────
@@ -415,17 +471,116 @@ export function extractToken(req) {
   return auth.startsWith("Bearer ") ? auth.slice(7) : null;
 }
 
-const ALLOWED_ORIGINS = [
+// Exact-origin allow-list. The previous startsWith() check accepted
+// https://tocs.co.evil.com because it began with an allowed prefix.
+const ALLOWED_ORIGINS = new Set([
   "https://occorder.vercel.app",
   "https://tocs.co",
+  "https://www.tocs.co",
   "http://localhost:5173",
   "http://localhost:3000",
-];
+]);
 export function cors(res, req) {
   const origin = req?.headers?.origin;
-  const allowedOrigin = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o)) ? origin : null;
-  if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  const allowedOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : null;
+  if (allowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Cron-Secret");
+  // Bearer tokens travel in the Authorization header — cookies are not used,
+  // so credentialed mode is unnecessary and would broaden CSRF surface.
+}
+
+// ── Per-IP rate limiter ───────────────────────────────────────────────────────
+// Simple sliding-window-style counter using Redis EX. Returns:
+//   { allowed: true,  remaining }  when the request is permitted
+//   { allowed: false, retryAfter } (seconds) when the cap is hit
+// `key` should be specific (e.g. "track:1.2.3.4"); pass max + window in seconds.
+// When KV is unavailable this is a no-op (allowed = true) — the caller still
+// gets best-effort protection rather than 503-ing every request.
+export async function rateLimit(key, max, windowSeconds) {
+  if (!KV_AVAILABLE) return { allowed: true, remaining: max };
+  const k = `tocs:rl:${key}`;
+  try {
+    const client = await getClient();
+    const cnt = await client.incr(k);
+    if (cnt === 1) {
+      await client.expire(k, windowSeconds);
+    }
+    if (cnt > max) {
+      let ttl = await client.ttl(k);
+      if (ttl < 0) ttl = windowSeconds;
+      return { allowed: false, retryAfter: ttl };
+    }
+    return { allowed: true, remaining: Math.max(0, max - cnt) };
+  } catch (err) {
+    console.error("rateLimit error:", err.message);
+    return { allowed: true, remaining: max };
+  }
+}
+
+export function clientIp(req) {
+  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
+    || req.socket?.remoteAddress
+    || "unknown";
+}
+
+// ── Per-order mutation lock ───────────────────────────────────────────────────
+// Backed by Redis SET NX EX. Use to serialise concurrent mutations on a single
+// order (Stripe webhook + stripe-confirm racing, dual amend submits, etc.).
+// Falls open when KV is unavailable so local dev still works.
+const LOCK_TTL_SECONDS = 10;
+const LOCK_RETRY_MS    = 75;
+const LOCK_MAX_WAIT_MS = 5000;
+
+export async function withOrderLock(orderId, fn) {
+  if (!KV_AVAILABLE) return await fn();
+  const key   = `tocs:lock:order:${orderId}`;
+  const token = randomBytes(16).toString("hex");
+  const client = await getClient();
+  const start  = Date.now();
+  let acquired = false;
+  while (Date.now() - start < LOCK_MAX_WAIT_MS) {
+    const ok = await client.set(key, token, { NX: true, EX: LOCK_TTL_SECONDS });
+    if (ok === "OK") { acquired = true; break; }
+    await new Promise(r => setTimeout(r, LOCK_RETRY_MS));
+  }
+  if (!acquired) {
+    throw new Error("Order is busy — please try again.");
+  }
+  try {
+    return await fn();
+  } finally {
+    // Best-effort release; only delete if we still own the lock.
+    try {
+      const current = await client.get(key);
+      if (current === token) await client.del(key);
+    } catch { /* lock will expire via TTL */ }
+  }
+}
+
+// ── Stripe webhook event deduplication ────────────────────────────────────────
+// Stripe retries webhook events on non-2xx; if the same event.id is delivered
+// twice, both invocations would otherwise repeat side effects (emails, status
+// flips). We mark the event ID as processed for 7 days; subsequent calls
+// short-circuit. SET NX semantics guarantee atomic check-and-set.
+const STRIPE_EVENT_TTL_SECONDS = 7 * 24 * 3600;
+
+export async function tryClaimStripeEvent(eventId) {
+  if (!KV_AVAILABLE) return true; // best-effort allow
+  if (!eventId || typeof eventId !== "string") return false;
+  try {
+    const client = await getClient();
+    const ok = await client.set(
+      `tocs:stripe:event:${eventId}`,
+      String(Date.now()),
+      { NX: true, EX: STRIPE_EVENT_TTL_SECONDS }
+    );
+    return ok === "OK";
+  } catch (err) {
+    console.error("tryClaimStripeEvent error:", err.message);
+    return true; // fall open — better to risk a duplicate than reject a valid event
+  }
 }
