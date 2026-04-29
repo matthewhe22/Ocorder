@@ -16,6 +16,13 @@ data.json
 demo-config.json.local
 demo-data.json.local
 
+# Local test fixtures (created by Playwright webServer + smoke probes)
+test-data.json
+test-config.json
+test-uploads/
+test-results/
+playwright-report/
+
 # Local backups created by maintenance scripts
 *.bak.*
 *.bak

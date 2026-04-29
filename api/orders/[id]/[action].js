@@ -8,7 +8,7 @@
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
 import Stripe from "stripe";
-import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, KV_AVAILABLE } from "../../_lib/store.js";
+import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
@@ -182,18 +182,27 @@ export default async function handler(req, res) {
     const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid","Awaiting Stripe Payment"];
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status: "${status}".` });
 
-    const data = await readData();
-    const idx = data.orders.findIndex(o => o.id === id);
-    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    try {
+      const result = await withOrderLock(id, async () => {
+        const data = await readData();
+        const idx = data.orders.findIndex(o => o.id === id);
+        if (idx === -1) return { error: "Order not found.", code: 404 };
 
-    data.orders[idx].status = status;
-    const auditEntry = { ts: new Date().toISOString(), action: `Status changed to ${status}` };
-    if (note) auditEntry.note = note;
-    data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), auditEntry];
-    if (status === "Cancelled" && note) data.orders[idx].cancelReason = note;
+        data.orders[idx].status = status;
+        const auditEntry = { ts: new Date().toISOString(), action: `Status changed to ${status}` };
+        if (note) auditEntry.note = note;
+        data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), auditEntry];
+        if (status === "Cancelled" && note) data.orders[idx].cancelReason = note;
 
-    await writeData(data);
-    return res.status(200).json({ ok: true });
+        await writeData(data);
+        return { ok: true };
+      });
+      if (result.error) return res.status(result.code).json({ error: result.error });
+      return res.status(200).json(result);
+    } catch (e) {
+      console.error(`status update failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
   }
 
   // ── PUT /api/orders/:id/amend ────────────────────────────────────────────
@@ -586,26 +595,25 @@ export default async function handler(req, res) {
       return res.status(503).json({ error: "Stripe is not configured on this server." });
     }
 
-    // Always read order from Redis first — idempotency check depends on it
-    const data = await readData();
-    const idx  = data.orders.findIndex(o => o.id === id);
-    if (idx === -1) return res.status(404).json({ error: "Order not found." });
-    const order = data.orders[idx];
-
-    // Idempotency guard — prevents duplicate emails on page refresh / replay
-    if (order.status === "Paid") {
-      return res.status(200).json({ success: true, order });
+    // Pre-lock read so we can short-circuit on already-paid (avoids a Stripe
+    // round-trip and the lock contention that would otherwise stack up if
+    // the customer double-submits the confirmation request).
+    const initialData = await readData();
+    const initialIdx  = initialData.orders.findIndex(o => o.id === id);
+    if (initialIdx === -1) return res.status(404).json({ error: "Order not found." });
+    if (initialData.orders[initialIdx].status === "Paid") {
+      return res.status(200).json({ success: true, order: initialData.orders[initialIdx] });
     }
 
-    const { stripeSessionId } = order;
-    if (!stripeSessionId) {
+    const stripeSessionIdRef = initialData.orders[initialIdx].stripeSessionId;
+    if (!stripeSessionIdRef) {
       return res.status(400).json({ error: "No Stripe session associated with this order." });
     }
 
     const stripe = new Stripe(stripeKey);
     let session;
     try {
-      session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+      session = await stripe.checkout.sessions.retrieve(stripeSessionIdRef);
     } catch (e) {
       console.error("Stripe session retrieve failed:", e.message);
       return res.status(500).json({ error: "Could not verify payment. Please contact support." });
@@ -621,14 +629,31 @@ export default async function handler(req, res) {
       return res.status(402).json({ error: "Payment not completed.", payment_status: session.payment_status });
     }
 
-    // Update order status and audit log
-    data.orders[idx].status = "Paid";
-    data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), {
-      ts: new Date().toISOString(),
-      action: "Payment confirmed via Stripe",
-      note: `Session: ${stripeSessionId}`,
-    }];
-    await writeData(data);
+    // Acquire the order lock and re-check status to serialise against the
+    // checkout.session.completed webhook (which can race this endpoint).
+    let data, idx, stripeSessionId;
+    try {
+      const r = await withOrderLock(id, async () => {
+        const d = await readData();
+        const i = d.orders.findIndex(o => o.id === id);
+        if (i === -1) return { error: "Order not found.", code: 404 };
+        if (d.orders[i].status === "Paid") return { alreadyPaid: true, order: d.orders[i] };
+        d.orders[i].status = "Paid";
+        d.orders[i].auditLog = [...(d.orders[i].auditLog || []), {
+          ts: new Date().toISOString(),
+          action: "Payment confirmed via Stripe",
+          note: `Session: ${d.orders[i].stripeSessionId}`,
+        }];
+        await writeData(d);
+        return { data: d, idx: i, stripeSessionId: d.orders[i].stripeSessionId };
+      });
+      if (r.error) return res.status(r.code).json({ error: r.error });
+      if (r.alreadyPaid) return res.status(200).json({ success: true, order: r.order });
+      data = r.data; idx = r.idx; stripeSessionId = r.stripeSessionId;
+    } catch (e) {
+      console.error(`stripe-confirm lock/write failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
 
     // Send admin + customer emails using shared helpers from _lib/email.js
     // Timeout config: connectionTimeout:8000, socketTimeout:10000, NO greetingTimeout
@@ -954,6 +979,15 @@ export default async function handler(req, res) {
 
   // ── GET /api/orders/:id/track  (public — applicant order status lookup) ──────
   if (action === "track" && req.method === "GET") {
+    // Per-IP rate limit: 30 lookups per 5 minutes is well above legitimate use
+    // (a customer occasionally re-checking their own order) but blunts
+    // enumeration scans against the order-id space.
+    const ip = clientIp(req);
+    const rl = await rateLimit(`track:${ip}`, 30, 5 * 60);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({ error: "Too many requests. Please try again shortly." });
+    }
     const data = await readData();
     const order = data.orders.find(o => o.id.toUpperCase() === id.toUpperCase());
     if (!order) return res.status(404).json({ error: "Order not found. Please check your reference number." });

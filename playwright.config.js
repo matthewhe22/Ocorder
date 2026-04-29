@@ -33,11 +33,13 @@ export default defineConfig({
     },
   ],
 
-  // Start the local dev server before running tests
+  // Start the local dev server before running tests. The Express server lives
+  // in OCOrder/ — `cd` keeps relative paths (DATA_FILE, UPLOADS_DIR, dist/)
+  // resolving correctly. The build runs once first so dist/index.html exists.
   webServer: {
-    command: "node server.js",
+    command: "cd OCOrder && node build.mjs && DATA_FILE=../test-data.json CONFIG_FILE=../test-config.json UPLOADS_DIR=../test-uploads PORT=3000 node server.js",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    timeout: 60_000,
   },
 });
