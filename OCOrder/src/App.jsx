@@ -333,6 +333,7 @@ const CSS = `
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
   .bg-warn { background: var(--warn-light); color: var(--warn); }
+  .bg-issued { background: #166534; color: #fff; }
   .search-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
@@ -347,6 +348,11 @@ const CSS = `
   .tbl-act-btn.danger:hover { background: var(--red-light); }
   .tbl-act-btn.success { color: var(--ok); border-color: var(--ok-light); }
   .tbl-act-btn.success:hover { background: var(--ok-light); }
+  .order-more-menu { position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.13); z-index:60; min-width:170px; padding:4px 0; }
+  .order-more-item { display:block; width:100%; text-align:left; background:none; border:none; padding:7px 14px; font-family:'Inter',sans-serif; font-size:0.75rem; font-weight:600; cursor:pointer; color:var(--mid); white-space:nowrap; text-decoration:none; }
+  .order-more-item:hover { background:var(--sage-tint); color:var(--forest); }
+  .order-more-item.danger { color:var(--red); }
+  .order-more-item.danger:hover { background:var(--red-light); color:var(--red); }
 
   /* ── LOGIN SCREEN ── */
   .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--cream); padding: 2rem; }
@@ -2749,6 +2755,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const ORDERS_PAGE_SIZE = 50;
   // Notify customer modal — composed inline so we don't add another file
   const [notifyModal, setNotifyModal] = useState(null); // { order, subject, message, sending, err }
+  const [moreMenuOrder, setMoreMenuOrder] = useState(null); // order id of open More menu
+
+  useEffect(() => {
+    if (!moreMenuOrder) return;
+    const close = () => setMoreMenuOrder(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [moreMenuOrder]);
 
   // Global Escape handler for the inline `modal` state (Add Plan / Edit Lot
   // / etc.) which doesn't use the dedicated modal components' useFocusTrap.
@@ -4077,7 +4091,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td data-label="Items" title={`${(o.items || []).length} line item${(o.items || []).length === 1 ? "" : "s"}`}>{(o.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0)}</td>
                       <td data-label="Total"><strong>{fmt(o.total)}</strong></td>
                       <td data-label="Status"><span className={`badge ${
-                        o.status==="Issued"?"bg-b":
+                        o.status==="Issued"?"bg-issued":
                         o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
                         o.status==="Processing"?"bg-teal":
@@ -4088,66 +4102,87 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-gray"
                       }`}>{o.status}</span></td>
-                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
-                        {o.status === "Invoice to be issued" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
-                        )}
-                        {o.status === "Pending Payment" && o.payment === "invoice" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
-                        )}
-                        {o.status === "Invoice to be issued" && o.orderCategory === "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--amber-tint)",color:"var(--amber)",border:"1px solid var(--amber-bd)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); markPending(o.id); }}>Mark Pending Payment</button>
-                        )}
-                        {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
-                          <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
-                        )}
-                        {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
-                        )}
-                        {["Invoice to be issued", "Pending Payment", "On Hold", "Awaiting Documents"].includes(o.status) && (
-                          <button className="tbl-act-btn" style={{ background:"var(--yellow-tint)",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
-                        )}
-                        {o.status !== "Issued" && o.status !== "Cancelled" && (
-                          <button className="tbl-act-btn danger" onClick={e => { e.stopPropagation(); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
-                        )}
-                        {o.status === "Cancelled" && (
-                          <button className="tbl-act-btn danger"
-                            title="Permanently delete this cancelled order"
-                            onClick={e => {
-                              e.stopPropagation();
-                              appConfirm({
-                                title: `Permanently delete order ${o.id}?`,
-                                message: "This cannot be undone.",
-                                confirmText: "Delete",
-                                danger: true,
-                              }).then(ok => {
-                                if (!ok) return;
-                                fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
-                                  .then(r => r.json())
-                                  .then(d => {
-                                    if (d.ok) {
-                                      setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
-                                      showAdminToast("ok", `Order ${o.id} deleted.`);
-                                    } else {
-                                      showAdminToast("err", d.error || "Delete failed.");
-                                    }
-                                  })
-                                  .catch(() => showAdminToast("err", "Delete failed."));
-                              });
-                            }}>Delete</button>
-                        )}
-                        {o.contactInfo?.email && (
-                          <button className="tbl-act-btn" style={{ background:"#eff6ff",color:"#1d4ed8",border:"1px solid #bfdbfe" }}
-                            title={`Email ${o.contactInfo.email} a status update`}
-                            onClick={e => { e.stopPropagation(); setNotifyModal({ order: o, subject: `Update on your TOCS order ${o.id}`, message: `Hi ${o.contactInfo?.name || ""},\n\nYour order ${o.id} is currently: ${o.status}.\n\nKind regards,\nTOCS Team`, sending: false, err: "" }); }}>
-                            ✉ Notify
-                          </button>
-                        )}
-                        {(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl) && (
-                          o.lotAuthorityUrl
-                            ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="tbl-act-btn" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
-                            : <button type="button" className="tbl-act-btn" style={{ background:"none", border:0, padding:0, cursor:"pointer", color:"inherit", font:"inherit" }} onClick={e => { e.stopPropagation(); openAuthorityDoc(o.id); }}>📎 Auth Doc</button>
-                        )}
+                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap" }}>
+                        {/* Issued = terminal state, no buttons at all */}
+                        {o.status !== "Issued" && (() => {
+                          const hasAmendInMore = ["Invoice to be issued", "Pending Payment"].includes(o.status);
+                          const hasMarkPending = o.status === "Invoice to be issued" && o.orderCategory === "keys";
+                          const hasCancel = o.status !== "Cancelled";
+                          const hasNotify = !!o.contactInfo?.email;
+                          const hasAuthDoc = !!(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl);
+                          return <>
+                            {/* Primary action — next workflow step */}
+                            {o.status === "Invoice to be issued" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
+                            )}
+                            {o.status === "Pending Payment" && o.payment === "invoice" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
+                            )}
+                            {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
+                              <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
+                            )}
+                            {(o.status === "Processing" || o.status === "Paid") && o.orderCategory !== "keys" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
+                            )}
+                            {["On Hold", "Awaiting Documents"].includes(o.status) && (
+                              <button className="tbl-act-btn" style={{ background:"var(--yellow-tint)",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                            )}
+                            {o.status === "Cancelled" && (
+                              <button className="tbl-act-btn danger"
+                                title="Permanently delete this cancelled order"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  appConfirm({
+                                    title: `Permanently delete order ${o.id}?`,
+                                    message: "This cannot be undone.",
+                                    confirmText: "Delete",
+                                    danger: true,
+                                  }).then(ok => {
+                                    if (!ok) return;
+                                    fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
+                                      .then(r => r.json())
+                                      .then(d => {
+                                        if (d.ok) {
+                                          setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
+                                          showAdminToast("ok", `Order ${o.id} deleted.`);
+                                        } else {
+                                          showAdminToast("err", d.error || "Delete failed.");
+                                        }
+                                      })
+                                      .catch(() => showAdminToast("err", "Delete failed."));
+                                  });
+                                }}>Delete</button>
+                            )}
+                            {/* More ▾ overflow menu */}
+                            {(hasAmendInMore || hasMarkPending || hasCancel || hasNotify || hasAuthDoc) && (
+                              <div style={{ position: "relative" }}>
+                                <button className="tbl-act-btn" onClick={e => { e.stopPropagation(); setMoreMenuOrder(moreMenuOrder === o.id ? null : o.id); }}>More ▾</button>
+                                {moreMenuOrder === o.id && (
+                                  <div className="order-more-menu" onClick={e => e.stopPropagation()}>
+                                    {hasMarkPending && (
+                                      <button className="order-more-item" style={{ color:"var(--amber)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); markPending(o.id); }}>Mark Pending Payment</button>
+                                    )}
+                                    {hasAmendInMore && (
+                                      <button className="order-more-item" style={{ color:"#854d0e" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                                    )}
+                                    {hasCancel && (
+                                      <button className="order-more-item danger" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
+                                    )}
+                                    {hasNotify && (
+                                      <button className="order-more-item" style={{ color:"#1d4ed8" }} title={`Email ${o.contactInfo.email} a status update`} onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setNotifyModal({ order: o, subject: `Update on your TOCS order ${o.id}`, message: `Hi ${o.contactInfo?.name || ""},\n\nYour order ${o.id} is currently: ${o.status}.\n\nKind regards,\nTOCS Team`, sending: false, err: "" }); }}>✉ Notify</button>
+                                    )}
+                                    {hasAuthDoc && (
+                                      o.lotAuthorityUrl
+                                        ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="order-more-item" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
+                                        : <button className="order-more-item" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); openAuthorityDoc(o.id); }}>📎 Auth Doc</button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>;
+                        })()}
+
                         <Ic n={expandedOrder === o.id ? "arrowL" : "arrow"} s={12}/>
                       </td>
                     </tr>
