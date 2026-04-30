@@ -191,7 +191,7 @@ export function buildCustomerEmailHtml(order, cfg) {
 
 /**
  * Admin notification email sent when PIQ confirms payment of a special levy.
- * Triggered by both the hourly cron poll and the manual "Check Now" button.
+ * Triggered by both the daily cron poll and the manual "Check Now" button.
  *
  * @param {object} order            - the order object from Redis
  * @param {string|null} paymentDate - ISO date string from PIQ receipt transaction

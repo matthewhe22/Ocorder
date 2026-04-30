@@ -918,13 +918,14 @@ export default async function handler(req, res) {
       order.piqLevyTotalNett = result.totalNett ?? (result.paid ? 0 : order.piqLevyTotalNett ?? null);
 
       if (result.paid) {
-        const isNewPayment = order.status !== "Paid";
+        const isNewPayment = !["Paid", "Issued"].includes(order.status) || !order.piqPaymentDate;
         // Use server time as payment date on first confirmation only — never overwrite.
         if (!order.piqPaymentDate) order.piqPaymentDate = now;
         if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
 
         if (isNewPayment) {
-        order.status = "Paid";
+        // Don't regress status from "Issued" — keys were already dispatched; just record payment details.
+        if (order.status !== "Issued") order.status = "Paid";
         const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
         order.auditLog = [...(order.auditLog || []), {
           ts:     now,
@@ -944,7 +945,7 @@ export default async function handler(req, res) {
               from:    `"TOCS Order Portal" <${toEmail}>`,
               to:      toEmail,
               subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
-              html:    buildPiqPaymentEmailHtml(order, result.paymentDate, result.paymentReference, result.totalPaid),
+              html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
             });
           }
         } catch (emailErr) {
@@ -963,7 +964,7 @@ export default async function handler(req, res) {
         totalDue:         result.totalDue    ?? null,
         totalNett:        result.totalNett   ?? null,
         totalPaid:        result.totalPaid   ?? null,
-        paymentDate:      result.paymentDate      ?? null,
+        paymentDate:      order.piqPaymentDate     ?? null,
         paymentReference: result.paymentReference ?? null,
         lastPolled:       now,
         orderStatus:      order.status,

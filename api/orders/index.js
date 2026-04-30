@@ -24,7 +24,8 @@ async function applyPiqPayment(order, result, cfg, data) {
     // Use server time as payment date on first confirmation only — never overwrite.
     if (!order.piqPaymentDate) order.piqPaymentDate = now;
     order.piqPaymentReference = result.paymentReference || null;
-    order.status              = "Paid";
+    // Don't regress status from "Issued" — keys were already dispatched; just record payment details.
+    if (order.status !== "Issued") order.status = "Paid";
     const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
     order.auditLog = [...(order.auditLog || []), {
       ts:     now,
@@ -43,7 +44,7 @@ async function applyPiqPayment(order, result, cfg, data) {
           from:    `"TOCS Order Portal" <${toEmail}>`,
           to:      toEmail,
           subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
-          html:    buildPiqPaymentEmailHtml(order, result.paymentDate, result.paymentReference, result.totalPaid),
+          html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
         });
         console.log(`PIQ payment notification sent for order ${order.id}`);
       }
@@ -58,7 +59,7 @@ export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // ── GET /api/orders?action=poll-piq  (called by Vercel cron hourly) ─────────
+  // ── GET /api/orders?action=poll-piq  (called by Vercel cron daily at 02:30 UTC) ─
   // Also accepts admin Bearer token for manual triggers.
   // Scans all keys orders awaiting payment and polls their PIQ lot ledgers.
   if (req.method === "GET" && req.query?.action === "poll-piq") {
@@ -97,12 +98,14 @@ export default async function handler(req, res) {
       const cfg  = await readConfig();
       const data = await readData();
 
-      // Find all keys orders that: have piqLotId, are invoice-payment type, and aren't already resolved
+      // Find all keys orders that: have piqLotId, are invoice-payment type, and aren't already resolved.
+      // "Issued" is intentionally NOT excluded — if keys were dispatched before payment was confirmed
+      // in the system, the payment must still be detected and recorded for proper reconciliation.
       const candidates = data.orders.filter(o =>
         o.orderCategory === "keys" &&
         o.piqLotId &&
         o.payment === "invoice" &&
-        !["Paid", "Issued", "Cancelled"].includes(o.status)
+        !["Paid", "Cancelled"].includes(o.status)
       );
 
       let checked = 0, confirmed = 0;
@@ -128,7 +131,9 @@ export default async function handler(req, res) {
       // send-invoice has already updated the status to "Pending Payment", silently
       // reverting the change.
       if (confirmed > 0) {
-        await writeData(data);
+        await writeData(data).catch(err => {
+          console.error("poll-piq: writeData failed after confirming payment(s):", err.message);
+        });
       }
 
       return res.status(200).json({ ok: true, checked, confirmed, errors: errors.length ? errors : undefined });
