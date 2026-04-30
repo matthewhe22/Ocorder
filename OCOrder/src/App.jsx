@@ -4112,7 +4112,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
                           <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
                         )}
-                        {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
+                        {(o.status === "Processing" || o.status === "Paid") && o.orderCategory !== "keys" && (
                           <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
                         )}
                         {["On Hold", "Awaiting Documents"].includes(o.status) && (
