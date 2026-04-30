@@ -98,20 +98,49 @@ export default async function handler(req, res) {
       const cfg  = await readConfig();
       const data = await readData();
 
-      // Find all keys orders that: have piqLotId, are invoice-payment type, and aren't already resolved.
+      // Find all keys/invoice orders not yet resolved.
       // "Issued" is intentionally NOT excluded — if keys were dispatched before payment was confirmed
       // in the system, the payment must still be detected and recorded for proper reconciliation.
+      // piqLotId is NOT required here — auto-link runs below for orders that are missing it.
       const candidates = data.orders.filter(o =>
         o.orderCategory === "keys" &&
-        o.piqLotId &&
         o.payment === "invoice" &&
         !["Paid", "Cancelled"].includes(o.status)
       );
 
-      let checked = 0, confirmed = 0;
+      // Normalise lot-number strings for matching (strips common prefixes like "Lot ", "Unit ", etc.)
+      const normLotStr = s => String(s || "").trim().toLowerCase()
+        .replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
+
+      let checked = 0, confirmed = 0, linked = 0;
       const errors = [];
 
       for (const order of candidates) {
+        // Auto-link piqLotId from plan data for orders created before PIQ was synced.
+        // Uses only local data — no extra API call needed.
+        if (!order.piqLotId) {
+          const lotNumber = order.items?.[0]?.lotNumber || "";
+          const lotId     = order.items?.[0]?.lotId     || "";
+          const planId    = order.items?.[0]?.planId    || "";
+          const plan      = data.strataPlans?.find(p => p.id === planId);
+          const lots      = plan?.lots || [];
+          const matches   = l =>
+            (lotNumber && normLotStr(l.number) === normLotStr(lotNumber)) ||
+            (lotId     && l.id === lotId);
+          const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
+          if (lot?.piqLotId) {
+            order.piqLotId = lot.piqLotId;
+            order.auditLog = [...(order.auditLog || []), {
+              ts:     new Date().toISOString(),
+              action: "PIQ lot linked",
+              note:   `piqLotId ${lot.piqLotId} auto-linked by poll-piq cron`,
+            }];
+            linked++;
+          }
+        }
+
+        if (!order.piqLotId) continue; // plan not yet synced from PIQ — skip
+
         try {
           const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
           await applyPiqPayment(order, result, cfg, data);
@@ -125,18 +154,17 @@ export default async function handler(req, res) {
         }
       }
 
-      // Only write back when a payment was actually confirmed.  Writing on every
-      // "no payment found" poll creates a race with send-invoice: the cron reads a
-      // stale snapshot (status = "Invoice to be issued"), then writes it back after
-      // send-invoice has already updated the status to "Pending Payment", silently
-      // reverting the change.
-      if (confirmed > 0) {
+      // Write back if: a payment was confirmed OR new lot IDs were auto-linked.
+      // We still avoid writing on pure "no payment found" runs to prevent a race
+      // with send-invoice: the cron could read a stale snapshot and then overwrite
+      // a concurrent status update made by send-invoice.
+      if (confirmed > 0 || linked > 0) {
         await writeData(data).catch(err => {
-          console.error("poll-piq: writeData failed after confirming payment(s):", err.message);
+          console.error("poll-piq: writeData failed:", err.message);
         });
       }
 
-      return res.status(200).json({ ok: true, checked, confirmed, errors: errors.length ? errors : undefined });
+      return res.status(200).json({ ok: true, checked, confirmed, linked: linked || undefined, errors: errors.length ? errors : undefined });
     } catch (err) {
       console.error("poll-piq error:", err.message);
       return res.status(500).json({ error: err.message });
