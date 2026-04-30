@@ -342,7 +342,7 @@ const CSS = `
   .cat-card-icon { font-size: 1.6rem; margin-bottom: 4px; }
   .cat-card-title { font-size: 0.95rem; font-weight: 700; color: var(--forest); }
   .cat-card-sub { font-size: 0.78rem; color: var(--mid); line-height: 1.4; }
-  .tbl-act-btn { background: none; border: 1px solid var(--border); font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 4px 10px; border-radius: 3px; transition: all 0.15s; color: var(--mid); }
+  .tbl-act-btn { background: none; border: 1px solid var(--border); font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 4px 10px; border-radius: 3px; transition: all 0.15s; color: var(--mid); white-space: nowrap; }
   .tbl-act-btn:hover { border-color: var(--forest); color: var(--forest); background: var(--sage-tint); }
   .tbl-act-btn.danger { color: var(--red); border-color: var(--red-light); }
   .tbl-act-btn.danger:hover { background: var(--red-light); }
@@ -4047,7 +4047,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <div className="empty"><div style={{ fontSize: "2rem", marginBottom: "0.8rem" }}>📋</div><p>{data.orders.length === 0 ? "No orders yet." : "No orders match your filter."}</p></div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-            <table className="tbl tbl-stack" style={{ minWidth: "960px" }}>
+            <table className="tbl tbl-stack" style={{ minWidth: "1100px" }}>
               <thead>
                 <tr>
                   {[
@@ -4102,7 +4102,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-gray"
                       }`}>{o.status}</span></td>
-                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap", minWidth: "220px" }}>
+                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap", minWidth: "280px", width: "280px" }}>
                         {/* Issued = terminal state, no buttons at all */}
                         {o.status !== "Issued" && (() => {
                           const hasAmendInMore = ["Invoice to be issued", "Pending Payment"].includes(o.status);
