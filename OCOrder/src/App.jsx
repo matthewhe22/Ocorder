@@ -333,6 +333,7 @@ const CSS = `
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
   .bg-warn { background: var(--warn-light); color: var(--warn); }
+  .bg-issued { background: #166534; color: #fff; }
   .search-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
@@ -4090,7 +4091,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       <td data-label="Items" title={`${(o.items || []).length} line item${(o.items || []).length === 1 ? "" : "s"}`}>{(o.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0)}</td>
                       <td data-label="Total"><strong>{fmt(o.total)}</strong></td>
                       <td data-label="Status"><span className={`badge ${
-                        o.status==="Issued"?"bg-b":
+                        o.status==="Issued"?"bg-issued":
                         o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
                         o.status==="Processing"?"bg-teal":
@@ -4102,83 +4103,84 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         "bg-gray"
                       }`}>{o.status}</span></td>
                       <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap" }}>
-                        {/* Primary action(s) — max 2, status-driven */}
-                        {o.status === "Invoice to be issued" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
-                        )}
-                        {o.status === "Pending Payment" && o.payment === "invoice" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
-                        )}
-                        {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
-                          <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
-                        )}
-                        {(o.status === "Processing" || o.status === "Paid") && o.orderCategory !== "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
-                        )}
-                        {["On Hold", "Awaiting Documents"].includes(o.status) && (
-                          <button className="tbl-act-btn" style={{ background:"var(--yellow-tint)",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
-                        )}
-                        {o.status === "Cancelled" && (
-                          <button className="tbl-act-btn danger"
-                            title="Permanently delete this cancelled order"
-                            onClick={e => {
-                              e.stopPropagation();
-                              appConfirm({
-                                title: `Permanently delete order ${o.id}?`,
-                                message: "This cannot be undone.",
-                                confirmText: "Delete",
-                                danger: true,
-                              }).then(ok => {
-                                if (!ok) return;
-                                fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
-                                  .then(r => r.json())
-                                  .then(d => {
-                                    if (d.ok) {
-                                      setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
-                                      showAdminToast("ok", `Order ${o.id} deleted.`);
-                                    } else {
-                                      showAdminToast("err", d.error || "Delete failed.");
-                                    }
-                                  })
-                                  .catch(() => showAdminToast("err", "Delete failed."));
-                              });
-                            }}>Delete</button>
-                        )}
-
-                        {/* More ▾ overflow menu */}
-                        {(() => {
+                        {/* Issued = terminal state, no buttons at all */}
+                        {o.status !== "Issued" && (() => {
                           const hasAmendInMore = ["Invoice to be issued", "Pending Payment"].includes(o.status);
                           const hasMarkPending = o.status === "Invoice to be issued" && o.orderCategory === "keys";
-                          const hasCancel = o.status !== "Issued" && o.status !== "Cancelled";
+                          const hasCancel = o.status !== "Cancelled";
                           const hasNotify = !!o.contactInfo?.email;
                           const hasAuthDoc = !!(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl);
-                          if (!hasAmendInMore && !hasMarkPending && !hasCancel && !hasNotify && !hasAuthDoc) return null;
-                          return (
-                            <div style={{ position: "relative" }}>
-                              <button className="tbl-act-btn" onClick={e => { e.stopPropagation(); setMoreMenuOrder(moreMenuOrder === o.id ? null : o.id); }}>More ▾</button>
-                              {moreMenuOrder === o.id && (
-                                <div className="order-more-menu" onClick={e => e.stopPropagation()}>
-                                  {hasMarkPending && (
-                                    <button className="order-more-item" style={{ color:"var(--amber)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); markPending(o.id); }}>Mark Pending Payment</button>
-                                  )}
-                                  {hasAmendInMore && (
-                                    <button className="order-more-item" style={{ color:"#854d0e" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
-                                  )}
-                                  {hasCancel && (
-                                    <button className="order-more-item danger" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
-                                  )}
-                                  {hasNotify && (
-                                    <button className="order-more-item" style={{ color:"#1d4ed8" }} title={`Email ${o.contactInfo.email} a status update`} onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setNotifyModal({ order: o, subject: `Update on your TOCS order ${o.id}`, message: `Hi ${o.contactInfo?.name || ""},\n\nYour order ${o.id} is currently: ${o.status}.\n\nKind regards,\nTOCS Team`, sending: false, err: "" }); }}>✉ Notify</button>
-                                  )}
-                                  {hasAuthDoc && (
-                                    o.lotAuthorityUrl
-                                      ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="order-more-item" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
-                                      : <button className="order-more-item" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); openAuthorityDoc(o.id); }}>📎 Auth Doc</button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
+                          return <>
+                            {/* Primary action — next workflow step */}
+                            {o.status === "Invoice to be issued" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
+                            )}
+                            {o.status === "Pending Payment" && o.payment === "invoice" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
+                            )}
+                            {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
+                              <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
+                            )}
+                            {(o.status === "Processing" || o.status === "Paid") && o.orderCategory !== "keys" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
+                            )}
+                            {["On Hold", "Awaiting Documents"].includes(o.status) && (
+                              <button className="tbl-act-btn" style={{ background:"var(--yellow-tint)",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                            )}
+                            {o.status === "Cancelled" && (
+                              <button className="tbl-act-btn danger"
+                                title="Permanently delete this cancelled order"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  appConfirm({
+                                    title: `Permanently delete order ${o.id}?`,
+                                    message: "This cannot be undone.",
+                                    confirmText: "Delete",
+                                    danger: true,
+                                  }).then(ok => {
+                                    if (!ok) return;
+                                    fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
+                                      .then(r => r.json())
+                                      .then(d => {
+                                        if (d.ok) {
+                                          setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
+                                          showAdminToast("ok", `Order ${o.id} deleted.`);
+                                        } else {
+                                          showAdminToast("err", d.error || "Delete failed.");
+                                        }
+                                      })
+                                      .catch(() => showAdminToast("err", "Delete failed."));
+                                  });
+                                }}>Delete</button>
+                            )}
+                            {/* More ▾ overflow menu */}
+                            {(hasAmendInMore || hasMarkPending || hasCancel || hasNotify || hasAuthDoc) && (
+                              <div style={{ position: "relative" }}>
+                                <button className="tbl-act-btn" onClick={e => { e.stopPropagation(); setMoreMenuOrder(moreMenuOrder === o.id ? null : o.id); }}>More ▾</button>
+                                {moreMenuOrder === o.id && (
+                                  <div className="order-more-menu" onClick={e => e.stopPropagation()}>
+                                    {hasMarkPending && (
+                                      <button className="order-more-item" style={{ color:"var(--amber)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); markPending(o.id); }}>Mark Pending Payment</button>
+                                    )}
+                                    {hasAmendInMore && (
+                                      <button className="order-more-item" style={{ color:"#854d0e" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                                    )}
+                                    {hasCancel && (
+                                      <button className="order-more-item danger" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
+                                    )}
+                                    {hasNotify && (
+                                      <button className="order-more-item" style={{ color:"#1d4ed8" }} title={`Email ${o.contactInfo.email} a status update`} onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setNotifyModal({ order: o, subject: `Update on your TOCS order ${o.id}`, message: `Hi ${o.contactInfo?.name || ""},\n\nYour order ${o.id} is currently: ${o.status}.\n\nKind regards,\nTOCS Team`, sending: false, err: "" }); }}>✉ Notify</button>
+                                    )}
+                                    {hasAuthDoc && (
+                                      o.lotAuthorityUrl
+                                        ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="order-more-item" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
+                                        : <button className="order-more-item" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); openAuthorityDoc(o.id); }}>📎 Auth Doc</button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>;
                         })()}
 
                         <Ic n={expandedOrder === o.id ? "arrowL" : "arrow"} s={12}/>
