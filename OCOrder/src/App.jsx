@@ -3146,6 +3146,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       let av, bv;
       switch (col) {
         case "id":       av = a.id; bv = b.id; break;
+        case "category": av = a.orderCategory || ""; bv = b.orderCategory || ""; break;
         case "building": av = a.items?.[0]?.planName || ""; bv = b.items?.[0]?.planName || ""; break;
         case "name":     av = a.contactInfo?.name || ""; bv = b.contactInfo?.name || ""; break;
         case "items":    av = (a.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0); bv = (b.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0); break;
@@ -4053,6 +4054,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                   {[
                     { key: "id", label: "Order ID" },
                     { key: "date", label: "Date" },
+                    { key: "category", label: "Type" },
                     { key: "building", label: "Building / Lot" },
                     { key: "name", label: "Applicant" },
                     { key: "items", label: "Items" },
@@ -4075,6 +4077,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     <tr style={{ cursor: "pointer" }} onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)}>
                       <td data-label="Order ID"><strong style={{ fontFamily: "monospace", fontSize: "0.76rem" }}>{o.id}</strong></td>
                       <td data-label="Date" style={{ fontSize: "0.78rem" }}>{new Date(o.date).toLocaleDateString("en-AU")}</td>
+                      <td data-label="Type" style={{ fontSize: "0.78rem" }}>
+                        <span className={`badge ${o.orderCategory === "keys" ? "bg-teal" : "bg-gray"}`}>
+                          {o.orderCategory === "keys" ? "Keys / Fobs" : "OC Cert"}
+                        </span>
+                      </td>
                       <td data-label="Building / Lot" style={{ fontSize: "0.78rem" }}><strong>{building}</strong><br/><span style={{ color: "var(--muted)" }}>{lotNum}</span></td>
                       <td data-label="Customer" style={{ fontSize: "0.78rem" }}>
                         {o.contactInfo?.name || "—"}
@@ -4188,7 +4195,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                     </tr>
                     {expandedOrder === o.id && (
                       <tr>
-                        <td colSpan={8} style={{ background: "var(--cream)", padding: "0.8rem 1rem" }}>
+                        <td colSpan={9} style={{ background: "var(--cream)", padding: "0.8rem 1rem" }}>
                           {/* Order Items */}
                           <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Order Items</div>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", marginBottom: "1rem" }}>
