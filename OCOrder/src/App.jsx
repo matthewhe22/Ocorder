@@ -3952,7 +3952,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* ── ORDERS ── */}
       {adminTab === "orders" && (() => {
         return (
-        <div className="panel">
+        <div className="panel" style={{ width: "min(1400px, calc(100vw - 48px))", marginLeft: "50%", transform: "translateX(-50%)" }}>
           {adminToast && (
             <div className={`alert ${adminToast.type === "err" ? "alert-err" : "alert-ok"}`}
               style={{ marginBottom: "1rem" }}>{adminToast.msg}</div>
@@ -4048,7 +4048,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <div className="empty"><div style={{ fontSize: "2rem", marginBottom: "0.8rem" }}>📋</div><p>{data.orders.length === 0 ? "No orders yet." : "No orders match your filter."}</p></div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-            <table className="tbl tbl-stack" style={{ minWidth: "1100px" }}>
+            <table className="tbl tbl-stack" style={{ minWidth: "1100px", width: "100%", tableLayout: "auto" }}>
               <thead>
                 <tr>
                   {[
@@ -4109,7 +4109,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-gray"
                       }`}>{o.status}</span></td>
-                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap", minWidth: "280px", width: "280px" }}>
+                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap", minWidth: "240px", width: "240px" }}>
                         {/* Issued = terminal state, no buttons at all */}
                         {o.status !== "Issued" && (() => {
                           const hasAmendInMore = ["Invoice to be issued", "Pending Payment"].includes(o.status);
