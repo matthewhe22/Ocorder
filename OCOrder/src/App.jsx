@@ -3687,8 +3687,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   const adminUser = (() => { try { return sessionStorage.getItem("admin_user") || ""; } catch { return ""; } })();
 
+  const wideAdmin = adminTab === "orders";
   return (
-    <div>
+    <div style={wideAdmin ? { width: "min(1400px, calc(100vw - 48px))", marginLeft: "50%", transform: "translateX(-50%)" } : undefined}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem" }}>
         <div>
           <h1 className="pg-title">Admin</h1>
@@ -3952,7 +3953,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* ── ORDERS ── */}
       {adminTab === "orders" && (() => {
         return (
-        <div className="panel" style={{ width: "min(1400px, calc(100vw - 48px))", marginLeft: "50%", transform: "translateX(-50%)" }}>
+        <div className="panel">
           {adminToast && (
             <div className={`alert ${adminToast.type === "err" ? "alert-err" : "alert-ok"}`}
               style={{ marginBottom: "1rem" }}>{adminToast.msg}</div>
