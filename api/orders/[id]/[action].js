@@ -133,6 +133,85 @@ function buildCertEmailHtml(order, message, cfg) {
 </body></html>`;
 }
 
+// ── Multipart parser (for FormData uploads) ───────────────────────────────────
+// Used by send-certificate / send-invoice so a 3.9 MB PDF doesn't get base64-
+// inflated past Vercel's 4.5 MB request body limit.
+function parseMultipart(buffer, contentType) {
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType || "");
+  if (!m) return { fields: {}, files: {} };
+  const boundary = Buffer.from("--" + (m[1] || m[2]).trim());
+  const fields = {};
+  const files = {};
+  let pos = buffer.indexOf(boundary);
+  if (pos < 0) return { fields, files };
+  pos += boundary.length;
+  while (pos < buffer.length) {
+    if (buffer[pos] === 0x2d && buffer[pos + 1] === 0x2d) break; // closing --
+    if (buffer[pos] === 0x0d && buffer[pos + 1] === 0x0a) pos += 2;
+    const next = buffer.indexOf(boundary, pos);
+    if (next < 0) break;
+    let partEnd = next;
+    if (buffer[partEnd - 2] === 0x0d && buffer[partEnd - 1] === 0x0a) partEnd -= 2;
+    const part = buffer.slice(pos, partEnd);
+    const headerEnd = part.indexOf("\r\n\r\n");
+    pos = next + boundary.length;
+    if (headerEnd < 0) continue;
+    const headerStr = part.slice(0, headerEnd).toString("utf8");
+    const body = part.slice(headerEnd + 4);
+    const nameMatch = /name="([^"]+)"/.exec(headerStr);
+    if (!nameMatch) continue;
+    const fileMatch = /filename="([^"]*)"/.exec(headerStr);
+    if (fileMatch) {
+      const ctMatch = /Content-Type:\s*([^\r\n]+)/i.exec(headerStr);
+      files[nameMatch[1]] = {
+        filename: fileMatch[1],
+        contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
+        data: body,
+      };
+    } else {
+      fields[nameMatch[1]] = body.toString("utf8");
+    }
+  }
+  return { fields, files };
+}
+
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+// Returns { message, attachment } where attachment.buffer is a Node Buffer.
+// Accepts both legacy JSON ({ message, attachment: { filename, contentType, data: base64 } })
+// and multipart/form-data (fields: message; file: PDF) for backward compatibility.
+async function readMessageAndAttachment(req) {
+  const ct = (req.headers["content-type"] || "").toLowerCase();
+  if (ct.includes("multipart/form-data")) {
+    let buf;
+    if (Buffer.isBuffer(req.body)) buf = req.body;
+    else if (typeof req.body === "string") buf = Buffer.from(req.body, "utf8");
+    else buf = await readRawBody(req).catch(() => Buffer.alloc(0));
+    const { fields, files } = parseMultipart(buf, ct);
+    const file = files.file || files.attachment;
+    return {
+      message: fields.message || "",
+      attachment: file
+        ? { filename: file.filename, contentType: file.contentType, buffer: file.data }
+        : null,
+    };
+  }
+  const body = req.body || {};
+  const a = body.attachment;
+  return {
+    message: body.message || "",
+    attachment: a?.data
+      ? { filename: a.filename, contentType: a.contentType, buffer: Buffer.from(a.data, "base64") }
+      : null,
+  };
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   cors(res, req);
@@ -413,7 +492,7 @@ export default async function handler(req, res) {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const { message, attachment } = req.body || {};
+    const { message, attachment } = await readMessageAndAttachment(req);
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -438,13 +517,13 @@ export default async function handler(req, res) {
         subject: subj,
         html: buildCertEmailHtml(order, message, cfg),
       };
-      if (attachment?.data) {
-        mailOpts.attachments = [{ filename: attachment.filename || "OC-Certificate.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+      if (attachment?.buffer) {
+        mailOpts.attachments = [{ filename: attachment.filename || "OC-Certificate.pdf", content: attachment.buffer, contentType: attachment.contentType || "application/pdf" }];
       }
       await transporter.sendMail(mailOpts);
 
       // Auto-save certificate to SharePoint (best-effort, non-fatal)
-      if (attachment?.data) {
+      if (attachment?.buffer) {
         try {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
@@ -455,7 +534,7 @@ export default async function handler(req, res) {
             const certUrl = await uploadToSharePoint(
               attachment.filename || "certificate.pdf",
               attachment.contentType || "application/pdf",
-              attachment.data,
+              attachment.buffer,
               spConfig,
               spSubFolder
             );
@@ -488,7 +567,7 @@ export default async function handler(req, res) {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const { message, attachment } = req.body || {};
+    const { message, attachment } = await readMessageAndAttachment(req);
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -530,8 +609,8 @@ export default async function handler(req, res) {
         subject: `Invoice for your Keys/Fobs/Remotes Order #${order.id}`,
         html,
       };
-      if (attachment?.data) {
-        mailOpts.attachments = [{ filename: attachment.filename || "Invoice.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+      if (attachment?.buffer) {
+        mailOpts.attachments = [{ filename: attachment.filename || "Invoice.pdf", content: attachment.buffer, contentType: attachment.contentType || "application/pdf" }];
       }
       await transporter.sendMail(mailOpts);
 
@@ -539,7 +618,7 @@ export default async function handler(req, res) {
       // Capture the URL separately so we can apply it to fresh data below.
       let spInvoiceUrl = null;
       let spAuditEntry = null;
-      if (attachment?.data) {
+      if (attachment?.buffer) {
         try {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
@@ -550,7 +629,7 @@ export default async function handler(req, res) {
             const uploadedUrl = await uploadToSharePoint(
               attachment.filename || "invoice.pdf",
               attachment.contentType || "application/pdf",
-              attachment.data,
+              attachment.buffer,
               spConfig,
               spSubFolder
             );

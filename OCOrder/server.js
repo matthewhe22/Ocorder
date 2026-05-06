@@ -1448,7 +1448,31 @@ async function handler(req, res) {
     const orderId = (sendCertMatch || sendInvMatch)[1];
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { message, attachment } = await readBody(req, res);
+    // Accept multipart/form-data (preferred — avoids 33% base64 inflation)
+    // or legacy JSON ({ message, attachment: { filename, contentType, data: base64 } }).
+    const ct = (req.headers["content-type"] || "").toLowerCase();
+    let message = "";
+    let attachmentBuf = null;
+    let attachmentName = null;
+    let attachmentType = null;
+    if (ct.includes("multipart/form-data")) {
+      const { fields, files } = await readMultipart(req);
+      message = fields.message || "";
+      const file = files.file || files.attachment;
+      if (file) {
+        attachmentBuf = file.data;
+        attachmentName = file.filename;
+        attachmentType = file.contentType;
+      }
+    } else {
+      const body = await readBody(req, res);
+      message = body.message || "";
+      if (body.attachment?.data) {
+        attachmentBuf = Buffer.from(body.attachment.data, "base64");
+        attachmentName = body.attachment.filename;
+        attachmentType = body.attachment.contentType;
+      }
+    }
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
@@ -1471,9 +1495,9 @@ async function handler(req, res) {
         from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
         to: recipientEmail, subject: subj, html,
       };
-      if (attachment?.data) {
+      if (attachmentBuf) {
         const defaultFilename = isCert ? "OC-Certificate.pdf" : "Invoice.pdf";
-        mailOpts.attachments = [{ filename: attachment.filename || defaultFilename, content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+        mailOpts.attachments = [{ filename: attachmentName || defaultFilename, content: attachmentBuf, contentType: attachmentType || "application/pdf" }];
       }
       await transporter.sendMail(mailOpts);
       d.orders[idx].status = isCert ? "Issued" : "Pending Payment";

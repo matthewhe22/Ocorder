@@ -747,6 +747,19 @@ class ErrorBoundary extends Component {
 }
 
 // ─── apiCall HELPER ────────────────────────────────────────────────────────────
+// Read a fetch Response safely — returns parsed JSON on success, or { error }
+// extracted from a non-JSON body (e.g. a Vercel 413 plain-text "Request Entity
+// Too Large" page) so callers can show a meaningful message instead of
+// "Unexpected token 'R'".
+async function safeReadResponse(r) {
+  const ct = (r.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    try { return await r.json(); } catch { return {}; }
+  }
+  const text = await r.text().catch(() => "");
+  return { error: (text || "").trim().slice(0, 200) || `HTTP ${r.status}` };
+}
+
 // One thin fetch wrapper used by every component. Centralises:
 //   - Authorization header from sessionStorage (when method !== GET or callers ask for auth)
 //   - JSON request/response handling
@@ -5442,26 +5455,19 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
     if (sending) return;
     setSending(true); setErr("");
     try {
-      let body = { message };
-      if (certFile) {
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(certFile);
-        });
-        body.attachment = { filename: certFile.name, contentType: certFile.type || "application/pdf", data: base64 };
-      }
+      const fd = new FormData();
+      fd.append("message", message);
+      if (certFile) fd.append("file", certFile, certFile.name);
       const r = await fetch(`/api/orders/${order.id}/send-certificate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify(body),
+        headers: { "Authorization": "Bearer " + adminToken },
+        body: fd,
       });
-      const d = await r.json();
+      const d = await safeReadResponse(r);
       if (r.ok) {
         onSent(order.id);
       } else {
-        setErr(d.error || "Failed to send email.");
+        setErr(d.error || (r.status === 413 ? "Attachment too large — please reduce the PDF size." : "Failed to send email."));
         setSending(false);
       }
     } catch (e) {
@@ -5543,26 +5549,19 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
     if (sending) return;
     setSending(true); setErr("");
     try {
-      let body = { message };
-      if (invoiceFile) {
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(invoiceFile);
-        });
-        body.attachment = { filename: invoiceFile.name, contentType: invoiceFile.type || "application/pdf", data: base64 };
-      }
+      const fd = new FormData();
+      fd.append("message", message);
+      if (invoiceFile) fd.append("file", invoiceFile, invoiceFile.name);
       const r = await fetch(`/api/orders/${order.id}/send-invoice`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify(body),
+        headers: { "Authorization": "Bearer " + adminToken },
+        body: fd,
       });
-      const d = await r.json();
+      const d = await safeReadResponse(r);
       if (r.ok) {
         onSent(order.id);
       } else {
-        setErr(d.error || "Failed to send invoice.");
+        setErr(d.error || (r.status === 413 ? "Attachment too large — please reduce the PDF size." : "Failed to send invoice."));
         setSending(false);
       }
     } catch (e) {

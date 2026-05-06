@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-05-06 — Send-Certificate / Send-Invoice: multipart upload (fix for Vercel 4.5 MB body limit)
+
+### Bug
+Sending a ~3.9 MB OC certificate PDF through the admin portal failed with `Network error: Unexpected token 'R', "Request En"... is not valid JSON`. Root cause: the frontend base64-encoded the PDF into a JSON body, inflating it ~33% to ~5.3 MB — exceeding Vercel's 4.5 MB serverless request limit. Vercel returned a plain-text `Request Entity Too Large` page that the client tried to `JSON.parse`.
+
+### Fix
+- **Frontend (`src/App.jsx`)** — `SendCertificateModal` and `SendInvoiceModal` now upload the PDF as `multipart/form-data` (raw binary, no base64 inflation). Added `safeReadResponse()` helper that detects non-JSON error bodies (e.g. 413) and surfaces a meaningful error message instead of the JSON parse error.
+- **Vercel handler (`api/orders/[id]/[action].js`)** — Added `parseMultipart()` + `readMessageAndAttachment()` helpers. Both routes now accept multipart (preferred) and legacy JSON+base64 (backward-compatible). Attachment is normalised to a Buffer.
+- **Local server (`OCOrder/server.js`)** — `send-certificate` / `send-invoice` route now branches on Content-Type: multipart uses the existing `readMultipart()`, JSON uses `readBody()`.
+- **`api/_lib/sharepoint.js`** — `uploadToSharePoint()` now accepts a Buffer or a base64 string for the file argument (avoids re-encoding round-trip on the multipart path).
+
+A 3.9 MB PDF is now ~3.95 MB on the wire (multipart overhead is small) — well within the 4.5 MB cap.
+
+---
+
 ## 2026-03-26 — Code Optimisation, Security & Demo/Shadow Environment
 
 ### Code Quality & Optimisation

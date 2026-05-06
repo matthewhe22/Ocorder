@@ -53,7 +53,7 @@ export async function uploadToSharePoint(filename, contentType, base64Data, spCo
     const tokenResponse = await credential.getToken("https://graph.microsoft.com/.default");
     const accessToken = tokenResponse.token;
 
-    const fileBuffer = Buffer.from(base64Data, "base64");
+    const fileBuffer = Buffer.isBuffer(base64Data) ? base64Data : Buffer.from(base64Data, "base64");
     // Encode each path segment so spaces/special chars in folder names are handled correctly
     const uploadPath = `${folderPath}/${filename}`;
     const encodedPath = uploadPath.split("/").map(s => encodeURIComponent(s)).join("/");
