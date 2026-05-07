@@ -642,11 +642,18 @@ function readMultipart(req) {
         if (fileMatch) {
           const filename = fileMatch[1];
           const ctMatch = headers.match(/Content-Type:\s*(.+)/i);
-          files[nameMatch[1]] = {
+          const fileObj = {
             filename,
             contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
             data: Buffer.from(body, "binary"),
           };
+          const key = nameMatch[1];
+          if (files[key]) {
+            if (!Array.isArray(files[key])) files[key] = [files[key]];
+            files[key].push(fileObj);
+          } else {
+            files[key] = fileObj;
+          }
         } else {
           fields[nameMatch[1]] = body;
         }
@@ -1452,27 +1459,25 @@ async function handler(req, res) {
     // or legacy JSON ({ message, attachment: { filename, contentType, data: base64 } }).
     const ct = (req.headers["content-type"] || "").toLowerCase();
     let message = "";
-    let attachmentBuf = null;
-    let attachmentName = null;
-    let attachmentType = null;
+    const attachments = [];
     if (ct.includes("multipart/form-data")) {
       const { fields, files } = await readMultipart(req);
       message = fields.message || "";
-      const file = files.file || files.attachment;
-      if (file) {
-        attachmentBuf = file.data;
-        attachmentName = file.filename;
-        attachmentType = file.contentType;
+      const fileField = files.file || files.attachment;
+      if (fileField) {
+        const fileList = Array.isArray(fileField) ? fileField : [fileField];
+        for (const f of fileList) attachments.push({ filename: f.filename, contentType: f.contentType, buffer: f.data });
       }
     } else {
       const body = await readBody(req, res);
       message = body.message || "";
       if (body.attachment?.data) {
-        attachmentBuf = Buffer.from(body.attachment.data, "base64");
-        attachmentName = body.attachment.filename;
-        attachmentType = body.attachment.contentType;
+        attachments.push({ filename: body.attachment.filename, contentType: body.attachment.contentType, buffer: Buffer.from(body.attachment.data, "base64") });
       }
     }
+    const ATTACH_LIMIT = 10 * 1024 * 1024;
+    const totalAttachSize = attachments.reduce((sum, a) => sum + a.buffer.length, 0);
+    if (totalAttachSize > ATTACH_LIMIT) return json(res, 413, { error: `Attachments too large — total must be under 10 MB.` });
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
@@ -1495,9 +1500,13 @@ async function handler(req, res) {
         from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
         to: recipientEmail, subject: subj, html,
       };
-      if (attachmentBuf) {
+      if (attachments.length > 0) {
         const defaultFilename = isCert ? "OC-Certificate.pdf" : "Invoice.pdf";
-        mailOpts.attachments = [{ filename: attachmentName || defaultFilename, content: attachmentBuf, contentType: attachmentType || "application/pdf" }];
+        mailOpts.attachments = attachments.map((a, i) => ({
+          filename: a.filename || (i === 0 ? defaultFilename : `attachment-${i + 1}.pdf`),
+          content: a.buffer,
+          contentType: a.contentType || "application/pdf",
+        }));
       }
       await transporter.sendMail(mailOpts);
       d.orders[idx].status = isCert ? "Issued" : "Pending Payment";
