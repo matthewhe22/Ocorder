@@ -5427,7 +5427,7 @@ function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
 }
 
 // ─── SEND CERTIFICATE MODAL ───────────────────────────────────────────────────
-const CERT_ATTACH_LIMIT_MB = 10;
+const CERT_ATTACH_LIMIT_MB = 4.5;
 const CERT_ATTACH_LIMIT_BYTES = CERT_ATTACH_LIMIT_MB * 1024 * 1024;
 
 function SendCertificateModal({ order, adminToken, onClose, onSent }) {

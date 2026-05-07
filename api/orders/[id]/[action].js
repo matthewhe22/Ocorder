@@ -499,9 +499,9 @@ export default async function handler(req, res) {
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { message, attachments } = await readMessageAndAttachments(req);
-    const ATTACH_LIMIT = 10 * 1024 * 1024;
+    const ATTACH_LIMIT = 4.5 * 1024 * 1024;
     const totalAttachSize = attachments.reduce((sum, a) => sum + a.buffer.length, 0);
-    if (totalAttachSize > ATTACH_LIMIT) return res.status(413).json({ error: "Attachments too large — total must be under 10 MB." });
+    if (totalAttachSize > ATTACH_LIMIT) return res.status(413).json({ error: "Attachments too large — total must be under 4.5 MB." });
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
