@@ -330,6 +330,21 @@ export async function readAuthority(orderId) {
   return await kvGet(`tocs:authority:${orderId}`);
 }
 
+// ── PIQ poll status helpers ───────────────────────────────────────────────────
+// Stores the result of the most recent /api/orders?action=poll-piq run so the
+// admin UI can surface "last auto-poll succeeded N hours ago" without scraping
+// Vercel logs. Kept in a dedicated KV key (separate from data/config) so a
+// concurrent poll never races writeData() back over an order-status update.
+const POLL_PIQ_STATUS_KEY = "tocs:poll-piq:last-run";
+
+export async function writePiqPollStatus(status) {
+  await kvSet(POLL_PIQ_STATUS_KEY, { ts: new Date().toISOString(), ...status });
+}
+
+export async function readPiqPollStatus() {
+  return await kvGet(POLL_PIQ_STATUS_KEY);
+}
+
 export { KV_AVAILABLE };
 
 // ── Data helpers ──────────────────────────────────────────────────────────────

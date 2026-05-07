@@ -2752,6 +2752,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [orderFilter, setOrderFilter] = useState({ text: "", status: "", category: "", plan: "", lot: "" });
   const [checkingAllPiq, setCheckingAllPiq] = useState(false);
+  const [piqPollStatus, setPiqPollStatus] = useState(null); // { cronSecretConfigured, schedule, lastRun }
   const [sendCertModal, setSendCertModal] = useState(null); // { orderId, order }
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
@@ -2776,6 +2777,20 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [moreMenuOrder]);
+
+  // Fetch the most recent poll-piq run summary whenever the Orders tab opens,
+  // so admins can see at a glance whether the daily auto-poll is healthy.
+  const fetchPiqPollStatus = async () => {
+    try {
+      const r = await fetch("/api/orders?action=poll-piq-status", { headers: { "Authorization": "Bearer " + adminToken } });
+      if (!r.ok) { setPiqPollStatus(null); return; }
+      setPiqPollStatus(await r.json());
+    } catch { setPiqPollStatus(null); }
+  };
+  useEffect(() => {
+    if (adminTab !== "orders" || !adminToken) return;
+    fetchPiqPollStatus();
+  }, [adminTab, adminToken]);
 
   // Global Escape handler for the inline `modal` state (Add Plan / Edit Lot
   // / etc.) which doesn't use the dedicated modal components' useFocusTrap.
@@ -3993,7 +4008,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       if (rd.ok) { const fresh = await rd.json(); setData(fresh); }
                     }
                   } catch { showAdminToast("err", "PIQ check failed — network error."); }
-                  finally { setCheckingAllPiq(false); }
+                  finally { setCheckingAllPiq(false); fetchPiqPollStatus(); }
                 }}>
                 {checkingAllPiq
                   ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
@@ -4017,6 +4032,43 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               )}
             </div>
           </div>
+          {/* PIQ auto-poll health line. Cron runs daily at 02:30 UTC; if the
+              last successful run is older than ~28 h or CRON_SECRET is unset,
+              flag in red so a missed run is visible without scraping logs. */}
+          {piqPollStatus && (() => {
+            const lr   = piqPollStatus.lastRun;
+            const cron = piqPollStatus.cronSecretConfigured;
+            let msg, bad = false;
+            if (!cron) {
+              msg = "CRON_SECRET is not configured — automatic PIQ polling is disabled. Set CRON_SECRET in Vercel env vars.";
+              bad = true;
+            } else if (!lr) {
+              msg = "No automatic PIQ poll has run yet. Daily schedule: 02:30 UTC.";
+              bad = true;
+            } else {
+              const ageMs = Date.now() - new Date(lr.ts).getTime();
+              const stale = ageMs > 28 * 3600 * 1000; // >28 h since last run
+              const ago   = ageMs < 3600e3 ? `${Math.round(ageMs/60000)} min` : `${Math.round(ageMs/3600000)} h`;
+              const when  = new Date(lr.ts).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+              if (!lr.ok) {
+                msg = `Last auto-poll FAILED ${ago} ago (${when}): ${lr.error || "unknown error"}`;
+                bad = true;
+              } else {
+                const trig = lr.trigger === "cron" ? "auto" : "manual";
+                msg = `Last ${trig} PIQ poll: ${ago} ago (${when}) — ${lr.checked || 0} checked, ${lr.confirmed || 0} confirmed${lr.linked ? `, ${lr.linked} linked` : ""}${lr.errorCount ? `, ${lr.errorCount} error(s)` : ""}.`;
+                bad = stale;
+                if (stale) msg = "⚠ " + msg + " Auto-poll appears stale — check Vercel cron config.";
+              }
+            }
+            return (
+              <div style={{
+                fontSize: "0.72rem", padding: "6px 10px", marginBottom: "8px", borderRadius: "4px",
+                background: bad ? "#fdecec" : "#f0f5f1",
+                color:      bad ? "#a02020" : "#1c3326",
+                border:     `1px solid ${bad ? "#e0a0a0" : "#cfdcd2"}`,
+              }}>{msg}</div>
+            );
+          })()}
           {/* Category toggle + Search / filter bar */}
           <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
             {[["", "All Orders"], ["oc", "OC Certificates"], ["keys", "Keys / Fobs"]].map(([val, label]) => (
