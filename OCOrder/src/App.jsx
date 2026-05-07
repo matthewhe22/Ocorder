@@ -5427,14 +5427,20 @@ function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
 }
 
 // ─── SEND CERTIFICATE MODAL ───────────────────────────────────────────────────
+const CERT_ATTACH_LIMIT_MB = 4.5;
+const CERT_ATTACH_LIMIT_BYTES = CERT_ATTACH_LIMIT_MB * 1024 * 1024;
+
 function SendCertificateModal({ order, adminToken, onClose, onSent }) {
   const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
-  const [certFile, setCertFile] = useState(null);
+  const [certFiles, setCertFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const contact = order.contactInfo || {};
   const lot = order.items?.[0];
+
+  const totalBytes = certFiles.reduce((sum, f) => sum + f.size, 0);
+  const oversized = totalBytes > CERT_ATTACH_LIMIT_BYTES;
 
   // Pre-fill default message
   useEffect(() => {
@@ -5451,13 +5457,24 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
       .catch(() => setMessage("Dear " + (contact.name || "Applicant") + ",\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team"));
   }, []);
 
+  const handleAddFiles = e => {
+    const incoming = Array.from(e.target.files);
+    setCertFiles(prev => {
+      const existing = new Set(prev.map(f => f.name));
+      return [...prev, ...incoming.filter(f => !existing.has(f.name))];
+    });
+    e.target.value = "";
+  };
+
+  const handleRemoveFile = idx => setCertFiles(prev => prev.filter((_, i) => i !== idx));
+
   const handleSend = async () => {
-    if (sending) return;
+    if (sending || oversized) return;
     setSending(true); setErr("");
     try {
       const fd = new FormData();
       fd.append("message", message);
-      if (certFile) fd.append("file", certFile, certFile.name);
+      for (const f of certFiles) fd.append("file", f, f.name);
       const r = await fetch(`/api/orders/${order.id}/send-certificate`, {
         method: "POST",
         headers: { "Authorization": "Bearer " + adminToken },
@@ -5467,7 +5484,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
       if (r.ok) {
         onSent(order.id);
       } else {
-        setErr(d.error || (r.status === 413 ? "Attachment too large — please reduce the PDF size." : "Failed to send email."));
+        setErr(d.error || (r.status === 413 ? `Attachments too large — total must be under ${CERT_ATTACH_LIMIT_MB} MB.` : "Failed to send email."));
         setSending(false);
       }
     } catch (e) {
@@ -5494,26 +5511,38 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
         </div>
 
         <div className="form-row" style={{ marginBottom: 0 }}>
-          <label className="f-label">Attach Certificate (PDF)</label>
-          {certFile ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)", fontSize: "0.82rem" }}>
-              <Ic n="doc" s={15}/>
-              <span style={{ flex: 1 }}>{certFile.name} ({(certFile.size/1024).toFixed(1)} KB)</span>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)" }} onClick={() => setCertFile(null)}><Ic n="x" s={14}/></button>
-            </div>
-          ) : (
+          <label className="f-label">Attachments (PDF, JPG, PNG)</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {certFiles.map((f, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)", fontSize: "0.82rem" }}>
+                <Ic n="doc" s={15}/>
+                <span style={{ flex: 1 }}>{f.name} <span style={{ color: "var(--muted)" }}>({(f.size / 1024).toFixed(1)} KB)</span></span>
+                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)" }} onClick={() => handleRemoveFile(i)} aria-label={`Remove ${f.name}`}><Ic n="x" s={14}/></button>
+              </div>
+            ))}
+            {certFiles.length > 0 && (
+              <div style={{ fontSize: "0.78rem", color: oversized ? "var(--red)" : "var(--muted)", marginTop: "2px" }}>
+                Total: {(totalBytes / 1024 / 1024).toFixed(2)} MB / {CERT_ATTACH_LIMIT_MB} MB{oversized ? ` — exceeds ${CERT_ATTACH_LIMIT_MB} MB limit` : ""}
+              </div>
+            )}
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", fontSize: "0.82rem", color: "var(--forest)" }}>
-              <Ic n="upload" s={16}/> Click to attach PDF certificate (optional)
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setCertFile(e.target.files[0]); }}/>
+              <Ic n="upload" s={16}/> {certFiles.length > 0 ? "Add another file" : "Click to attach files (optional)"}
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple style={{ display: "none" }} onChange={handleAddFiles}/>
             </label>
-          )}
+          </div>
         </div>
 
-        {err && <div className="alert alert-err" style={{ marginTop: "1rem" }}>{err}</div>}
+        {oversized && (
+          <div className="alert alert-err" style={{ marginTop: "0.75rem" }}>
+            Total attachment size ({(totalBytes / 1024 / 1024).toFixed(2)} MB) exceeds the {CERT_ATTACH_LIMIT_MB} MB email limit. Remove some files before sending.
+          </div>
+        )}
+        {!oversized && err && <div className="alert alert-err" style={{ marginTop: "1rem" }}>{err}</div>}
+        {oversized && err && <div className="alert alert-err" style={{ marginTop: "0.5rem" }}>{err}</div>}
 
         <div style={{ display: "flex", gap: "10px", marginTop: "1.5rem" }}>
           <button className="btn btn-out" onClick={onClose}>Cancel</button>
-          <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending}>
+          <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending || oversized}>
             {sending
               ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
               : <><Ic n="mail" s={15}/> Send Certificate</>

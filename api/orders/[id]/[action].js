@@ -163,11 +163,18 @@ function parseMultipart(buffer, contentType) {
     const fileMatch = /filename="([^"]*)"/.exec(headerStr);
     if (fileMatch) {
       const ctMatch = /Content-Type:\s*([^\r\n]+)/i.exec(headerStr);
-      files[nameMatch[1]] = {
+      const fileObj = {
         filename: fileMatch[1],
         contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
         data: body,
       };
+      const key = nameMatch[1];
+      if (files[key]) {
+        if (!Array.isArray(files[key])) files[key] = [files[key]];
+        files[key].push(fileObj);
+      } else {
+        files[key] = fileObj;
+      }
     } else {
       fields[nameMatch[1]] = body.toString("utf8");
     }
@@ -183,10 +190,10 @@ async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
-// Returns { message, attachment } where attachment.buffer is a Node Buffer.
+// Returns { message, attachments } where each attachment has a .buffer Node Buffer.
 // Accepts both legacy JSON ({ message, attachment: { filename, contentType, data: base64 } })
-// and multipart/form-data (fields: message; file: PDF) for backward compatibility.
-async function readMessageAndAttachment(req) {
+// and multipart/form-data (fields: message; file: PDF, one or many) for backward compatibility.
+async function readMessageAndAttachments(req) {
   const ct = (req.headers["content-type"] || "").toLowerCase();
   if (ct.includes("multipart/form-data")) {
     let buf;
@@ -194,21 +201,20 @@ async function readMessageAndAttachment(req) {
     else if (typeof req.body === "string") buf = Buffer.from(req.body, "utf8");
     else buf = await readRawBody(req).catch(() => Buffer.alloc(0));
     const { fields, files } = parseMultipart(buf, ct);
-    const file = files.file || files.attachment;
+    const fileField = files.file || files.attachment;
+    const fileList = fileField ? (Array.isArray(fileField) ? fileField : [fileField]) : [];
     return {
       message: fields.message || "",
-      attachment: file
-        ? { filename: file.filename, contentType: file.contentType, buffer: file.data }
-        : null,
+      attachments: fileList.map(f => ({ filename: f.filename, contentType: f.contentType, buffer: f.data })),
     };
   }
   const body = req.body || {};
   const a = body.attachment;
   return {
     message: body.message || "",
-    attachment: a?.data
-      ? { filename: a.filename, contentType: a.contentType, buffer: Buffer.from(a.data, "base64") }
-      : null,
+    attachments: a?.data
+      ? [{ filename: a.filename, contentType: a.contentType, buffer: Buffer.from(a.data, "base64") }]
+      : [],
   };
 }
 
@@ -492,7 +498,10 @@ export default async function handler(req, res) {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const { message, attachment } = await readMessageAndAttachment(req);
+    const { message, attachments } = await readMessageAndAttachments(req);
+    const ATTACH_LIMIT = 4.5 * 1024 * 1024;
+    const totalAttachSize = attachments.reduce((sum, a) => sum + a.buffer.length, 0);
+    if (totalAttachSize > ATTACH_LIMIT) return res.status(413).json({ error: "Attachments too large — total must be under 4.5 MB." });
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -517,13 +526,18 @@ export default async function handler(req, res) {
         subject: subj,
         html: buildCertEmailHtml(order, message, cfg),
       };
-      if (attachment?.buffer) {
-        mailOpts.attachments = [{ filename: attachment.filename || "OC-Certificate.pdf", content: attachment.buffer, contentType: attachment.contentType || "application/pdf" }];
+      if (attachments.length > 0) {
+        const defaultFilename = "OC-Certificate.pdf";
+        mailOpts.attachments = attachments.map((a, i) => ({
+          filename: a.filename || (i === 0 ? defaultFilename : `attachment-${i + 1}.pdf`),
+          content: a.buffer,
+          contentType: a.contentType || "application/pdf",
+        }));
       }
       await transporter.sendMail(mailOpts);
 
-      // Auto-save certificate to SharePoint (best-effort, non-fatal)
-      if (attachment?.buffer) {
+      // Auto-save first certificate to SharePoint (best-effort, non-fatal)
+      if (attachments.length > 0) {
         try {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
@@ -531,10 +545,11 @@ export default async function handler(req, res) {
             const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
             const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
             const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
+            const first = attachments[0];
             const certUrl = await uploadToSharePoint(
-              attachment.filename || "certificate.pdf",
-              attachment.contentType || "application/pdf",
-              attachment.buffer,
+              first.filename || "certificate.pdf",
+              first.contentType || "application/pdf",
+              first.buffer,
               spConfig,
               spSubFolder
             );
@@ -567,7 +582,7 @@ export default async function handler(req, res) {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const { message, attachment } = await readMessageAndAttachment(req);
+    const { message, attachments: invoiceAttachments } = await readMessageAndAttachments(req);
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -609,8 +624,12 @@ export default async function handler(req, res) {
         subject: `Invoice for your Keys/Fobs/Remotes Order #${order.id}`,
         html,
       };
-      if (attachment?.buffer) {
-        mailOpts.attachments = [{ filename: attachment.filename || "Invoice.pdf", content: attachment.buffer, contentType: attachment.contentType || "application/pdf" }];
+      if (invoiceAttachments.length > 0) {
+        mailOpts.attachments = invoiceAttachments.map((a, i) => ({
+          filename: a.filename || (i === 0 ? "Invoice.pdf" : `attachment-${i + 1}.pdf`),
+          content: a.buffer,
+          contentType: a.contentType || "application/pdf",
+        }));
       }
       await transporter.sendMail(mailOpts);
 
@@ -618,7 +637,7 @@ export default async function handler(req, res) {
       // Capture the URL separately so we can apply it to fresh data below.
       let spInvoiceUrl = null;
       let spAuditEntry = null;
-      if (attachment?.buffer) {
+      if (invoiceAttachments.length > 0) {
         try {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
@@ -626,10 +645,11 @@ export default async function handler(req, res) {
             const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
             const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
             const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
+            const first = invoiceAttachments[0];
             const uploadedUrl = await uploadToSharePoint(
-              attachment.filename || "invoice.pdf",
-              attachment.contentType || "application/pdf",
-              attachment.buffer,
+              first.filename || "invoice.pdf",
+              first.contentType || "application/pdf",
+              first.buffer,
               spConfig,
               spSubFolder
             );
