@@ -1,12 +1,23 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
-import { readData, writeData, readConfig, cors, writeAuthority, KV_AVAILABLE } from "../_lib/store.js";
+import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, KV_AVAILABLE } from "../_lib/store.js";
 import { randomBytes } from "crypto";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
 import { detectPiqPayment } from "../_lib/piq.js";
 import Stripe from "stripe";
+
+// Cold-start assertion: log loudly if CRON_SECRET is missing. Without it, the
+// Vercel cron at 02:30 UTC is rejected with 401 inside the handler below and
+// payments stop syncing automatically. Surfacing this at module load means a
+// single deploy log line is enough to catch the misconfiguration — the user
+// no longer has to wait for a missed run to notice.
+if (!process.env.CRON_SECRET) {
+  console.error("[startup][CRITICAL] CRON_SECRET is not set. The poll-piq cron will be rejected with 401 until CRON_SECRET is configured in Vercel → Settings → Environment Variables. Manual admin 'Check PIQ' will continue to work.");
+} else {
+  console.log("[startup] CRON_SECRET is configured; poll-piq cron auth is wired up.");
+}
 
 async function sendMail(smtp, mailOpts) {
   const transporter = createTransporter(smtp);
@@ -90,10 +101,18 @@ export default async function handler(req, res) {
     if (!isAdmin && !isCron) {
       if (!cronSecret) {
         console.error("[CRITICAL] CRON_SECRET not set — refusing cron request. Set CRON_SECRET in the deployment environment.");
+        // Record the rejection so admins can see it via poll-piq-status without
+        // grepping Vercel logs. Best-effort — don't fail the response on KV error.
+        await writePiqPollStatus({
+          ok:        false,
+          trigger:   "cron",
+          error:     "CRON_SECRET not configured — cron request rejected with 401.",
+        }).catch(() => {});
       }
       return res.status(401).json({ error: "Not authenticated." });
     }
 
+    const trigger = isCron ? "cron" : "manual";
     try {
       const cfg  = await readConfig();
       const data = await readData();
@@ -164,11 +183,43 @@ export default async function handler(req, res) {
         });
       }
 
+      // Record this run so the admin UI can show "last auto-poll" status.
+      await writePiqPollStatus({
+        ok:        true,
+        trigger,
+        checked,
+        confirmed,
+        linked,
+        errorCount: errors.length,
+      }).catch(e => console.error("poll-piq: writePiqPollStatus failed:", e.message));
+
       return res.status(200).json({ ok: true, checked, confirmed, linked: linked || undefined, errors: errors.length ? errors : undefined });
     } catch (err) {
       console.error("poll-piq error:", err.message);
+      await writePiqPollStatus({
+        ok:      false,
+        trigger,
+        error:   err.message?.substring(0, 240) || "unknown error",
+      }).catch(() => {});
       return res.status(500).json({ error: err.message });
     }
+  }
+
+  // ── GET /api/orders?action=poll-piq-status (admin only) ──────────────────────
+  // Returns the most recent poll-piq run summary plus whether CRON_SECRET is
+  // configured in this deployment. Used by the admin Orders panel so a missed
+  // or broken cron is visible without scraping Vercel logs.
+  if (req.method === "GET" && req.query?.action === "poll-piq-status") {
+    const token = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    const lastRun = await readPiqPollStatus().catch(() => null);
+    return res.status(200).json({
+      cronSecretConfigured: !!process.env.CRON_SECRET,
+      schedule:             "30 2 * * * (UTC)",
+      lastRun:              lastRun || null,
+    });
   }
 
   // ── GET /api/orders?action=refresh-piq-payments  (admin only) ────────────────
