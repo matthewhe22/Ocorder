@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TOCS OC Portal — Redesign Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ─── TOCS BRAND TOKENS ──────────────────────────────────────────── */
+  :root {
+    --black:        #000000;
+    --ink:          #0a0a0a;
+    --mid:          #4a4a4a;
+    --muted:        #8a8a8a;
+    --grey:         #cececd;   /* TOCS Grey */
+    --grey-tint:    #e8e8e8;
+    --grey-soft:    #f4f4f4;
+    --hairline:     #e0e0e0;
+    --white:        #ffffff;
+    /* status (desaturated, used sparingly) */
+    --ok:           #1a4d2e;
+    --ok-bg:        #eef3ef;
+    --warn:         #7a5218;
+    --warn-bg:      #f7f0e3;
+    --err:          #7a2020;
+    --err-bg:       #f5ebeb;
+    --info:         #2a2a2a;
+    --info-bg:      #eeeeee;
+  }
+  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { font-family: 'Montserrat', Arial, sans-serif; color: var(--ink); background: var(--white); -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; }
+
+  /* preview chrome */
+  .preview-banner { background: var(--grey); color: var(--ink); padding: 10px 24px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--hairline);}
+  .preview-banner span { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--mid); }
+  .screen-label { max-width: 1080px; margin: 56px auto 12px; padding: 0 24px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+  .screen-label::before { content: ""; display: inline-block; width: 24px; height: 1px; background: var(--muted); vertical-align: middle; margin-right: 10px;}
+
+  /* ─── HEADER ─────────────────────────────────────────────────────── */
+  .hdr { background: var(--black); height: 64px; display: flex; align-items: center; padding: 0 32px; justify-content: space-between; }
+  .hdr-logo { color: #fff; font-weight: 700; letter-spacing: .22em; font-size: 16px; }
+  .hdr-logo small { font-weight: 400; opacity: .55; letter-spacing: .14em; font-size: 10px; margin-left: 10px; }
+  .hdr-nav { display: flex; gap: 4px; }
+  .hn { background: transparent; border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.78); font: 500 11px/1 'Montserrat', Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; padding: 9px 16px; cursor: pointer; transition: .15s; border-radius: 2px; display: inline-flex; align-items: center; gap: 8px;}
+  .hn:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+  .hn.act  { background: #fff; color: #000; border-color: #fff; }
+  .cart-dot{ background: #fff; color:#000; font-weight:700; font-size:10px; padding:2px 7px; border-radius:10px; }
+
+  /* ─── STEP BAR ───────────────────────────────────────────────────── */
+  .steps { background: var(--grey); padding: 14px 32px; display:flex; align-items:center; gap:0;}
+  .step-w{ display:flex; align-items:center; flex:1; }
+  .step-w:last-child{ flex:0; }
+  .step-dot{ width:24px; height:24px; border-radius:50%; border:1.5px solid rgba(0,0,0,.25); background: rgba(255,255,255,.7); font:600 10px/1 'Montserrat'; display:flex; align-items:center; justify-content:center; color: var(--mid);}
+  .step-dot.done{ background: var(--black); border-color: var(--black); color:#fff;}
+  .step-dot.curr{ background: var(--black); border-color: var(--black); color:#fff; box-shadow: 0 0 0 4px rgba(0,0,0,.10);}
+  .step-lbl{ font: 600 10px/1 'Montserrat'; color: rgba(0,0,0,.4); text-transform:uppercase; letter-spacing:.14em; margin-left:9px; white-space:nowrap;}
+  .step-lbl.curr{ color: var(--black);}
+  .step-lbl.done{ color: rgba(0,0,0,.6);}
+  .step-line{ flex:1; height:1px; background: rgba(0,0,0,.18); margin:0 12px;}
+  .step-line.done{ background: var(--black);}
+
+  /* ─── LAYOUT ─────────────────────────────────────────────────────── */
+  .main { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; width: 100%; }
+
+  /* ─── PAGE TITLE BLOCK (subtle arch motif) ───────────────────────── */
+  .pg-hero { position: relative; background: var(--grey); padding: 48px 40px 44px; margin-bottom: 36px;
+             border-top-left-radius: 96px; }
+  .pg-eyebrow { font: 700 10px/1 'Montserrat'; letter-spacing: .2em; text-transform:uppercase; color: var(--mid); margin-bottom: 14px; }
+  .pg-title { font: 700 36px/1.1 'Montserrat'; color: var(--black); margin-bottom: 8px; letter-spacing: -.01em;}
+  .pg-sub   { font: 400 14px/1.55 'Montserrat'; color: var(--mid); max-width: 620px; }
+
+  /* ─── SEARCH ─────────────────────────────────────────────────────── */
+  .search-wrap { position: relative; margin-bottom: 24px; }
+  .search-input{ width:100%; padding: 16px 16px 16px 48px; border:1.5px solid var(--hairline); background:#fff; font:400 14px 'Montserrat'; color: var(--ink); outline:none; transition: .15s; border-radius: 2px;}
+  .search-input:focus{ border-color: var(--black); box-shadow: 0 0 0 3px rgba(0,0,0,.06);}
+  .search-icon{ position:absolute; left:16px; top:50%; transform:translateY(-50%); color: var(--muted); }
+
+  /* ─── PLAN CARDS ─────────────────────────────────────────────────── */
+  .plan-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .plan-card { background: #fff; border:1px solid var(--hairline); padding: 22px 22px 18px; cursor:pointer; transition: .15s; position:relative; border-radius: 2px;}
+  .plan-card:hover { border-color: var(--black); }
+  .plan-card.sel   { border:1.5px solid var(--black); }
+  .pc-id   { font:700 10px/1 'Montserrat'; letter-spacing:.16em; text-transform:uppercase; color: var(--mid); margin-bottom: 8px;}
+  .pc-name { font:700 18px/1.25 'Montserrat'; color: var(--black); margin-bottom: 4px;}
+  .pc-addr { font:400 13px/1.5 'Montserrat'; color: var(--muted); }
+  .pc-meta { font:600 11px/1 'Montserrat'; color: var(--mid); margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline); letter-spacing:.06em; text-transform:uppercase;}
+  .sel-tick { position:absolute; top:14px; right:14px; width:20px; height:20px; background: var(--black); display:flex; align-items:center; justify-content:center; color:#fff;}
+
+  /* ─── FORM ───────────────────────────────────────────────────────── */
+  .panel-grid { display:grid; gap:20px; grid-template-columns: 1fr 1fr;}
+  .panel { background:#fff; border:1px solid var(--hairline); padding: 28px; border-radius:2px;}
+  .section-tt { font:700 16px/1.25 'Montserrat'; color: var(--black); margin-bottom: 18px; letter-spacing:.02em; }
+  .form-row { margin-bottom: 18px; }
+  .f-label { display:block; font:600 11px/1 'Montserrat'; letter-spacing: .12em; text-transform:uppercase; color: var(--mid); margin-bottom: 8px;}
+  .f-input, .f-select { width:100%; padding: 12px 14px; border:1.5px solid var(--hairline); background:#fff; font:400 14px 'Montserrat'; color: var(--ink); outline:none; transition:.15s; border-radius: 2px;}
+  .f-input:focus, .f-select:focus { border-color: var(--black); box-shadow: 0 0 0 3px rgba(0,0,0,.06);}
+
+  /* ─── PRODUCT CARDS ──────────────────────────────────────────────── */
+  .prod-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1px; background: var(--hairline); border:1px solid var(--hairline); }
+  .prod-card { background:#fff; padding: 22px; transition: .15s; }
+  .prod-card:hover { background: var(--grey-soft); }
+  .prod-card.added { background: #fff; outline: 1.5px solid var(--black); outline-offset:-1.5px; }
+  .prod-name { font:700 14px/1.3 'Montserrat'; color: var(--black); margin-bottom: 6px;}
+  .prod-desc { font:400 13px/1.55 'Montserrat'; color: var(--muted); margin-bottom: 10px;}
+  .prod-turna{ font:500 11px/1 'Montserrat'; color: var(--mid); margin-bottom: 16px; letter-spacing:.06em; text-transform:uppercase;}
+  .prod-foot { display:flex; align-items:flex-end; justify-content: space-between;}
+  .prod-price{ font:700 22px/1 'Montserrat'; color: var(--black); font-variant-numeric: tabular-nums; }
+  .prod-price-sub{ font:400 11px/1 'Montserrat'; color: var(--muted); margin-top: 4px;}
+  .per-oc-tag{ display:inline-block; font:700 10px/1 'Montserrat'; letter-spacing: .08em; background: var(--grey); color: var(--black); padding: 3px 8px; text-transform:uppercase; border-radius:2px; margin-left: 6px;}
+  .added-pill{ display:inline-flex; align-items:center; gap:6px; font:700 11px/1 'Montserrat'; color: var(--black); padding: 7px 12px; border:1.5px solid var(--black); border-radius:2px; letter-spacing:.08em; text-transform:uppercase;}
+
+  /* ─── BUTTONS ────────────────────────────────────────────────────── */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding: 13px 28px; font:600 11px/1 'Montserrat'; letter-spacing: .14em; text-transform:uppercase; cursor:pointer; border:1.5px solid transparent; transition: .15s; border-radius: 2px;}
+  .btn-blk { background: var(--black); color:#fff; border-color: var(--black);}
+  .btn-blk:hover { background: #1a1a1a; }
+  .btn-out { background: #fff; color: var(--black); border-color: var(--black);}
+  .btn-out:hover{ background: var(--black); color:#fff; }
+  .btn-ghost{ background:transparent; color: var(--ink); border-color: var(--hairline);}
+  .btn-ghost:hover{ border-color: var(--black);}
+  .btn:disabled{ background: var(--grey); border-color: var(--grey); color: var(--muted); cursor: not-allowed;}
+  .btn-lg { padding: 15px 36px; font-size: 12px; }
+  .add-btn { background: var(--black); color:#fff; border:none; padding: 9px 16px; font:600 11px/1 'Montserrat'; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; border-radius: 2px; display:inline-flex; align-items:center; gap:6px;}
+  .add-btn:hover { background: #1a1a1a; }
+
+  /* ─── CART ───────────────────────────────────────────────────────── */
+  .cart-item { display:flex; gap:14px; padding: 18px 0; border-bottom:1px solid var(--hairline);}
+  .ci-name { font:600 14px/1.3 'Montserrat'; color: var(--black); margin-bottom: 4px;}
+  .ci-meta { font:400 12px/1.5 'Montserrat'; color: var(--muted);}
+  .ci-price{ font:700 16px/1 'Montserrat'; color: var(--black); white-space:nowrap; font-variant-numeric: tabular-nums;}
+  .cart-grand-row { display:flex; justify-content:space-between; align-items:center; padding: 16px 0 0; border-top: 2px solid var(--black); margin-top: 8px;}
+  .cart-grand-amt { font:700 22px/1 'Montserrat'; color: var(--black); font-variant-numeric: tabular-nums;}
+  .cart-total-label{ font:700 12px/1 'Montserrat'; letter-spacing: .14em; text-transform:uppercase; color: var(--mid);}
+
+  /* ─── PAYMENT ────────────────────────────────────────────────────── */
+  .pay-method { border: 1.5px solid var(--hairline); padding: 16px; cursor:pointer; transition:.15s; margin-bottom:8px; display:flex; align-items:center; gap: 14px; border-radius:2px;}
+  .pay-method:hover { border-color: var(--black);}
+  .pay-method.sel  { border-color: var(--black); background: var(--grey-soft);}
+  .pm-icon { width: 42px; height: 42px; background: var(--grey); display:flex; align-items:center; justify-content:center; color: var(--black); flex-shrink:0; border-radius:2px;}
+  .pm-name { font:600 14px/1.2 'Montserrat'; color: var(--black); margin-bottom: 2px;}
+  .pm-desc { font:400 12px/1.4 'Montserrat'; color: var(--muted);}
+  .radio-ring { width:18px; height:18px; border:1.5px solid var(--hairline); border-radius:50%; margin-left:auto; flex-shrink:0; position:relative;}
+  .radio-ring.sel{ border-color: var(--black);}
+  .radio-ring.sel::after{ content:""; position:absolute; inset:3px; background: var(--black); border-radius:50%;}
+
+  /* ─── ALERTS ─────────────────────────────────────────────────────── */
+  .alert { padding: 12px 16px; font:500 13px/1.4 'Montserrat'; border-radius: 2px; margin-bottom: 14px; border-left: 3px solid; }
+  .alert-info{ background: var(--info-bg); color: var(--info); border-color: var(--info); }
+  .alert-ok  { background: var(--ok-bg);   color: var(--ok);   border-color: var(--ok); }
+  .alert-warn{ background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .alert-err { background: var(--err-bg);  color: var(--err);  border-color: var(--err); }
+
+  /* ─── STICKY CART FOOTER ─────────────────────────────────────────── */
+  .sticky-cart { position:sticky; bottom:0; background: var(--black); color:#fff; padding: 0 32px; height:68px; display:flex; align-items:center; justify-content:space-between; margin-top: 32px;}
+  .sc-count { font:600 11px/1 'Montserrat'; letter-spacing:.12em; text-transform:uppercase; color: rgba(255,255,255,.6);}
+  .sc-items { font:500 14px 'Montserrat'; }
+  .sc-total { font:700 24px/1 'Montserrat'; font-variant-numeric:tabular-nums;}
+  .sc-gst   { font:400 11px/1 'Montserrat'; color: rgba(255,255,255,.55); margin-top: 3px; text-align:right;}
+
+  /* ─── SUCCESS ────────────────────────────────────────────────────── */
+  .success-wrap { max-width: 600px; margin: 0 auto; padding: 24px 0; text-align:center;}
+  .success-ring { width: 88px; height: 88px; border-radius:50%; background: var(--black); display:flex; align-items:center; justify-content:center; color:#fff; margin: 0 auto 28px;}
+  .order-code-wrap { display:flex; align-items:center; justify-content:center; gap: 10px; margin: 18px 0;}
+  .order-code{ font:700 22px/1 'Montserrat'; letter-spacing: .14em; color: var(--black); background: var(--grey); border: 1px dashed var(--mid); padding: 16px 28px; display:inline-block; border-radius:2px; font-variant-numeric:tabular-nums;}
+
+  /* ─── BADGES (status) ────────────────────────────────────────────── */
+  .badge { display:inline-block; font:700 10px/1 'Montserrat'; letter-spacing:.1em; text-transform:uppercase; padding: 5px 10px; border-radius: 2px;}
+  .badge-pending{ background: var(--warn-bg); color: var(--warn); border:1px solid #e9d8b2;}
+  .badge-issued { background: var(--ok-bg);   color: var(--ok);   border:1px solid #cbdcc8;}
+  .badge-cancel { background: var(--err-bg);  color: var(--err);  border:1px solid #e7c4c4;}
+  .badge-proc   { background: var(--info-bg); color: var(--info); border:1px solid var(--hairline);}
+
+  /* ─── DIVIDER between preview screens ───────────────────────────── */
+  .screen-sep { height: 80px; background:
+    linear-gradient(to bottom, transparent 0, transparent 39px,
+                    var(--hairline) 39px, var(--hairline) 41px,
+                    transparent 41px, transparent 80px);
+    margin: 24px 0; }
+
+  /* OC chip */
+  .oc-pill { font:500 11px/1 'Montserrat'; background: var(--grey-soft); border:1px solid var(--hairline); padding: 5px 10px; border-radius: 12px; color: var(--mid); display:inline-block; margin: 2px;}
+</style>
+</head>
+<body>
+
+<div class="preview-banner">
+  TOCS OC Portal — Redesign Preview
+  <span>Strict B&amp;W + status &middot; Subtle arch motif &middot; Montserrat</span>
+</div>
+
+<!-- ═══════ SCREEN 1: PLAN SELECT ═══════ -->
+<div class="screen-label">Screen 1 · Plan Select</div>
+
+<header class="hdr">
+  <div class="hdr-logo">TOCS<small>OC ORDER PORTAL</small></div>
+  <nav class="hdr-nav">
+    <button class="hn act">Order</button>
+    <button class="hn">Track</button>
+    <button class="hn">My Orders <span class="cart-dot">2</span></button>
+    <button class="hn">Admin</button>
+  </nav>
+</header>
+
+<div class="steps">
+  <div class="step-w"><div class="step-dot curr">1</div><div class="step-lbl curr">Select Plan</div><div class="step-line"></div></div>
+  <div class="step-w"><div class="step-dot">2</div><div class="step-lbl">Lot &amp; Contact</div><div class="step-line"></div></div>
+  <div class="step-w"><div class="step-dot">3</div><div class="step-lbl">Products</div><div class="step-line"></div></div>
+  <div class="step-w"><div class="step-dot">4</div><div class="step-lbl">Review</div><div class="step-line"></div></div>
+  <div class="step-w"><div class="step-dot">5</div><div class="step-lbl">Payment</div></div>
+</div>
+
+<main class="main">
+  <section class="pg-hero">
+    <div class="pg-eyebrow">Step 1 of 5</div>
+    <h1 class="pg-title">Select your strata plan</h1>
+    <p class="pg-sub">Search by plan number, building name, or address. Leading with expertise and reliability — your OC certificate is one form away.</p>
+  </section>
+
+  <div class="search-wrap">
+    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input class="search-input" type="text" placeholder="Search plans, buildings, or addresses…" value="harbour" />
+  </div>
+
+  <div class="plan-grid">
+    <div class="plan-card sel">
+      <div class="sel-tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="pc-id">SP 12345</div>
+      <div class="pc-name">Harbour View Residences</div>
+      <div class="pc-addr">45 Marina Drive, Sydney NSW 2000</div>
+      <div class="pc-meta">128 lots · 2 owner corps</div>
+    </div>
+    <div class="plan-card">
+      <div class="pc-id">SP 67890</div>
+      <div class="pc-name">Harbour Quay Apartments</div>
+      <div class="pc-addr">12 Wharf Road, Pyrmont NSW 2009</div>
+      <div class="pc-meta">86 lots · 1 owner corp</div>
+    </div>
+    <div class="plan-card">
+      <div class="pc-id">SP 24680</div>
+      <div class="pc-name">Harbourside Tower</div>
+      <div class="pc-addr">88 Pacific Hwy, North Sydney NSW 2060</div>
+      <div class="pc-meta">204 lots · 3 owner corps</div>
+    </div>
+  </div>
+
+  <div style="margin-top:32px; display:flex; justify-content:space-between; align-items:center;">
+    <button class="btn btn-ghost">&larr; Back</button>
+    <button class="btn btn-blk btn-lg">Continue &rarr;</button>
+  </div>
+</main>
+
+<div class="screen-sep"></div>
+
+<!-- ═══════ SCREEN 2: PRODUCTS ═══════ -->
+<div class="screen-label">Screen 2 · Products</div>
+
+<header class="hdr">
+  <div class="hdr-logo">TOCS<small>OC ORDER PORTAL</small></div>
+  <nav class="hdr-nav">
+    <button class="hn act">Order</button>
+    <button class="hn">Track</button>
+    <button class="hn">My Orders <span class="cart-dot">3</span></button>
+    <button class="hn">Admin</button>
+  </nav>
+</header>
+
+<div class="steps">
+  <div class="step-w"><div class="step-dot done">&#10003;</div><div class="step-lbl done">Select Plan</div><div class="step-line done"></div></div>
+  <div class="step-w"><div class="step-dot done">&#10003;</div><div class="step-lbl done">Lot &amp; Contact</div><div class="step-line done"></div></div>
+  <div class="step-w"><div class="step-dot curr">3</div><div class="step-lbl curr">Products</div><div class="step-line"></div></div>
+  <div class="step-w"><div class="step-dot">4</div><div class="step-lbl">Review</div><div class="step-line"></div></div>
+  <div class="step-w"><div class="step-dot">5</div><div class="step-lbl">Payment</div></div>
+</div>
+
+<main class="main">
+  <section class="pg-hero">
+    <div class="pg-eyebrow">Step 3 of 5 · Harbour View Residences · Lot 42</div>
+    <h1 class="pg-title">Select products</h1>
+    <p class="pg-sub">Choose certificates and services for OC-A. Per-OC items are charged once per owner corporation.</p>
+  </section>
+
+  <div class="alert alert-info">Standard turnaround is 7 business days. Express options available where shown.</div>
+
+  <div class="prod-grid">
+    <div class="prod-card added">
+      <div class="prod-name">Section 184 OC Certificate <span class="per-oc-tag">Per OC</span></div>
+      <div class="prod-desc">Statutory certificate disclosing levies, expenses and outstanding contributions.</div>
+      <div class="prod-turna">Turnaround · 7 business days</div>
+      <div class="prod-foot">
+        <div>
+          <div class="prod-price">$220.00</div>
+          <div class="prod-price-sub">incl. GST</div>
+        </div>
+        <span class="added-pill">&#10003; Added</span>
+      </div>
+    </div>
+
+    <div class="prod-card">
+      <div class="prod-name">Express S184 Certificate <span class="per-oc-tag">Per OC</span></div>
+      <div class="prod-desc">Same statutory certificate with expedited 2-business-day delivery.</div>
+      <div class="prod-turna">Turnaround · 2 business days</div>
+      <div class="prod-foot">
+        <div>
+          <div class="prod-price">$330.00</div>
+          <div class="prod-price-sub">incl. GST</div>
+        </div>
+        <button class="add-btn">+ Add</button>
+      </div>
+    </div>
+
+    <div class="prod-card">
+      <div class="prod-name">Strata Search Report</div>
+      <div class="prod-desc">Comprehensive review of records, minutes, financials and key correspondence.</div>
+      <div class="prod-turna">Turnaround · 5 business days</div>
+      <div class="prod-foot">
+        <div>
+          <div class="prod-price">$385.00</div>
+          <div class="prod-price-sub">incl. GST</div>
+        </div>
+        <button class="add-btn">+ Add</button>
+      </div>
+    </div>
+
+    <div class="prod-card">
+      <div class="prod-name">Replacement Key / Fob</div>
+      <div class="prod-desc">Cut and program a replacement security key or building access fob.</div>
+      <div class="prod-turna">Turnaround · 3 business days</div>
+      <div class="prod-foot">
+        <div>
+          <div class="prod-price">$95.00</div>
+          <div class="prod-price-sub">per item, incl. GST</div>
+        </div>
+        <button class="add-btn">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;">
+    <span class="oc-pill">OC-A · Common Property</span>
+    <span class="oc-pill">OC-B · Residential</span>
+  </div>
+
+  <div style="margin-top:32px; display:flex; justify-content:space-between; align-items:center;">
+    <button class="btn btn-ghost">&larr; Back</button>
+    <button class="btn btn-blk btn-lg">Review Order &rarr;</button>
+  </div>
+
+  <div class="sticky-cart">
+    <div>
+      <div class="sc-count">3 items in cart</div>
+      <div class="sc-items">S184 × 2 · Strata Search × 1</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="sc-total">$825.00</div>
+      <div class="sc-gst">incl. GST</div>
+    </div>
+  </div>
+</main>
+
+<div class="screen-sep"></div>
+
+<!-- ═══════ SCREEN 3: REVIEW + PAYMENT ═══════ -->
+<div class="screen-label">Screen 3 · Review &amp; Payment</div>
+
+<header class="hdr">
+  <div class="hdr-logo">TOCS<small>OC ORDER PORTAL</small></div>
+  <nav class="hdr-nav">
+    <button class="hn act">Order</button>
+    <button class="hn">Track</button>
+    <button class="hn">My Orders <span class="cart-dot">3</span></button>
+    <button class="hn">Admin</button>
+  </nav>
+</header>
+
+<main class="main">
+  <section class="pg-hero">
+    <div class="pg-eyebrow">Step 5 of 5</div>
+    <h1 class="pg-title">Review &amp; payment</h1>
+    <p class="pg-sub">Confirm your order details and choose how you&rsquo;d like to pay.</p>
+  </section>
+
+  <div class="panel-grid">
+    <div class="panel">
+      <div class="section-tt">Order summary</div>
+      <div class="cart-item">
+        <div style="flex:1;">
+          <div class="ci-name">Section 184 OC Certificate</div>
+          <div class="ci-meta">Harbour View Residences · OC-A · Lot 42</div>
+        </div>
+        <div class="ci-price">$220.00</div>
+      </div>
+      <div class="cart-item">
+        <div style="flex:1;">
+          <div class="ci-name">Section 184 OC Certificate</div>
+          <div class="ci-meta">Harbour View Residences · OC-B · Lot 42</div>
+        </div>
+        <div class="ci-price">$220.00</div>
+      </div>
+      <div class="cart-item">
+        <div style="flex:1;">
+          <div class="ci-name">Strata Search Report</div>
+          <div class="ci-meta">Harbour View Residences · Lot 42</div>
+        </div>
+        <div class="ci-price">$385.00</div>
+      </div>
+      <div class="cart-grand-row">
+        <span class="cart-total-label">Total (incl. GST)</span>
+        <span class="cart-grand-amt">$825.00</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-tt">Payment method</div>
+      <div class="pay-method sel">
+        <div class="pm-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="pm-name">Credit / Debit Card</div>
+          <div class="pm-desc">Pay securely via Stripe. Receipt sent immediately.</div>
+        </div>
+        <div class="radio-ring sel"></div>
+      </div>
+      <div class="pay-method">
+        <div class="pm-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V10l7-7 7 7v11M9 21v-6h6v6"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="pm-name">Bank Transfer</div>
+          <div class="pm-desc">Order processed once funds clear (1–2 business days).</div>
+        </div>
+        <div class="radio-ring"></div>
+      </div>
+      <div class="pay-method">
+        <div class="pm-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <div style="flex:1;">
+          <div class="pm-name">PayID</div>
+          <div class="pm-desc">Instant transfer using ABN or email PayID.</div>
+        </div>
+        <div class="radio-ring"></div>
+      </div>
+
+      <div class="alert alert-warn" style="margin-top:18px;">A purchase authority document may be required. You&rsquo;ll be prompted to upload it after payment.</div>
+
+      <button class="btn btn-blk btn-lg" style="width:100%; margin-top:12px;">Place Order &middot; $825.00</button>
+    </div>
+  </div>
+
+  <div style="margin-top:24px; display:flex; gap: 8px; flex-wrap: wrap;">
+    <span class="badge badge-pending">Pending Payment</span>
+    <span class="badge badge-proc">Processing</span>
+    <span class="badge badge-issued">Issued</span>
+    <span class="badge badge-cancel">Cancelled</span>
+    <span style="font:400 12px 'Montserrat'; color: var(--muted); margin-left: 8px;">&larr; status badge styles (admin view)</span>
+  </div>
+</main>
+
+<div class="screen-sep"></div>
+
+<!-- ═══════ SCREEN 4: SUCCESS ═══════ -->
+<div class="screen-label">Screen 4 · Order Confirmed</div>
+
+<header class="hdr">
+  <div class="hdr-logo">TOCS<small>OC ORDER PORTAL</small></div>
+  <nav class="hdr-nav">
+    <button class="hn">Order</button>
+    <button class="hn">Track</button>
+    <button class="hn act">My Orders <span class="cart-dot">3</span></button>
+    <button class="hn">Admin</button>
+  </nav>
+</header>
+
+<main class="main">
+  <div class="success-wrap">
+    <div class="success-ring">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="pg-eyebrow" style="text-align:center;">Order received</div>
+    <h1 class="pg-title" style="text-align:center;">Thank you</h1>
+    <p class="pg-sub" style="margin: 10px auto 0;">A confirmation has been emailed to <strong>jane@example.com</strong>. Our team will begin processing once payment is verified.</p>
+    <div class="order-code-wrap">
+      <div class="order-code">OC-2026-12345-001</div>
+    </div>
+    <div style="display:flex; gap:10px; justify-content:center; margin-top: 24px;">
+      <button class="btn btn-out">Track this order</button>
+      <button class="btn btn-blk">Place another order</button>
+    </div>
+  </div>
+</main>
+
+<footer style="background: var(--black); color: rgba(255,255,255,.6); text-align:center; padding: 32px; font:400 12px 'Montserrat'; letter-spacing: .04em; margin-top: 48px;">
+  &copy; TOCS &middot; Top Owners Corporation Solution &nbsp;|&nbsp; Leading with Expertise &amp; Reliability
+</footer>
+
+</body>
+</html>
