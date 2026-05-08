@@ -4060,8 +4060,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 if (cronRun.error) {
                   msg = `Last auto-poll FAILED ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}): ${cronRun.error}`;
                 } else {
-                  const okCount = (cronRun.checked || 0) - (cronRun.errorCount || 0);
-                  msg = `Last auto PIQ poll ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) had ${cronRun.errorCount} error(s) — ${okCount} ok, ${cronRun.errorCount} failed${cronRun.firstError ? ` (first: ${cronRun.firstError})` : ""}. PIQ may be down or credentials wrong.`;
+                  // checked is already the *successful* count — failures only
+                  // increment errorCount on the backend, never checked. Don't
+                  // subtract or the count goes negative in a full-outage run.
+                  msg = `Last auto PIQ poll ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) had ${cronRun.errorCount} error(s) — ${cronRun.checked || 0} ok, ${cronRun.errorCount} failed${cronRun.firstError ? ` (first: ${cronRun.firstError})` : ""}. PIQ may be down or credentials wrong.`;
                 }
                 bad = true;
               } else {
