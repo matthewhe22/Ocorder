@@ -184,13 +184,18 @@ export default async function handler(req, res) {
       }
 
       // Record this run so the admin UI can show "last auto-poll" status.
+      // ok=false when ANY per-order detectPiqPayment threw (e.g. PIQ down or
+      // credentials rejected) — those orders were not actually checked, so the
+      // banner must surface this even if some other orders succeeded. The
+      // first error message is included as a hint without leaking all of them.
       await writePiqPollStatus({
-        ok:        true,
+        ok:         errors.length === 0,
         trigger,
         checked,
         confirmed,
         linked,
         errorCount: errors.length,
+        firstError: errors[0]?.error || null,
       }).catch(e => console.error("poll-piq: writePiqPollStatus failed:", e.message));
 
       return res.status(200).json({ ok: true, checked, confirmed, linked: linked || undefined, errors: errors.length ? errors : undefined });

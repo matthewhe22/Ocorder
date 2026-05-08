@@ -4054,10 +4054,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               const ageMs = Date.now() - new Date(cronRun.ts).getTime();
               const stale = ageMs > 28 * 3600 * 1000;
               if (!cronRun.ok) {
-                msg = `Last auto-poll FAILED ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}): ${cronRun.error || "unknown error"}`;
+                // Two failure shapes: a thrown exception (cronRun.error set,
+                // whole run aborted) or per-order failures (errorCount > 0,
+                // those orders were not actually checked).
+                if (cronRun.error) {
+                  msg = `Last auto-poll FAILED ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}): ${cronRun.error}`;
+                } else {
+                  const okCount = (cronRun.checked || 0) - (cronRun.errorCount || 0);
+                  msg = `Last auto PIQ poll ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) had ${cronRun.errorCount} error(s) — ${okCount} ok, ${cronRun.errorCount} failed${cronRun.firstError ? ` (first: ${cronRun.firstError})` : ""}. PIQ may be down or credentials wrong.`;
+                }
                 bad = true;
               } else {
-                msg = `Last auto PIQ poll: ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) — ${cronRun.checked || 0} checked, ${cronRun.confirmed || 0} confirmed${cronRun.linked ? `, ${cronRun.linked} linked` : ""}${cronRun.errorCount ? `, ${cronRun.errorCount} error(s)` : ""}.`;
+                msg = `Last auto PIQ poll: ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) — ${cronRun.checked || 0} checked, ${cronRun.confirmed || 0} confirmed${cronRun.linked ? `, ${cronRun.linked} linked` : ""}.`;
                 if (stale) { msg = "⚠ " + msg + " Auto-poll appears stale — check Vercel cron config."; bad = true; }
               }
             }
