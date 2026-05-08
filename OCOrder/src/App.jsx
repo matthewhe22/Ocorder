@@ -4032,33 +4032,41 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               )}
             </div>
           </div>
-          {/* PIQ auto-poll health line. Cron runs daily at 02:30 UTC; if the
-              last successful run is older than ~28 h or CRON_SECRET is unset,
-              flag in red so a missed run is visible without scraping logs. */}
+          {/* PIQ auto-poll health line. Staleness is judged ONLY against the
+              cron slot — a recent manual "Check PIQ" must not mask a broken
+              Vercel cron. Cron runs daily at 02:30 UTC; >28 h since last
+              successful cron run, or CRON_SECRET unset, flags red. */}
           {piqPollStatus && (() => {
-            const lr   = piqPollStatus.lastRun;
-            const cron = piqPollStatus.cronSecretConfigured;
+            const cronOk   = piqPollStatus.cronSecretConfigured;
+            const cronRun  = piqPollStatus.lastCronRun;
+            const manRun   = piqPollStatus.lastManualRun;
+            const fmtAge   = ms => ms < 3600e3 ? `${Math.round(ms/60000)} min` : `${Math.round(ms/3600000)} h`;
+            const fmtWhen  = ts => new Date(ts).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+
             let msg, bad = false;
-            if (!cron) {
+            if (!cronOk) {
               msg = "CRON_SECRET is not configured — automatic PIQ polling is disabled. Set CRON_SECRET in Vercel env vars.";
               bad = true;
-            } else if (!lr) {
+            } else if (!cronRun) {
               msg = "No automatic PIQ poll has run yet. Daily schedule: 02:30 UTC.";
               bad = true;
             } else {
-              const ageMs = Date.now() - new Date(lr.ts).getTime();
-              const stale = ageMs > 28 * 3600 * 1000; // >28 h since last run
-              const ago   = ageMs < 3600e3 ? `${Math.round(ageMs/60000)} min` : `${Math.round(ageMs/3600000)} h`;
-              const when  = new Date(lr.ts).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
-              if (!lr.ok) {
-                msg = `Last auto-poll FAILED ${ago} ago (${when}): ${lr.error || "unknown error"}`;
+              const ageMs = Date.now() - new Date(cronRun.ts).getTime();
+              const stale = ageMs > 28 * 3600 * 1000;
+              if (!cronRun.ok) {
+                msg = `Last auto-poll FAILED ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}): ${cronRun.error || "unknown error"}`;
                 bad = true;
               } else {
-                const trig = lr.trigger === "cron" ? "auto" : "manual";
-                msg = `Last ${trig} PIQ poll: ${ago} ago (${when}) — ${lr.checked || 0} checked, ${lr.confirmed || 0} confirmed${lr.linked ? `, ${lr.linked} linked` : ""}${lr.errorCount ? `, ${lr.errorCount} error(s)` : ""}.`;
-                bad = stale;
-                if (stale) msg = "⚠ " + msg + " Auto-poll appears stale — check Vercel cron config.";
+                msg = `Last auto PIQ poll: ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) — ${cronRun.checked || 0} checked, ${cronRun.confirmed || 0} confirmed${cronRun.linked ? `, ${cronRun.linked} linked` : ""}${cronRun.errorCount ? `, ${cronRun.errorCount} error(s)` : ""}.`;
+                if (stale) { msg = "⚠ " + msg + " Auto-poll appears stale — check Vercel cron config."; bad = true; }
               }
+            }
+            // Append a hint about the most recent manual run so admins can see
+            // when someone last clicked "Check PIQ" — informational only, never
+            // affects the bad/good colour.
+            if (manRun) {
+              const manAge = Date.now() - new Date(manRun.ts).getTime();
+              msg += ` Last manual check: ${fmtAge(manAge)} ago.`;
             }
             return (
               <div style={{

@@ -214,11 +214,15 @@ export default async function handler(req, res) {
     const { validToken } = await import("../_lib/store.js");
     if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
 
-    const lastRun = await readPiqPollStatus().catch(() => null);
+    // KV value shape: { lastCron?: {...}, lastManual?: {...} }. Returned as
+    // distinct fields so the UI can judge auto-poll freshness against the cron
+    // slot only — a recent manual run must NOT mask a broken Vercel cron.
+    const status = await readPiqPollStatus().catch(() => null);
     return res.status(200).json({
       cronSecretConfigured: !!process.env.CRON_SECRET,
       schedule:             "30 2 * * * (UTC)",
-      lastRun:              lastRun || null,
+      lastCronRun:          status?.lastCron   || null,
+      lastManualRun:        status?.lastManual || null,
     });
   }
 
