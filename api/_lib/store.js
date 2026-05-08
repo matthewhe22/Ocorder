@@ -335,10 +335,21 @@ export async function readAuthority(orderId) {
 // admin UI can surface "last auto-poll succeeded N hours ago" without scraping
 // Vercel logs. Kept in a dedicated KV key (separate from data/config) so a
 // concurrent poll never races writeData() back over an order-status update.
-const POLL_PIQ_STATUS_KEY = "tocs:poll-piq:last-run";
+//
+// Cron and manual runs are stored in *separate* slots so a manual "Check PIQ"
+// click never makes the auto-poll banner look healthy when the Vercel cron is
+// actually broken — staleness is only ever judged against the cron slot.
+//
+// Demo deployments get their own key so they cannot overwrite or read the
+// production banner state when sharing a Redis instance (matches DATA_KEY).
+const POLL_PIQ_STATUS_KEY = DEMO_MODE ? "demo:poll-piq:last-run" : "tocs:poll-piq:last-run";
 
 export async function writePiqPollStatus(status) {
-  await kvSet(POLL_PIQ_STATUS_KEY, { ts: new Date().toISOString(), ...status });
+  const slot    = status?.trigger === "cron" ? "lastCron" : "lastManual";
+  const entry   = { ts: new Date().toISOString(), ...status };
+  const current = (await kvGet(POLL_PIQ_STATUS_KEY)) || {};
+  current[slot] = entry;
+  await kvSet(POLL_PIQ_STATUS_KEY, current);
 }
 
 export async function readPiqPollStatus() {
