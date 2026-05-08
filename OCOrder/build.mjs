@@ -1,6 +1,6 @@
 // build.mjs — esbuild bundler for TOCS OC Portal
 import * as esbuild from "esbuild";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, copyFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -8,6 +8,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes("--watch");
 
 mkdirSync(resolve(__dirname, "dist"), { recursive: true });
+
+// Copy design preview (if present) so it's viewable on the deploy
+const previewSrc = resolve(__dirname, "docs/tocs-redesign-preview.html");
+if (existsSync(previewSrc)) {
+  copyFileSync(previewSrc, resolve(__dirname, "dist/preview.html"));
+}
 
 // Write static index.html
 writeFileSync(
