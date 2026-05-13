@@ -240,8 +240,15 @@ export default async function handler(req, res) {
   const { id, action } = req.query;
 
   // ── GET /api/orders/:id/authority ─────────────────────────────────────────
+  // Two response shapes (matches the /certificate endpoint):
+  //   - SharePoint URL on the order → 200 { url } (JSON). Frontend opens it.
+  //     Previously this was a 302 that carried the admin token via Referer.
+  //   - SharePoint URL missing → stream the binary from Redis KV.
   if (action === "authority" && req.method === "GET") {
-    const token = extractToken(req) || req.query?.token;
+    // Bearer header only — the previous ?token= fallback leaked the long-lived
+    // admin token via Vercel access logs, browser history, and (on the old
+    // 302 path) Referer headers cross-origin to *.sharepoint.com.
+    const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const data = await readData();
@@ -249,15 +256,12 @@ export default async function handler(req, res) {
     if (!order) return res.status(404).json({ error: "Order not found." });
     if (!order.lotAuthorityFile && !order.lotAuthorityUrl) return res.status(404).json({ error: "No authority document for this order." });
 
-    // Preferred: redirect to SharePoint URL (opens directly in browser).
-    // Validate the host against a fixed allow-list so a corrupted / forged
-    // value cannot turn the portal into an open-redirect / phishing chain.
     if (order.lotAuthorityUrl) {
-      if (isAllowedRedirectHost(order.lotAuthorityUrl)) {
-        return res.redirect(302, order.lotAuthorityUrl);
+      if (!isAllowedRedirectHost(order.lotAuthorityUrl)) {
+        console.error(`Authority URL blocked — non-allowed host: ${order.lotAuthorityUrl}`);
+        return res.status(502).json({ error: "Stored authority URL is not on an allowed host." });
       }
-      console.error(`Authority redirect blocked — non-allowed host: ${order.lotAuthorityUrl}`);
-      return res.status(502).json({ error: "Stored authority URL is not on an allowed host." });
+      return res.status(200).json({ url: order.lotAuthorityUrl });
     }
 
     // Fallback: serve from Redis KV

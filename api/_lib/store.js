@@ -560,10 +560,30 @@ export async function rateLimit(key, max, windowSeconds) {
   }
 }
 
+// Returns the originating client IP for rate-limiting purposes.
+//
+// Selection order:
+//   1. `x-vercel-forwarded-for` — set by Vercel's edge from the TLS-terminated
+//      socket. Clients cannot forge this header at Vercel because the platform
+//      overwrites it on ingress. Preferred on Vercel.
+//   2. The *last* (rightmost) entry of `x-forwarded-for`. On a single-hop
+//      Vercel deploy the rightmost entry is what Vercel inserted itself; any
+//      client-supplied values land further left and must be ignored or the
+//      rate limiter is bypassable by rotating the header.
+//   3. `req.socket?.remoteAddress` — direct-connection fallback (local dev).
+//
+// Naive `xff.split(",")[0]` (the previous implementation) returned the
+// *client-supplied* leftmost entry on Vercel and was trivially spoofable.
 export function clientIp(req) {
-  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
-    || req.socket?.remoteAddress
-    || "unknown";
+  const vercel = req.headers["x-vercel-forwarded-for"];
+  if (typeof vercel === "string" && vercel.trim()) {
+    return vercel.split(",").pop().trim();
+  }
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) {
+    return xff.split(",").pop().trim();
+  }
+  return req.socket?.remoteAddress || "unknown";
 }
 
 // ── Per-order mutation lock ───────────────────────────────────────────────────

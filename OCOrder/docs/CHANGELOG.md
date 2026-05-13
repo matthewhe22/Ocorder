@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-05-13 — Tier-3 follow-ups: token leak on /authority + /data, XFF spoofing, popup-blocker, bidi sanitisation
+
+Seven issues from the second review pass over PR #37:
+
+### Security
+- **`?token=` query fallback removed from `GET /api/orders/:id/authority` and `GET /api/data`** — same Referer/log leak vector that PR #37 closed for `/certificate` was still open on these two endpoints. `/authority` is the worst case because it used to issue a 302 to SharePoint, carrying the admin token to `*.sharepoint.com` via `Referer`. The endpoint now mirrors `/certificate`: returns 200 `{url}` JSON for the SharePoint case (frontend opens it via a synthesised `<a target="_blank">` click) and streams the binary for the Redis KV fallback. Bearer header only.
+- **`clientIp()` hardened against `x-forwarded-for` rotation** (`api/_lib/store.js`). The previous implementation returned `xff.split(",")[0]` — the *leftmost* entry, which on Vercel is the client-supplied value. A leaked admin token could rotate the header per request and bypass `save-to-sharepoint`'s 10/60s rate limit (and the `/track` rate limit). New selection order: `x-vercel-forwarded-for` → rightmost entry of `x-forwarded-for` → `req.socket?.remoteAddress`.
+- **Unicode bidi / zero-width sanitisation in `sanitiseSegment`** — RTL override (U+202E) and ZW joiners are now stripped; segments are NFKC-normalised first. Not a traversal vector (Graph's path resolver was already safe per the security reviewer's analysis) but a phishing/UI-spoof primitive in admin audit-log surfaces and toasts.
+
+### Correctness
+- **Webhook SP IIFE bails when status flipped away from `Paid`** during the upload window — an admin cancelling the order between the lock release and the IIFE running no longer ends up with PDFs uploaded to a cancelled order. `readData` failure (Redis blip) now distinguishes "not found / not Paid" (skip) from "read failed" (fall back to the stale snapshot, better than dropping the upload).
+- **`pushAuditOnce` helper** suppresses duplicate "SP upload failed" audit entries on webhook retries — a persistently misconfigured SharePoint deployment that previously produced ~288 duplicate rows per day now produces one rolling failure entry per 24 h. Only failure entries are deduped; successes still always append.
+
+### UX
+- **`window.open` replaced with a synthesised `<a target="_blank">.click()`** for the Download Certificate (and now Open Authority Doc) JSON-redirect path. Safari and Firefox routinely block `window.open` when the user-gesture context has been consumed by the preceding `await fetch`; the bytes branch worked because `<a>.click()` is gesture-exempt. Both endpoints now use the same helpers (`openUrlInNewTab`, `streamResponseAsDownload`).
+- **`pubConfig` refreshed after SharePoint settings save** — enabling SP in Storage settings no longer requires a full page reload before the "↑ Save to SharePoint" button appears in the Orders tab.
+
+---
+
 ## 2026-05-13 — PR #35/#36 tier-2 follow-ups: token leakage, open redirect, locking, rate limit, polish
 
 Six issues from the same review pass as PR #36, plus three polish items:

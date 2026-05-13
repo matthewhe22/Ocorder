@@ -3490,18 +3490,58 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   // Opens an authority-document download via a short-lived signed URL so the
   // long-lived admin session token never appears in the URL / browser history.
+  // Open a URL in a new tab via a synthesised anchor click. Important: this
+  // is gesture-exempt in Safari/Firefox where `window.open(url)` is blocked
+  // when the user-gesture context has already been consumed by an awaited
+  // fetch — i.e. exactly the path that loads the URL from a server response.
+  const openUrlInNewTab = (url) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  // Stream a binary fetch response to disk via a temporary <a download>.
+  const streamResponseAsDownload = async (r, fallbackBase) => {
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const cd = r.headers.get("Content-Disposition") || "";
+    const filenameMatch = /filename="?([^"]+)"?/i.exec(cd);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filenameMatch?.[1] || `${fallbackBase}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // Open the authority document. Server returns either:
+  //   - 200 JSON { url } → SharePoint copy; we navigate to it in a new tab.
+  //   - 200 binary       → stream the bytes from Redis / local uploads.
+  // Both servers accept Bearer header auth on GET /authority.
   const openAuthorityDoc = async (orderId) => {
     try {
-      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/authority-link`, {
-        method: "POST",
+      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/authority`, {
         headers: { "Authorization": "Bearer " + adminToken },
       });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.url) {
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
         showAdminToast("err", d.error || "Could not open authority document.");
         return;
       }
-      window.location.href = d.url;
+      const ct = (r.headers.get("Content-Type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const d = await r.json().catch(() => ({}));
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
+        return;
+      }
+      streamResponseAsDownload(r, `authority-${orderId}`);
     } catch {
       showAdminToast("err", "Network error opening authority document.");
     }
@@ -3568,24 +3608,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       const ct = (r.headers.get("Content-Type") || "").toLowerCase();
       if (ct.includes("application/json")) {
         const d = await r.json().catch(() => ({}));
-        if (d.url) {
-          window.open(d.url, "_blank", "noopener,noreferrer");
-        } else {
-          showAdminToast("err", "Server did not return a download URL.");
-        }
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
         return;
       }
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const cd = r.headers.get("Content-Disposition") || "";
-      const filenameMatch = /filename="?([^"]+)"?/i.exec(cd);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filenameMatch?.[1] || `certificate-${order.id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      streamResponseAsDownload(r, `certificate-${order.id}`);
     } catch {
       showAdminToast("err", "Network error downloading certificate.");
     }
@@ -4935,7 +4962,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       )}
 
       {adminTab === "storage" && (
-        <StorageTab adminToken={adminToken} />
+        <StorageTab adminToken={adminToken} setPubConfig={setPubConfig} />
       )}
 
       {adminTab === "security" && (
@@ -6470,7 +6497,7 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
 }
 
 // ─── STORAGE TAB ──────────────────────────────────────────────────────────────
-function StorageTab({ adminToken }) {
+function StorageTab({ adminToken, setPubConfig }) {
   const DEF_SP  = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
   const DEF_PIQ = { baseUrl: "https://tocs.propertyiq.com.au", clientId: "", clientSecret: "" };
 
@@ -6566,7 +6593,16 @@ function StorageTab({ adminToken }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ sharepoint: payload }),
       });
-      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
+      if (r.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 3500);
+        // Refresh public config so the "Save to SharePoint" button in the
+        // Orders tab appears immediately after enabling SP, without requiring
+        // a full page reload.
+        try {
+          const pc = await fetch("/api/config/public").then(rr => rr.json());
+          setPubConfig?.(pc);
+        } catch { /* non-fatal */ }
+      }
       else { const d = await r.json(); setErr(d.error || "Save failed."); }
     } catch { setErr("Unable to connect to server."); }
   };
