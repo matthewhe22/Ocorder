@@ -96,7 +96,9 @@
       "Bash(pip3 show:*)",
       "Bash(git check-ignore:*)",
       "Bash(git worktree:*)",
-      "Bash(PATH=/Users/matthewhe/.nvm/versions/node/v24.14.0/bin:$PATH)"
+      "Bash(PATH=/Users/matthewhe/.nvm/versions/node/v24.14.0/bin:$PATH)",
+      "mcp__4a226703-35f5-49bb-a2aa-162fb88d4b81__get_project",
+      "mcp__4a226703-35f5-49bb-a2aa-162fb88d4b81__list_deployments"
     ]
   }
 }
