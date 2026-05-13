@@ -2,7 +2,7 @@
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
 import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, KV_AVAILABLE } from "../_lib/store.js";
 import { randomBytes } from "crypto";
-import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH } from "../_lib/sharepoint.js";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
 import { detectPiqPayment } from "../_lib/piq.js";
@@ -368,6 +368,60 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid order items: each item must have productName and price." });
     }
 
+    // ── C1: Server-side price & total reconciliation ────────────────────────
+    // Without this, a customer can POST `total: 0` (or any value) for a paid
+    // OC order and the order saves with that total on bank/payid/invoice paths.
+    // Stripe path is gated on `total > 0` but the other paths trust the body.
+    // We look up each item's expected unit price in the plan catalog and reject
+    // any mismatch.  Keys orders are special: product.price = 0 by design
+    // (admin sets the real amount on the invoice), so we only enforce the
+    // non-negative invariant and trust the rest of the keys-flow.
+    {
+      const planData = await readData();
+      const planId = order.items[0]?.planId;
+      const plan = planData.strataPlans?.find(p => p.id === planId);
+      if (order.orderCategory === "oc" && !plan) {
+        return res.status(400).json({ error: "Invalid order: unknown planId." });
+      }
+      let recomputedItemsTotal = 0;
+      for (const item of order.items) {
+        if (!Number.isFinite(item.price) || item.price < 0) {
+          return res.status(400).json({ error: "Invalid item: price must be a non-negative number." });
+        }
+        const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
+        if (order.orderCategory === "keys") {
+          // Keys: trust client price (zero at order time, set by admin on invoice)
+          recomputedItemsTotal += item.price * qty;
+          continue;
+        }
+        // OC: must match the plan catalog exactly.
+        const product = plan.products?.find(p => p.id === item.productId);
+        if (!product) {
+          return res.status(400).json({ error: `Invalid order: unknown productId "${item.productId}".` });
+        }
+        const expectedUnit = (product.perOC && item.isSecondaryOC && Number.isFinite(Number(product.secondaryPrice)))
+          ? Number(product.secondaryPrice)
+          : Number(product.price) || 0;
+        if (Math.abs(item.price - expectedUnit) > 0.01) {
+          return res.status(400).json({
+            error: `Invalid order: ${product.id} must be $${expectedUnit.toFixed(2)} (received $${Number(item.price).toFixed(2)}).`,
+          });
+        }
+        recomputedItemsTotal += expectedUnit * qty;
+      }
+      const shippingCost = (order.orderCategory === "keys" && order.selectedShipping)
+        ? Math.max(0, Number(order.selectedShipping.cost) || Number(order.selectedShipping.price) || 0)
+        : 0;
+      const recomputedTotal = Math.round((recomputedItemsTotal + shippingCost) * 100) / 100;
+      if (Math.abs(recomputedTotal - order.total) > 0.01) {
+        return res.status(400).json({
+          error: `Invalid total: expected $${recomputedTotal.toFixed(2)} (received $${Number(order.total || 0).toFixed(2)}).`,
+        });
+      }
+      // Trust the server-computed value going forward
+      order.total = recomputedTotal;
+    }
+
     // Derive SharePoint folder structure: {buildingName}/{categoryFolder}/{orderId}
     const categoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
     const buildingName   = (order.items?.[0]?.planName || "Unknown Building")
@@ -442,7 +496,11 @@ export default async function handler(req, res) {
           }],
           mode: "payment",
           success_url: `${baseUrl}/complete?orderId=${serverId}&stripeOk=1`,
-          cancel_url:  `${baseUrl}/?cancelled=1&orderId=${serverId}`,
+          // Include the Stripe-injected session-id so the cancel endpoint can
+          // verify the caller is the actual paying customer (not anyone who
+          // guessed the order id). {CHECKOUT_SESSION_ID} is a Stripe template
+          // placeholder, NOT a JS variable.
+          cancel_url:  `${baseUrl}/?cancelled=1&orderId=${serverId}&session_id={CHECKOUT_SESSION_ID}`,
           metadata: { orderId: order.id },
         });
         // Persist the session ID so stripe-confirm can verify it server-side
@@ -487,7 +545,10 @@ export default async function handler(req, res) {
     if (spEnabled) {
       spPromise = (async () => {
         try {
-          const spFilename = `authority-${body.lotAuthority?.filename || "doc"}`;
+          // Sanitise the client-supplied filename before it's concatenated into
+          // the upload path — `../foo.pdf` would otherwise resolve out of the
+          // order folder under Graph's `root:/{path}:` API.
+          const spFilename = `authority-${sanitiseSegment(body.lotAuthority?.filename, "doc")}`;
           // Capture upload errors so audit log entries contain the actual reason
           let authErr = null, pdfErr = null;
           // Run both uploads in parallel — each takes ~8–9 s independently

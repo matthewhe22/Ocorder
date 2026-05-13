@@ -2,6 +2,27 @@
 
 ---
 
+## 2026-05-13 — Critical hotfix: order pricing, stripe-cancel, SP filename, admin takeover, order lock coverage
+
+Five Critical findings from an end-to-end review pass over main.
+
+### C1 — Server-side `total` / `item.price` reconciliation (`api/orders/index.js`)
+Order creation trusted the client-supplied `total` and per-item `price`. Stripe was gated on `total > 0` but bank/payid/invoice paths happily saved `total: 0`. New reconciliation phase looks up each item's `productId` against the plan catalog, computes the expected unit price (honouring `secondaryPrice` for additional-OC items), validates the total within 1¢, and rewrites `order.total` to the server-computed value. Keys orders are special — `product.price = 0` by design — so we only enforce non-negative invariants there.
+
+### C2 — `stripe-cancel` now requires Stripe session-id proof + rate limit (`api/orders/[id]/[action].js`, `OCOrder/src/App.jsx`)
+The endpoint was public + unauth'd; any unauthenticated client who guessed an order id could flip a pending Stripe checkout to `Cancelled`. Stripe cancel-redirects now carry `{CHECKOUT_SESSION_ID}` in the URL; the frontend reads it from `?session_id=` and posts it back; the server compares it against the stored session id with a constant-time check, and rate-limits the endpoint (20 req/min/IP).
+
+### C3 — `lotAuthority.filename` sanitised at direct `uploadToSharePoint` call sites
+The `sanitiseSegment` fix from PR #36 only covered `uploadOrderDocs`. Two older direct callers in `api/orders/index.js` and `stripe-confirm` (`[id]/[action].js`) still concatenated the raw client filename — `../../evil.pdf` would have escaped the order folder under Graph's path API. Both now run `sanitiseSegment` first; the helper is exported for reuse.
+
+### C4 — Admin mutations require `currentPass` + audit trail (`api/auth/index.js`, `OCOrder/src/App.jsx`)
+`add-admin`, `remove-admin`, `reset-admin-password` previously only checked `validToken`. A stolen 8-h bearer in localStorage was enough to take over the whole admin pool with no audit trace. Each handler now requires the actor's current password (verified via the decoded token's username → admins record) and writes a structured entry to a new `tocs:auth-audit` Redis list (last 500 events). `change-credentials` writes the same audit entry. Self-removal is also blocked — pulling out your own account via a single stolen-token vector is no longer the easy path. The shared `appConfirm` dialog grew a `passwordPrompt` mode (resolves with the entered string, or `null` on cancel) so the three call sites can prompt without bespoke modals.
+
+### C5 — `withOrderLock` coverage extended to 6 audit-mutating handlers (`api/orders/[id]/[action].js`)
+`check-piq-payment`, `notify`, `delete`, `send-cert`, `send-invoice`, `amend` all did `readData → mutate auditLog/fields → writeData` without holding the order lock, so a concurrent hourly PIQ poll + admin click would silently lose updates. Each handler now wraps the *persistence* boundary in `withOrderLock` (external I/O — SMTP, Graph, PIQ — runs outside the lock so the 10s TTL is plenty). `check-piq-payment` got a `persistPiqChanges` helper that merges only the PIQ-related fields + the audit entries appended during the call into a fresh-read, so concurrent state isn't clobbered. `delete` is now lock-wrapped end-to-end and returns 503 on contention.
+
+---
+
 ## 2026-05-13 — Hotfix round: login XFF spoofing, /certificate open-redirect, x-vercel-forwarded-for direction
 
 Findings from a third agent review pass over the previous three rounds.

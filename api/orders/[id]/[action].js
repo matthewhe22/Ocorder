@@ -8,9 +8,9 @@
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
 import Stripe from "stripe";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
-import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs } from "../../_lib/sharepoint.js";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 import { detectPiqPayment } from "../../_lib/piq.js";
@@ -187,6 +187,34 @@ const ALLOWED_REDIRECT_HOSTS = (() => {
     .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
   return env.length ? env : ALLOWED_REDIRECT_HOSTS_DEFAULT;
 })();
+// Merge the changes that check-piq-payment made on its local `order` copy into
+// a fresh Redis snapshot, under the order lock. Only the PIQ-related fields +
+// any newly-appended audit entries are merged, so a concurrent admin click,
+// send-cert, or amendment isn't clobbered. Audit entries appended since the
+// handler began are tracked via the `auditLogStartLen` snapshot.
+const PIQ_MERGE_FIELDS = ["piqLotId", "piqPaymentDate", "piqPaymentReference",
+  "piqLastPolled", "piqLevyFound", "piqLevyTotalDue", "piqLevyTotalNett"];
+async function persistPiqChanges(orderId, localOrder, auditLogStartLen) {
+  return withOrderLock(orderId, async () => {
+    const fresh = await readData();
+    const fi = fresh.orders.findIndex(o => o.id === orderId);
+    if (fi === -1) return;
+    const target = fresh.orders[fi];
+    for (const f of PIQ_MERGE_FIELDS) target[f] = localOrder[f];
+    // Only overwrite status when the local handler actually changed it.
+    if (localOrder.status === "Paid") target.status = "Paid";
+    // Apply the auto-link side-effect on items[0].lotId if it changed.
+    if (localOrder.items?.[0]?.lotId && target.items?.[0]) {
+      target.items[0].lotId = localOrder.items[0].lotId;
+    }
+    const newAudits = (localOrder.auditLog || []).slice(auditLogStartLen);
+    if (newAudits.length) {
+      target.auditLog = [...(target.auditLog || []), ...newAudits];
+    }
+    await writeData(fresh);
+  });
+}
+
 function isAllowedRedirectHost(rawUrl) {
   try {
     const u = new URL(rawUrl);
@@ -507,16 +535,33 @@ export default async function handler(req, res) {
     const noteText = (typeof note === "string" && note.trim()) ? note.trim().slice(0, 200) : "";
     const auditNote = `Total: $${oldTotal.toFixed(2)} → $${newTotal.toFixed(2)} | Items: ${oldItemCount} → ${cleanItems.length}${noteText ? ` | ${noteText}` : ""}`;
 
-    data.orders[idx].items = cleanItems;
-    data.orders[idx].total = newTotal;
-    if (cleanShipping) data.orders[idx].selectedShipping = cleanShipping;
     const amendTs = new Date().toISOString();
-    data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), {
-      ts: amendTs,
-      action: "Order amended",
-      note: auditNote,
-    }];
-    await writeData(data);
+    // Persist the amendment inside the order lock so a concurrent send-cert,
+    // PIQ poll, or another admin amend serialises rather than clobbers.
+    try {
+      const persisted = await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const fi = fresh.orders.findIndex(o => o.id === id);
+        if (fi === -1) return { error: "Order vanished mid-amend.", code: 404 };
+        const fo = fresh.orders[fi];
+        if (!AMENDABLE_STATUSES.includes(fo.status)) {
+          return { error: `Order status "${fo.status}" no longer amendable.`, code: 409 };
+        }
+        fo.items = cleanItems;
+        fo.total = newTotal;
+        if (cleanShipping) fo.selectedShipping = cleanShipping;
+        fo.auditLog = [...(fo.auditLog || []), { ts: amendTs, action: "Order amended", note: auditNote }];
+        await writeData(fresh);
+        return { ok: true, order: fo };
+      });
+      if (persisted.error) return res.status(persisted.code).json({ error: persisted.error });
+      // Refresh local refs so the post-amend (PDF/email) phase uses the
+      // persisted state.
+      data.orders[idx] = persisted.order;
+    } catch (e) {
+      console.error(`amend persist failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
 
     // After saving the amendment we (a) regenerate the order summary PDF,
     // (b) upload it to SharePoint with a date-stamped filename, and (c) email
@@ -603,9 +648,12 @@ export default async function handler(req, res) {
     // entries for this post-amend phase.  Fresh-read avoids clobbering
     // concurrent writes (e.g. the hourly PIQ poll) that ran while we were
     // generating the PDF / sending email.
-    const fresh = await readData().catch(() => null);
-    const oi = fresh?.orders.find(o => o.id === id);
-    if (oi) {
+    // Persist post-amend SP / email audit entries under the order lock so
+    // PIQ poll / send-cert / send-invoice can't race against this write.
+    await withOrderLock(id, async () => {
+      const fresh = await readData();
+      const oi = fresh.orders.find(o => o.id === id);
+      if (!oi) return;
       if (newSummaryUrl) {
         oi.summaryUrl = newSummaryUrl;
         oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regenerated", note: `${filename} → ${newSummaryUrl}` });
@@ -623,8 +671,8 @@ export default async function handler(req, res) {
           oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment confirmation emails partially failed", note: emailFailures.join("; ").substring(0, 200) });
         }
       }
-      await writeData(fresh).catch(e => console.error("Amend post-write failed:", e.message));
-    }
+      await writeData(fresh);
+    }).catch(e => console.error("Amend post-write failed:", e.message));
     return res.status(200).json({ ok: true, order: data.orders[idx] });
   }
 
@@ -664,18 +712,24 @@ export default async function handler(req, res) {
         subject: subj,
         html: buildNotifyEmailHtml(order, safeMessage, cfg),
       });
-      data.orders[idx].auditLog = [
-        ...(data.orders[idx].auditLog || []),
-        { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subj}` },
-      ];
-      await writeData(data);
+      // Persist audit entry inside the order lock so a concurrent amend /
+      // status / piq run can't clobber the entry we just produced.
+      await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const oi = fresh.orders.find(o => o.id === id);
+        if (!oi) return;
+        oi.auditLog = [...(oi.auditLog || []), { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subj}` }];
+        await writeData(fresh);
+      }).catch(e => console.error("notify audit persist failed:", e.message));
       return res.status(200).json({ ok: true });
     } catch (err) {
-      data.orders[idx].auditLog = [
-        ...(data.orders[idx].auditLog || []),
-        { ts: new Date().toISOString(), action: "Customer notify failed", note: err.message?.substring(0, 200) || "" },
-      ];
-      await writeData(data).catch(() => {});
+      await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const oi = fresh.orders.find(o => o.id === id);
+        if (!oi) return;
+        oi.auditLog = [...(oi.auditLog || []), { ts: new Date().toISOString(), action: "Customer notify failed", note: err.message?.substring(0, 200) || "" }];
+        await writeData(fresh);
+      }).catch(() => {});
       console.error(`Customer notify failed for ${id}:`, err.message);
       return res.status(500).json({ error: "Failed to send notification email." });
     }
@@ -765,11 +819,14 @@ export default async function handler(req, res) {
         }
       } catch (e) { console.error("Certificate SharePoint upload failed:", e.message); }
 
-      // Re-read fresh data before writing to avoid clobbering concurrent writes
-      // (same pattern as send-invoice — email takes ~7s during which poll-piq may write).
-      const freshDataCert = await readData();
-      const freshIdxCert  = freshDataCert.orders.findIndex(o => o.id === id);
-      if (freshIdxCert !== -1) {
+      // Persist the issued-certificate state inside the order lock so a
+      // concurrent amend / status / piq run can't clobber the URLs or audit
+      // entries we just produced. The SMTP + Graph I/O above is unlocked
+      // (~7s of network) and runs as before.
+      await withOrderLock(id, async () => {
+        const freshDataCert = await readData();
+        const freshIdxCert  = freshDataCert.orders.findIndex(o => o.id === id);
+        if (freshIdxCert === -1) return;
         const freshOrder = freshDataCert.orders[freshIdxCert];
         freshOrder.certificateFile = firstFilename;
         freshOrder.certificateContentType = firstContentType;
@@ -782,7 +839,7 @@ export default async function handler(req, res) {
         newAudit.push({ ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` });
         freshOrder.auditLog = [...(freshOrder.auditLog || []), ...newAudit];
         await writeData(freshDataCert);
-      }
+      }).catch(e => console.error("send-certificate persist failed:", e.message));
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -877,9 +934,13 @@ export default async function handler(req, res) {
       // concurrent writes (e.g. the hourly PIQ poll) that ran while the email was
       // being sent.  The email is already delivered at this point so we must not
       // let a stale snapshot from earlier in this request overwrite the current state.
-      const freshData = await readData();
-      const freshIdx  = freshData.orders.findIndex(o => o.id === id);
-      if (freshIdx !== -1) {
+      // Wrap the persist in the order lock so the hourly PIQ poll, an admin
+      // amendment, or a concurrent send-cert can't clobber the URLs / audit
+      // we just produced. The SMTP + Graph I/O above is unlocked.
+      await withOrderLock(id, async () => {
+        const freshData = await readData();
+        const freshIdx  = freshData.orders.findIndex(o => o.id === id);
+        if (freshIdx === -1) return;
         if (spInvoiceUrl) freshData.orders[freshIdx].invoiceUrl = spInvoiceUrl;
         freshData.orders[freshIdx].status = "Pending Payment";
         const newAuditEntries = [
@@ -888,7 +949,7 @@ export default async function handler(req, res) {
         ];
         freshData.orders[freshIdx].auditLog = [...(freshData.orders[freshIdx].auditLog || []), ...newAuditEntries];
         await writeData(freshData);
-      }
+      }).catch(e => console.error("send-invoice persist failed:", e.message));
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -1002,7 +1063,9 @@ export default async function handler(req, res) {
           const [authResult, summaryResult, receiptResult] = await Promise.allSettled([
             authDoc?.data
               ? uploadToSharePoint(
-                  `authority-${authDoc.filename || "document"}`,
+                  // Sanitise the client-supplied filename so a `../foo.pdf`
+                  // can't escape the order folder under Graph's path API.
+                  `authority-${sanitiseSegment(authDoc.filename, "document")}`,
                   authDoc.contentType || "application/octet-stream",
                   authDoc.data,
                   spConfig,
@@ -1109,8 +1172,22 @@ export default async function handler(req, res) {
 
   // ── POST /api/orders/:id/stripe-cancel ──────────────────────────────────────
   // PUBLIC — called by the browser when the customer cancels or abandons Stripe checkout.
-  // Verifies the Stripe session is NOT paid before removing the phantom order from Redis.
+  //
+  // Authorization: the client must supply the Stripe `sessionId` it received
+  // from Stripe's cancel-redirect (cancel_url carries `{CHECKOUT_SESSION_ID}`).
+  // We compare it against the session-id we stored at checkout creation.
+  // Without this, anyone who guesses an order id can flip a pending Stripe
+  // checkout to `Cancelled`.
+  //
+  // Rate-limited per IP so a brute-force scanner can't drive arbitrary orders
+  // through repeated 401s.
   if (action === "stripe-cancel" && req.method === "POST") {
+    const rl = await rateLimit(`stripe-cancel:${clientIp(req)}`, 20, 60);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({ error: "Too many cancellation attempts — please wait." });
+    }
+
     const data = await readData();
     const idx  = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(200).json({ ok: true }); // already gone — idempotent
@@ -1122,10 +1199,25 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: "Order cannot be cancelled via this endpoint." });
     }
 
+    // Caller must prove they hold the Stripe session id Stripe redirected with.
+    // If we never stored a sessionId (legacy / never reached checkout), the
+    // expired-session webhook is the only sanctioned canceller — refuse here.
+    if (!order.stripeSessionId) {
+      return res.status(409).json({ error: "Order has no Stripe session — cancellation must come from Stripe webhook." });
+    }
+    const suppliedSessionId = String(req.body?.sessionId || "");
+    // Constant-time equality (length-protected; sessionIds are fixed-shape so
+    // length leak is moot, but use a constant-time compare anyway).
+    const a = Buffer.from(suppliedSessionId);
+    const b = Buffer.from(order.stripeSessionId);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: "Invalid cancellation token." });
+    }
+
     // Double-check with Stripe that payment was not actually completed
     const cfg = await readConfig();
     const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
-    if (stripeKey && order.stripeSessionId) {
+    if (stripeKey) {
       try {
         const stripe = new Stripe(stripeKey);
         const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
@@ -1154,18 +1246,26 @@ export default async function handler(req, res) {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const data = await readData();
-    const idx = data.orders.findIndex(o => o.id === id);
-    if (idx === -1) return res.status(404).json({ error: "Order not found." });
-
-    const orderToDelete = data.orders[idx];
-    if (orderToDelete.status !== "Cancelled") {
-      return res.status(409).json({ error: "Only cancelled orders can be deleted. Cancel the order first." });
+    // Wrap the read-modify-write in the order lock so a concurrent amend /
+    // status / piq / send-cert cannot race against the splice.
+    try {
+      const result = await withOrderLock(id, async () => {
+        const data = await readData();
+        const idx = data.orders.findIndex(o => o.id === id);
+        if (idx === -1) return { error: "Order not found.", code: 404 };
+        if (data.orders[idx].status !== "Cancelled") {
+          return { error: "Only cancelled orders can be deleted. Cancel the order first.", code: 409 };
+        }
+        data.orders.splice(idx, 1);
+        await writeData(data);
+        return { ok: true };
+      });
+      if (result.error) return res.status(result.code).json({ error: result.error });
+      return res.status(200).json({ ok: true, deleted: id });
+    } catch (e) {
+      console.error(`delete failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
     }
-
-    data.orders.splice(idx, 1);
-    await writeData(data);
-    return res.status(200).json({ ok: true, deleted: id });
   }
 
   // ── POST /api/orders/:id/check-piq-payment ──────────────────────────────────
@@ -1179,6 +1279,10 @@ export default async function handler(req, res) {
     const idx   = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
     const order = data.orders[idx];
+    // Snapshot the audit-log length so we can compute the entries we appended
+    // during this handler and merge ONLY those into a fresh-read at write time
+    // (so a concurrent admin click / cron / send-cert isn't clobbered).
+    const auditLogStartLen = (order.auditLog || []).length;
 
     // 1. Admin-supplied piqLotId (manual link from the UI) takes top priority
     //    so admins can fix orders that PIQ sync couldn't auto-resolve.
@@ -1278,7 +1382,7 @@ export default async function handler(req, res) {
         } // end isNewPayment
       }
 
-      await writeData(data);
+      await persistPiqChanges(id, order, auditLogStartLen);
 
       return res.status(200).json({
         ok:               true,
@@ -1296,7 +1400,7 @@ export default async function handler(req, res) {
       console.error(`check-piq-payment error for ${id}:`, err.message);
       // Still update lastPolled on error
       order.piqLastPolled = now;
-      await writeData(data).catch(() => {});
+      await persistPiqChanges(id, order, auditLogStartLen).catch(() => {});
       return res.status(200).json({ ok: false, error: err.message, lastPolled: now });
     }
   }

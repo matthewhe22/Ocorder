@@ -622,11 +622,18 @@ function DialogHost() {
 
   useEffect(() => {
     const onConfirm = (e) => setConfirmState({
-      title:       e.detail?.title    || "Are you sure?",
-      message:     e.detail?.message  || "",
-      confirmText: e.detail?.confirmText || "Confirm",
-      cancelText:  e.detail?.cancelText  || "Cancel",
-      danger:      !!e.detail?.danger,
+      title:        e.detail?.title    || "Are you sure?",
+      message:      e.detail?.message  || "",
+      confirmText:  e.detail?.confirmText || "Confirm",
+      cancelText:   e.detail?.cancelText  || "Cancel",
+      danger:       !!e.detail?.danger,
+      // When passwordPrompt is set, the dialog shows a password field and
+      // resolves with the entered string (or null on cancel) instead of a
+      // boolean. Used to gate destructive admin actions on a re-confirmation
+      // of the current password, so a stolen 8-h bearer alone isn't enough.
+      passwordPrompt: !!e.detail?.passwordPrompt,
+      passwordLabel:  e.detail?.passwordLabel || "Your current password",
+      password:       "",
     });
     const onToast = (e) => {
       const id = ++toastIdRef.current;
@@ -649,11 +656,11 @@ function DialogHost() {
     };
   }, []);
 
-  // Escape closes confirm dialog as a "no"
+  // Escape closes confirm dialog as a "no" / null for passwordPrompt
   useEffect(() => {
     if (!confirmState) return;
     const onKey = (e) => {
-      if (e.key === "Escape") { _confirmAnswer(false); setConfirmState(null); }
+      if (e.key === "Escape") { _confirmAnswer(confirmState.passwordPrompt ? null : false); setConfirmState(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -670,17 +677,43 @@ function DialogHost() {
             padding:"22px 24px 18px", boxShadow:"0 10px 32px rgba(0,0,0,0.25)" }}>
             <h3 id="tocs-confirm-title" style={{ margin:"0 0 8px", color:"#1c3326", fontSize:"1.05rem" }}>{confirmState.title}</h3>
             {confirmState.message && (
-              <p style={{ margin:"0 0 18px", color:"#333", fontSize:"0.92rem", whiteSpace:"pre-wrap", lineHeight:1.45 }}>{confirmState.message}</p>
+              <p style={{ margin:"0 0 14px", color:"#333", fontSize:"0.92rem", whiteSpace:"pre-wrap", lineHeight:1.45 }}>{confirmState.message}</p>
+            )}
+            {confirmState.passwordPrompt && (
+              <div style={{ margin:"0 0 16px" }}>
+                <label style={{ display:"block", fontSize:"0.82rem", color:"#555", marginBottom:6 }}>{confirmState.passwordLabel}</label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={confirmState.password}
+                  onChange={(e) => setConfirmState(s => s ? { ...s, password: e.target.value } : s)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && confirmState.password) { _confirmAnswer(confirmState.password); setConfirmState(null); } }}
+                  style={{ width:"100%", padding:"8px 10px", borderRadius:4, border:"1px solid #c8cdd1", fontSize:"0.92rem", boxSizing:"border-box" }}
+                />
+              </div>
             )}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-              <button autoFocus onClick={() => { _confirmAnswer(false); setConfirmState(null); }}
+              <button autoFocus={!confirmState.passwordPrompt} onClick={() => { _confirmAnswer(confirmState.passwordPrompt ? null : false); setConfirmState(null); }}
                 style={{ padding:"9px 16px", minHeight:38, borderRadius:4, border:"1px solid #c8cdd1",
                   background:"#fff", color:"#333", cursor:"pointer", fontSize:"0.88rem" }}>
                 {confirmState.cancelText}
               </button>
-              <button onClick={() => { _confirmAnswer(true); setConfirmState(null); }}
+              <button
+                disabled={confirmState.passwordPrompt && !confirmState.password}
+                onClick={() => {
+                  if (confirmState.passwordPrompt) {
+                    if (!confirmState.password) return;
+                    _confirmAnswer(confirmState.password);
+                  } else {
+                    _confirmAnswer(true);
+                  }
+                  setConfirmState(null);
+                }}
                 style={{ padding:"9px 16px", minHeight:38, borderRadius:4, border:"none",
-                  background: confirmState.danger ? "#b91c1c" : "#1c3326", color:"#fff", cursor:"pointer", fontSize:"0.88rem", fontWeight:600 }}>
+                  background: confirmState.danger ? "#b91c1c" : "#1c3326", color:"#fff",
+                  cursor: (confirmState.passwordPrompt && !confirmState.password) ? "not-allowed" : "pointer",
+                  opacity: (confirmState.passwordPrompt && !confirmState.password) ? 0.55 : 1,
+                  fontSize:"0.88rem", fontWeight:600 }}>
                 {confirmState.confirmText}
               </button>
             </div>
@@ -899,13 +932,21 @@ export default function App() {
       setStep(6);
       setCurrentView("portal");
     }
-    // Detect Stripe cancel redirect: /?cancelled=1&orderId=xxx — clean up the pending order
+    // Detect Stripe cancel redirect: /?cancelled=1&orderId=xxx&session_id=cs_… —
+    // clean up the pending order. Pass session_id back to /stripe-cancel so the
+    // server can prove the caller is the actual paying customer (not an
+    // attacker who guessed the order id).
     if (params.get("cancelled") === "1") {
       const cancelledOrderId = params.get("orderId");
+      const cancelledSessionId = params.get("session_id");
       window.history.replaceState({}, "", "/");
       setStripeCancelled(true);
       if (cancelledOrderId) {
-        fetch(`/api/orders/${cancelledOrderId}/stripe-cancel`, { method: "POST" }).catch(() => {});
+        fetch(`/api/orders/${cancelledOrderId}/stripe-cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: cancelledSessionId || undefined }),
+        }).catch(() => {});
       }
     }
     // Detect privacy policy route
@@ -6849,20 +6890,24 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
   useEffect(() => { loadAdmins(); }, []);
 
   const removeAdmin = async (id, username) => {
-    const ok = await appConfirm({
+    // Re-confirm the actor's current password before destructive admin actions
+    // so a stolen 8-h bearer alone isn't enough to mutate the admin pool.
+    const currentPass = await appConfirm({
       title: `Remove admin "${username}"?`,
-      message: "They will no longer be able to log in.",
+      message: "They will no longer be able to log in.\n\nEnter your current password to confirm.",
       confirmText: "Remove",
       danger: true,
+      passwordPrompt: true,
     });
-    if (!ok) return;
+    if (!currentPass) return;
     const r = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-      body: JSON.stringify({ action: "remove-admin", id }),
+      body: JSON.stringify({ action: "remove-admin", id, currentPass }),
     });
     const d = await r.json().catch(() => ({}));
-    if (r.ok) loadAdmins();
+    if (r.status === 401) { onLogout(); return; }
+    if (r.ok) { appToast({ type: "ok", message: `Admin "${username}" removed.` }); loadAdmins(); }
     else appToast({ type: "err", message: d.error || "Could not remove admin." });
   };
 
@@ -6877,12 +6922,20 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
     if (!addForm.username.trim()) { setAddMsg({ type: "err", text: "Username is required." }); return; }
     if (!addForm.password) { setAddMsg({ type: "err", text: "Password is required." }); return; }
     if (addForm.password.length < 8) { setAddMsg({ type: "err", text: "Password must be at least 8 characters." }); return; }
+    // Re-confirm the actor's password before mutating the admin pool.
+    const currentPass = await appConfirm({
+      title: `Add admin "${addForm.username.trim()}"?`,
+      message: "Enter your current password to confirm.",
+      confirmText: "Add admin",
+      passwordPrompt: true,
+    });
+    if (!currentPass) return;
     setAddLoading(true); setAddMsg(null);
     try {
       const r = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ action: "add-admin", username: addForm.username.trim(), password: addForm.password, name: addForm.name.trim() || undefined }),
+        body: JSON.stringify({ action: "add-admin", username: addForm.username.trim(), password: addForm.password, name: addForm.name.trim() || undefined, currentPass }),
       });
       const d = await r.json();
       if (r.status === 401) { onLogout(); return; }
@@ -6909,12 +6962,23 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
   const submitReset = async () => {
     if (!resetPw) { setResetMsg({ type: "err", text: "Password is required." }); return; }
     if (resetPw.length < 8) { setResetMsg({ type: "err", text: "Must be at least 8 characters." }); return; }
+    // Re-confirm the actor's current password before resetting another admin's
+    // password — without this, a stolen 8-h bearer is enough to lock the
+    // other admin out and take over.
+    const currentPass = await appConfirm({
+      title: `Reset password for "${resetTarget.username}"?`,
+      message: "All sessions for all admins will be invalidated.\n\nEnter your current password to confirm.",
+      confirmText: "Reset password",
+      danger: true,
+      passwordPrompt: true,
+    });
+    if (!currentPass) return;
     setResetLoading(true); setResetMsg(null);
     try {
       const r = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ action: "reset-admin-password", id: resetTarget.id, newPassword: resetPw }),
+        body: JSON.stringify({ action: "reset-admin-password", id: resetTarget.id, newPassword: resetPw, currentPass }),
       });
       const d = await r.json();
       if (r.status === 401) { onLogout(); return; }

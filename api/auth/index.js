@@ -13,6 +13,42 @@ import { createHash, timingSafeEqual } from "crypto";
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_TTL = 15 * 60; // seconds
 
+// ── Auth audit trail ─────────────────────────────────────────────────────────
+// Admin-management actions (add / remove / reset password / change credentials)
+// write to a dedicated Redis list so an attacker who hijacks a single token
+// cannot quietly modify the admin pool. Order audit log lives on each order;
+// auth events live here. Keep the last 500 entries.
+const AUTH_AUDIT_KEY = "tocs:auth-audit";
+async function writeAuthAudit(entry) {
+  if (!KV_AVAILABLE) return;
+  try {
+    const prev = (await kvGet(AUTH_AUDIT_KEY)) || [];
+    const next = [...prev, { ts: new Date().toISOString(), ...entry }].slice(-500);
+    await kvSet(AUTH_AUDIT_KEY, next);
+  } catch (e) {
+    console.error("[auth-audit] persist failed:", e.message);
+  }
+}
+
+// Resolve the actor (the admin who owns the bearer token) AND verify they've
+// supplied their current password. Returns { ok: true, actor } on success or
+// { ok: false, status, error } on any failure. The "current password" gate
+// stops a stolen 8-h bearer in localStorage from being enough to add/remove
+// admins or reset passwords on its own.
+async function verifyActor(req, cfg, suppliedPass) {
+  const token = extractToken(req);
+  const verified = await verifyToken(token);
+  if (!verified) return { ok: false, status: 401, error: "Not authenticated." };
+  if (!suppliedPass) return { ok: false, status: 400, error: "Confirm your current password to perform this action." };
+  const admins = getAdmins(cfg);
+  const actor = admins.find(a => a.username === verified.user);
+  if (!actor) return { ok: false, status: 404, error: "Your admin account was not found." };
+  if (!(await verifyPassword(actor.password || "", suppliedPass))) {
+    return { ok: false, status: 400, error: "Current password is incorrect." };
+  }
+  return { ok: true, actor };
+}
+
 // Constant-time string comparison via SHA-256 digests — prevents timing
 // attacks on credential validation. Length differences are masked because
 // both inputs are hashed to a fixed 32-byte digest before comparison.
@@ -145,17 +181,17 @@ export default async function handler(req, res) {
 
   // ── POST action=add-admin ─────────────────────────────────────────────────
   if (action === "add-admin") {
-    const token = extractToken(req);
-    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
-
-    const { username, password, name } = body;
+    const { username, password, name, currentPass } = body;
     if (!username?.trim()) return res.status(400).json({ error: "Username is required." });
     if (!password) return res.status(400).json({ error: "Password is required." });
     if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
 
     const cfg = await readConfig();
-    const admins = getAdmins(cfg);
+    // Actor must re-confirm their own password before mutating the admin pool.
+    const actorCheck = await verifyActor(req, cfg, currentPass);
+    if (!actorCheck.ok) return res.status(actorCheck.status).json({ error: actorCheck.error });
 
+    const admins = getAdmins(cfg);
     if (admins.find(a => a.username.toLowerCase() === username.trim().toLowerCase())) {
       return res.status(409).json({ error: "An admin with that username already exists." });
     }
@@ -169,6 +205,7 @@ export default async function handler(req, res) {
 
     cfg.admins = [...admins, newAdmin];
     await writeConfig(cfg);
+    await writeAuthAudit({ actor: actorCheck.actor.username, ip: clientIp(req), action: "admin-added", target: newAdmin.username, targetId: newAdmin.id });
     return res.status(200).json({
       ok: true,
       admin: { id: newAdmin.id, username: newAdmin.username, name: newAdmin.name },
@@ -177,18 +214,21 @@ export default async function handler(req, res) {
 
   // ── POST action=remove-admin ──────────────────────────────────────────────
   if (action === "remove-admin") {
-    const token = extractToken(req);
-    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
-
-    const { id } = body;
+    const { id, currentPass } = body;
     const cfg = await readConfig();
-    const admins = getAdmins(cfg);
+    const actorCheck = await verifyActor(req, cfg, currentPass);
+    if (!actorCheck.ok) return res.status(actorCheck.status).json({ error: actorCheck.error });
 
+    const admins = getAdmins(cfg);
     if (admins.length <= 1) {
       return res.status(409).json({ error: "Cannot remove the last admin account." });
     }
-    if (!admins.find(a => a.id === id)) {
-      return res.status(404).json({ error: "Admin not found." });
+    const target = admins.find(a => a.id === id);
+    if (!target) return res.status(404).json({ error: "Admin not found." });
+    // Prevent self-removal — pulling out from under your own feet by way of
+    // a single stolen-token vector should not be the easy path.
+    if (target.username === actorCheck.actor.username) {
+      return res.status(409).json({ error: "Cannot remove yourself — have another admin do it." });
     }
 
     cfg.admins = admins.filter(a => a.id !== id);
@@ -197,20 +237,21 @@ export default async function handler(req, res) {
     delete cfg.pass;
 
     await writeConfig(cfg);
+    await writeAuthAudit({ actor: actorCheck.actor.username, ip: clientIp(req), action: "admin-removed", target: target.username, targetId: target.id });
     return res.status(200).json({ ok: true });
   }
 
   // ── POST action=reset-admin-password ─────────────────────────────────────
   if (action === "reset-admin-password") {
-    const token = extractToken(req);
-    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
-
-    const { id, newPassword } = body;
+    const { id, newPassword, currentPass } = body;
     if (!id) return res.status(400).json({ error: "Admin ID is required." });
     if (!newPassword) return res.status(400).json({ error: "New password is required." });
     if (newPassword.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
 
     const cfg = await readConfig();
+    const actorCheck = await verifyActor(req, cfg, currentPass);
+    if (!actorCheck.ok) return res.status(actorCheck.status).json({ error: actorCheck.error });
+
     const admins = getAdmins(cfg);
     const idx = admins.findIndex(a => a.id === id);
     if (idx === -1) return res.status(404).json({ error: "Admin not found." });
@@ -222,6 +263,7 @@ export default async function handler(req, res) {
 
     await writeConfig(cfg);
     await invalidateAllSessions();
+    await writeAuthAudit({ actor: actorCheck.actor.username, ip: clientIp(req), action: "admin-password-reset", target: admins[idx].username, targetId: admins[idx].id });
     return res.status(200).json({ ok: true });
   }
 
@@ -259,6 +301,7 @@ export default async function handler(req, res) {
 
     await writeConfig(cfg);
     await invalidateAllSessions();
+    await writeAuthAudit({ actor: tokenUser, ip: clientIp(req), action: "credentials-changed", target: admins[idx].username, targetId: admins[idx].id, note: newPass ? (newUser ? "username + password" : "password") : "username" });
     return res.status(200).json({ ok: true });
   }
 
