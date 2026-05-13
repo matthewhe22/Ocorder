@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-05-13 — Send-Certificate: require attachment, persist a re-downloadable copy
+
+### Bug
+Two recent OC certificate orders (`TOCS-MOJI6FCL-YLC` and `TOCS-MOI215N8-GR4`) were marked **Issued** in the portal but the applicants received no attachment, and no SharePoint folder was created under the building. Root cause: `SendCertificateModal` labelled the file picker as **"(optional)"** and neither the frontend nor `send-certificate` rejected an empty submission. With zero attachments:
+- the email was delivered with only the cover note (no PDF),
+- the SharePoint upload block was gated by `if (attachments.length > 0)` and skipped, so no `…/<Building>/OC-Certificates/<orderId>/` folder was created,
+- the order was still moved to **Issued**, masking the failure.
+
+### Fix
+- **Frontend (`src/App.jsx`)** — `SendCertificateModal` now requires at least one file before the Send button is enabled; the attachments label is marked required and copy updated from *"optional"* to *"required"*.
+- **Vercel handler (`api/orders/[id]/[action].js`)** — `send-certificate` returns 400 when no attachment is supplied. After a successful send, the first attachment is also persisted to Redis KV (`tocs:certificate:<orderId>`, 365 d TTL) and the order is annotated with `certificateFile` + `certificateContentType` so the file can be re-served when the SharePoint link is missing.
+- **Local server (`OCOrder/server.js`)** — Same attachment-required guard; sent certificate is copied into `uploads/<orderId>-certificate.<ext>` for re-download in dev.
+- **`api/_lib/store.js`** — New `writeCertificate` / `readCertificate` helpers mirror the authority-doc pattern.
+
+### Feature — Admin re-download
+- **`GET /api/orders/:id/certificate`** (Vercel + local) — admin-only endpoint that redirects to the SharePoint view URL when present, otherwise streams the stored copy from Redis KV / `uploads/`.
+- **Frontend** — every issued OC Certificate order now shows a **Download Certificate** button in the Documents section. Clicking it fetches the bytes (or follows the SP redirect) and triggers a browser download.
+
+### Operational note
+The two affected orders pre-date this change and have no stored copy on either store. The fix prevents recurrence and gives admins a one-click re-download for all future issued certificates; for the two existing orders the admin must re-send the certificate (with the PDF attached) to populate the new storage and the SharePoint folder.
+
+---
+
 ## 2026-05-06 — Send-Certificate / Send-Invoice: multipart upload (fix for Vercel 4.5 MB body limit)
 
 ### Bug

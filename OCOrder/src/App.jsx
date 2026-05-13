@@ -3507,6 +3507,38 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
 
+  // Re-download the OC certificate that was previously emailed to the
+  // applicant. The server redirects to the SharePoint copy when available and
+  // falls back to the Redis / uploads copy otherwise. Orders issued before
+  // this feature shipped (no certificateUrl, no certificateFile) will return
+  // a 404 — admin must re-send the certificate to populate storage.
+  const downloadCertificate = async (order) => {
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(order.id)}/certificate`, {
+        headers: { "Authorization": "Bearer " + adminToken },
+        redirect: "follow",
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showAdminToast("err", d.error || (r.status === 404 ? "No stored certificate. Re-send the certificate to enable re-download." : "Could not download certificate."));
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const cd = r.headers.get("Content-Disposition") || "";
+      const filenameMatch = /filename="?([^"]+)"?/i.exec(cd);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filenameMatch?.[1] || `certificate-${order.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      showAdminToast("err", "Network error downloading certificate.");
+    }
+  };
+
   const updateOrderStatus = async (oid, status) => {
     // Capture previous status for rollback
     const prev = data.orders.find(o => o.id === oid)?.status;
@@ -4354,7 +4386,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                             </div>
                           )}
                           {/* Documents section — order summary, authority doc, certificate, invoice */}
-                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.invoiceUrl) && (
+                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.certificateFile || o.status === "Issued" || o.invoiceUrl) && (
                             <div style={{ marginBottom: "1rem" }}>
                               <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Documents</div>
                               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -4374,10 +4406,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     </button>
                                   )
                                 )}
-                                {o.certificateUrl && (
-                                  <a href={o.certificateUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
-                                    <Ic n="doc" s={13}/> Certificate
-                                  </a>
+                                {(o.certificateUrl || o.certificateFile || o.status === "Issued") && (
+                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                                    title={o.certificateUrl ? "Open the certificate from SharePoint" : (o.certificateFile ? "Download the stored copy of the certificate" : "Certificate was issued before re-download was supported — re-send to enable")}
+                                    onClick={() => downloadCertificate(o)}>
+                                    <Ic n="doc" s={13}/> Download Certificate
+                                  </button>
                                 )}
                                 {o.invoiceUrl && (
                                   <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
@@ -5540,6 +5574,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
   const handleSend = async () => {
     if (sending || oversized) return;
+    if (certFiles.length === 0) { setErr("Attach the certificate PDF before sending."); return; }
     setSending(true); setErr("");
     try {
       const fd = new FormData();
@@ -5581,7 +5616,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
         </div>
 
         <div className="form-row" style={{ marginBottom: 0 }}>
-          <label className="f-label">Attachments (PDF, JPG, PNG)</label>
+          <label className="f-label">Attachments (PDF, JPG, PNG) <span style={{ color: "var(--red)" }}>*</span></label>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {certFiles.map((f, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)", fontSize: "0.82rem" }}>
@@ -5596,7 +5631,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
               </div>
             )}
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", fontSize: "0.82rem", color: "var(--forest)" }}>
-              <Ic n="upload" s={16}/> {certFiles.length > 0 ? "Add another file" : "Click to attach files (optional)"}
+              <Ic n="upload" s={16}/> {certFiles.length > 0 ? "Add another file" : "Click to attach the certificate (required)"}
               <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple style={{ display: "none" }} onChange={handleAddFiles}/>
             </label>
           </div>
@@ -5612,7 +5647,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
 
         <div style={{ display: "flex", gap: "10px", marginTop: "1.5rem" }}>
           <button className="btn btn-out" onClick={onClose}>Cancel</button>
-          <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending || oversized}>
+          <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending || oversized || certFiles.length === 0} title={certFiles.length === 0 ? "Attach the certificate PDF before sending" : ""}>
             {sending
               ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
               : <><Ic n="mail" s={15}/> Send Certificate</>

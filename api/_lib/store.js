@@ -330,6 +330,19 @@ export async function readAuthority(orderId) {
   return await kvGet(`tocs:authority:${orderId}`);
 }
 
+// ── Issued-certificate helpers ────────────────────────────────────────────────
+// Stores a copy of the OC certificate / keys order attachment that was emailed
+// to the applicant. Acts as a guaranteed fallback for admin re-download when
+// the SharePoint upload fails or the SP link is unreachable. 365-day TTL —
+// SharePoint is the canonical long-term store; KV is the safety net.
+export async function writeCertificate(orderId, doc) {
+  await kvSet(`tocs:certificate:${orderId}`, doc, 365 * 86400);
+}
+
+export async function readCertificate(orderId) {
+  return await kvGet(`tocs:certificate:${orderId}`);
+}
+
 // ── PIQ poll status helpers ───────────────────────────────────────────────────
 // Stores the result of the most recent /api/orders?action=poll-piq run so the
 // admin UI can surface "last auto-poll succeeded N hours ago" without scraping
