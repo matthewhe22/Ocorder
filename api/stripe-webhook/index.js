@@ -242,10 +242,12 @@ export default async function handler(req, res) {
     });
   }
 
-  // Respond to Stripe before awaiting SP — SP uploads take several seconds and
-  // Stripe retries on slow responses. Vercel will let the function keep running
-  // for a short window after res.end() so the IIFE has a chance to finish.
-  res.status(200).json({ received: true });
+  // Await SP uploads BEFORE responding 200 — Vercel Node serverless does NOT
+  // keep executing past res.end() (there is no waitUntil shim here), and
+  // `tryClaimStripeEvent` already burned the event ID so Stripe won't retry
+  // if we drop the work. Emails (~6 s) and the SP IIFE (~3–5 s) ran in
+  // parallel, so the wait here is usually a small tail — total handler time
+  // stays within Stripe's 30 s timeout and Vercel's 10 s function limit.
   await spPromise;
-  return;
+  return res.status(200).json({ received: true });
 }

@@ -261,7 +261,11 @@ export default async function handler(req, res) {
   // webhook path before the May 13 fix, or any historical SP upload failure).
   // Generates the order summary (and payment receipt for Stripe orders) and
   // uploads alongside the authority doc, then persists the URLs back onto the
-  // order. Safe to call repeatedly — existing files are overwritten in place.
+  // order.
+  //
+  // Idempotent — each doc kind is only uploaded if its URL is not already
+  // populated on the order. A second click on a fully-uploaded order is a
+  // no-op (no audit log noise, no Graph API calls).
   if (action === "save-to-sharepoint" && req.method === "POST") {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
@@ -275,14 +279,30 @@ export default async function handler(req, res) {
     const spConfig = cfg?.sharepoint || {};
     if (!isSharePointEnabled(spConfig)) return res.status(400).json({ error: "SharePoint is not configured." });
 
-    const authDoc = await readAuthority(id).catch(() => null);
-    const includeReceipt = order.payment === "stripe" && order.status === "Paid" && !!order.stripeSessionId;
+    const authDocStored = await readAuthority(id).catch(() => null);
+    const isStripePaid = order.payment === "stripe" && order.status === "Paid" && !!order.stripeSessionId;
+
+    // Per-doc gating — skip anything already in SharePoint.
+    const needSummary = !order.summaryUrl;
+    const needAuth    = !!authDocStored?.data && !order.lotAuthorityUrl;
+    const needReceipt = isStripePaid && !order.receiptUrl;
+
+    if (!needSummary && !needAuth && !needReceipt) {
+      return res.status(200).json({
+        ok: true, alreadyPresent: true,
+        summaryUrl: order.summaryUrl || null,
+        authUrl:    order.lotAuthorityUrl || null,
+        receiptUrl: order.receiptUrl || null,
+        order,
+      });
+    }
 
     let result;
     try {
       result = await uploadOrderDocs(order, spConfig, { generateOrderPdf, generateReceiptPdf }, {
-        authDoc,
-        includeReceipt,
+        authDoc: needAuth ? authDocStored : null,
+        includeSummary: needSummary,
+        includeReceipt: needReceipt,
         stripeSessionId: order.stripeSessionId,
       });
     } catch (e) {
@@ -297,11 +317,15 @@ export default async function handler(req, res) {
     const fo = fresh.orders[fi];
     fo.auditLog = fo.auditLog || [];
     const ts = () => new Date().toISOString();
-    if (authUrl)            { fo.lotAuthorityUrl = authUrl; fo.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: `Manual: ${authUrl}` }); }
-    else if (authDoc?.data) { fo.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: "Manual: " + (errors.auth?.message?.slice(0, 180) || "See Vercel logs") }); }
-    if (summaryUrl) { fo.summaryUrl = summaryUrl; fo.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: `Manual: ${summaryUrl}` }); }
-    else            { fo.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: "Manual: " + (errors.summary?.message?.slice(0, 180) || "See Vercel logs") }); }
-    if (includeReceipt) {
+    if (needAuth) {
+      if (authUrl) { fo.lotAuthorityUrl = authUrl; fo.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: `Manual: ${authUrl}` }); }
+      else         { fo.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: "Manual: " + (errors.auth?.message?.slice(0, 180) || "See Vercel logs") }); }
+    }
+    if (needSummary) {
+      if (summaryUrl) { fo.summaryUrl = summaryUrl; fo.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: `Manual: ${summaryUrl}` }); }
+      else            { fo.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: "Manual: " + (errors.summary?.message?.slice(0, 180) || "See Vercel logs") }); }
+    }
+    if (needReceipt) {
       if (receiptUrl) { fo.receiptUrl = receiptUrl; fo.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: `Manual: ${receiptUrl}` }); }
       else            { fo.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: "Manual: " + (errors.receipt?.message?.slice(0, 180) || "See Vercel logs") }); }
     }
@@ -314,10 +338,13 @@ export default async function handler(req, res) {
   }
 
   // ── GET /api/orders/:id/certificate  (admin — re-download issued cert) ────
-  // Returns the OC certificate that was last emailed to the applicant. Falls
-  // back to Redis KV when the SharePoint link is missing or the SP store has
-  // not yet finished uploading. Token can be passed via ?token= so the link
-  // can be opened directly in a new browser tab.
+  // Two response shapes:
+  //   - SharePoint copy available → 200 { url: "<sp view url>" } (JSON).
+  //     The frontend opens this in a new tab. A 302 here was previously used
+  //     but broke `fetch`-based downloads: browsers follow the cross-origin
+  //     redirect without CORS headers and the response becomes opaque, so the
+  //     admin saw a generic "could not download" toast on the happy path.
+  //   - SharePoint URL missing → stream the bytes from Redis KV.
   if (action === "certificate" && req.method === "GET") {
     const token = extractToken(req) || req.query?.token;
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
@@ -326,10 +353,9 @@ export default async function handler(req, res) {
     const order = data.orders.find(o => o.id === id);
     if (!order) return res.status(404).json({ error: "Order not found." });
 
-    // Preferred: redirect to the SharePoint view URL.
-    if (order.certificateUrl) return res.redirect(302, order.certificateUrl);
+    if (order.certificateUrl) return res.status(200).json({ url: order.certificateUrl });
 
-    if (!KV_AVAILABLE) return res.status(404).json({ error: "No stored certificate for this order." });
+    if (!KV_AVAILABLE) return res.status(503).json({ error: "Document storage is not connected." });
     let stored = null;
     try { stored = await readCertificate(id); } catch (e) {
       return res.status(503).json({ error: "Document storage unavailable: " + e.message });
