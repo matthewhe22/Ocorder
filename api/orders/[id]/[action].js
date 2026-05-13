@@ -147,13 +147,17 @@ async function readRawBody(req) {
 // Accepts both legacy JSON ({ message, attachment: { filename, contentType, data: base64 } })
 // and multipart/form-data (fields: message; file: PDF, one or many) for backward compatibility.
 async function readMessageAndAttachments(req) {
-  const ct = (req.headers["content-type"] || "").toLowerCase();
+  // Preserve the original content-type header — multipart boundaries are
+  // case-sensitive, and mobile Safari sends mixed-case boundaries (e.g.
+  // ----WebKitFormBoundaryXyZ) that won't match the body if we lowercase.
+  const ctRaw = req.headers["content-type"] || "";
+  const ct = ctRaw.toLowerCase();
   if (ct.includes("multipart/form-data")) {
     let buf;
     if (Buffer.isBuffer(req.body)) buf = req.body;
     else if (typeof req.body === "string") buf = Buffer.from(req.body, "utf8");
     else buf = await readRawBody(req).catch(() => Buffer.alloc(0));
-    const { fields, files } = parseMultipart(buf, ct);
+    const { fields, files } = parseMultipart(buf, ctRaw);
     const fileField = files.file || files.attachment;
     const fileList = fileField ? (Array.isArray(fileField) ? fileField : [fileField]) : [];
     return {

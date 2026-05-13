@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-05-13 — Send Certificate failing on mobile Safari with attached file
+
+Sending an OC certificate from an iPhone/iPad rejected the request with `Attach at least one certificate file before sending.` even when a PDF had been attached. The frontend was uploading the file correctly; the Vercel handler dropped it during multipart parsing.
+
+### Root cause
+`readMessageAndAttachments` in `api/orders/[id]/[action].js` lowercased the entire `Content-Type` header before extracting the boundary. Multipart boundaries are case-sensitive, and mobile Safari sends boundaries like `----WebKitFormBoundaryAbCdEf` — once lowercased, the boundary string no longer matched the actual delimiter bytes in the body, so the parser found zero parts and `attachments` came back empty. The backend then 400'd with the "attach at least one" message.
+
+### Fix
+- Keep the raw `Content-Type` value for boundary extraction; only the lowercased copy is used for the `multipart/form-data` type check. The local `OCOrder/server.js` parser was already case-preserving and not affected.
+
+### Verified
+- Reproduced the empty-parse failure with a `----WebKitFormBoundaryAbC` payload and a lowercased CT; same payload with the raw CT now yields `{ fields: { message }, files: { file } }`.
+
+---
+
 ## 2026-05-13 — Local server now mounts the missing Vercel-handler routes
 
 The end-to-end review's last remaining backlog item: `OCOrder/server.js` was missing handlers for `stripe-confirm`, `stripe-cancel`, `stripe-webhook`, `save-to-sharepoint`, `check-piq-payment`, `poll-piq`, and `refresh-piq-payments`. Dev couldn't exercise those flows at all — every PR touching them was deploy-tested only.
