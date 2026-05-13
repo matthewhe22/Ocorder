@@ -16,11 +16,24 @@ import { generateOrderPdf, generateReceiptPdf } from "../_lib/pdf.js";
 // Stripe signature verification.
 export const config = { api: { bodyParser: false } };
 
+// Cap the raw body so an attacker who knows the endpoint URL can't stream
+// unbounded data before the Stripe-signature check fails. Real Stripe events
+// are well under 256 KB; we allow 1 MB as a generous safety margin.
+const RAW_BODY_MAX = 1024 * 1024;
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     let data = "";
-    req.on("data", chunk => { data += chunk; });
-    req.on("end", () => resolve(data));
+    let oversized = false;
+    req.on("data", chunk => {
+      if (oversized) return;
+      data += chunk;
+      if (data.length > RAW_BODY_MAX) {
+        oversized = true;
+        req.destroy();
+        reject(Object.assign(new Error("Stripe webhook payload too large"), { code: "PAYLOAD_TOO_LARGE" }));
+      }
+    });
+    req.on("end", () => { if (!oversized) resolve(data); });
     req.on("error", reject);
   });
 }
@@ -49,8 +62,15 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: "Webhook secret not configured.", code: "WEBHOOK_SECRET_MISSING" });
   }
 
-  // Read raw body for Stripe signature verification
-  const rawBody = await getRawBody(req);
+  // Read raw body for Stripe signature verification (capped at 1 MB).
+  let rawBody;
+  try {
+    rawBody = await getRawBody(req);
+  } catch (e) {
+    if (e?.code === "PAYLOAD_TOO_LARGE") return res.status(413).json({ error: "Payload too large." });
+    console.error("Stripe webhook: getRawBody failed:", e.message);
+    return res.status(400).json({ error: "Failed to read request body." });
+  }
   const sig = req.headers["stripe-signature"];
 
   if (!stripeInUse) {

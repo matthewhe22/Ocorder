@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-05-13 — Medium + Low tier sweep: input validation, race/idempotency, a11y, secret cleanup
+
+Eighteen items from the end-to-end review backlog, batched into one PR.
+
+### Input validation / crash guards
+- **`/track` no longer crashes on missing id** — guard added before `toUpperCase()`; explicit 400 returned when the order reference is empty.
+- **`piqLotId` validator** now requires `Number.isInteger > 0` (was `Number.isFinite`, which accepted floats and 0).
+- **Logo upload validated at `/api/config/settings` POST** — 256 KB cap, `data:image/(png|jpe?g|gif|webp|svg+xml);base64,…` MIME check. Stops an authenticated admin (or stolen-token attacker) planting arbitrary content reflected to every visitor via `/api/config/public`.
+- **Authority-filename ext parser** rewritten to a strict allow-list (`pdf|jpg|jpeg|png`); filenames ending in `.` or with weird characters no longer produce empty / odd extensions.
+
+### Security hardening
+- **Stripe-webhook raw body capped at 1 MB** with early-abort + 413 response, so an attacker who knows the URL can't stream unbounded data before the signature check.
+- **`clientIp` XFF fallback gated behind `TRUST_XFF=1` env var** — non-Vercel deployments no longer silently trust attacker-controllable XFF for rate-limiter buckets.
+- **Email-failure audit entries now use the `note` field for error text**, not the `action` field. Defence in depth against stored-XSS if any UI path ever skipped `esc()` (action is rendered more prominently).
+- **`DEMO_DEFAULT_CONFIG` no longer ships the well-known `Demo@1234` password by default** in production-style configs — sourced from `DEMO_ADMIN_PASS` env var; the literal placeholder only applies on the dedicated demo deployment.
+- **`/api/config/settings` GET no longer pre-fills the well-known default SharePoint folder name** — runtime fallback still applies, but the admin sees an empty field and chooses explicitly.
+
+### Correctness / race
+- **`POST /api/orders` now awaits `spPromise` before responding** — same Vercel "no post-response execution" fix as the webhook (PR #36). Without this, audit log entries written after `res.end()` were silently dropped on cold starts.
+- **Graph API timeout** reduced from 8s × 2 sequential (= 16s, > Vercel 10s limit) to **4.5s × 2 = 9s**. A slow Graph response now surfaces as a recoverable upload failure, not a function timeout that kills the surrounding handler.
+- **PIQ lot-prefix normaliser deduplicated** to `normaliseLotNumber()` in `api/_lib/constants.js`. Previously two near-identical inline copies — `api/orders/index.js` (cron) and `[id]/[action].js` (single-order check) — had already drifted on edge cases like "Apartment 5" vs "Apt 5".
+
+### Frontend UX
+- **PIQ payment panel `checkNow` handles 401 and 429** distinctly, surfacing "Session expired" / "Too many PIQ checks" instead of burying them inside the generic `checkResult.error`.
+- **`SettingsTab` now refreshes `pubConfig`** after saving SMTP/email template settings (matches the `StorageTab` pattern), so any pubconfig-mirrored field (logo, sharepointEnabled, ...) updates immediately rather than after a page reload.
+- **`/track` polling adopts `AbortController`** — rapid clicks no longer race on the last-resolved (not last-clicked) result. Also surfaces `429` distinctly.
+- **401 toasts on the remaining admin handlers** — `fetchPiqPollStatus`, `openPiqSync`, `importLotsFromFile`, `loadAdmins` now dispatch `tocs:auth-fail` on a stale-session response instead of silently returning empty data.
+
+### Accessibility
+- **`aria-hidden="true"` on every decorative spinner** (~17 sites). Screen readers no longer announce the animated glyph; the surrounding "Saving…" / "Sending…" / "Processing…" text remains the announced state.
+
+---
+
 ## 2026-05-13 — High-tier hotfix: rate limits, TLS hardening, PIQ idempotency, status enum dedup
 
 Eleven High-tier findings from the end-to-end review pass, all landed in a single PR.

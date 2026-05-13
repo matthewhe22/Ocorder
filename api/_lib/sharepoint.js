@@ -44,8 +44,13 @@ export async function uploadToSharePoint(filename, contentType, base64Data, spCo
 
   if (!(tenantId && clientId && clientSecret && siteId)) return null;
 
-  // Timeout for each Graph API HTTP call (ms). Must leave room within Vercel's 10 s limit.
-  const GRAPH_TIMEOUT_MS = 8000;
+  // Timeout for each Graph API HTTP call (ms). The PUT and createLink calls
+  // are sequential — at 8000 ms each (16 s total) we'd routinely exceed
+  // Vercel's 10 s function limit even on the happy-ish path. Tighten each to
+  // 4500 ms (9 s combined worst case) so a slow Graph response surfaces as a
+  // controllable upload failure, not a function timeout that kills the
+  // surrounding handler.
+  const GRAPH_TIMEOUT_MS = 4500;
 
   try {
     // Get OAuth2 token via client credentials (calls login.microsoftonline.com — fast ~1 s)
