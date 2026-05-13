@@ -8,6 +8,12 @@ import nodemailer from "nodemailer";
 // Shared with the Vercel handlers so the local dev server can't drift from
 // production on what counts as a valid order status.
 import { VALID_STATUSES } from "../api/_lib/constants.js";
+// Vercel handlers, mounted via callVercelHandler() so the local dev server
+// can exercise Stripe / SharePoint / PIQ flows end-to-end without duplicating
+// ~1500 lines of handler logic. Set LOCAL_KV_DIR (or REDIS_URL) so the
+// shared _lib/store.js persists state between calls.
+import orderActionHandler from "../api/orders/[id]/[action].js";
+import stripeWebhookHandler from "../api/stripe-webhook/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST        = path.join(__dirname, "dist");
@@ -668,6 +674,66 @@ function readMultipart(req) {
     });
     req.on("error", reject);
   });
+}
+
+// ── Vercel-handler adapter ────────────────────────────────────────────────────
+// Lets the local dev server route directly into the Vercel serverless
+// handlers (api/orders/[id]/[action].js, api/stripe-webhook/index.js, …) so
+// the same code path runs locally and on Vercel — and we don't have to
+// duplicate ~1500 lines of order/Stripe/PIQ/SP logic into server.js (which
+// caused drift in the past).
+//
+// The Vercel runtime exposes `res.status().json()` / `res.send()` /
+// `res.redirect()` and pre-parses `req.body` + `req.query` for filesystem-
+// routed dynamic segments. We mimic that shape here.
+//
+// `opts.query` carries the path-derived segments (`{ id, action }`) plus any
+// querystring params. `opts.parseBody` controls whether the JSON body is
+// pre-parsed (false for stripe-webhook, which reads the raw stream itself).
+async function callVercelHandler(handler, req, res, opts = {}) {
+  // Shim res.status / res.json / res.send / res.redirect on the Node res.
+  if (typeof res.status !== "function") {
+    res.status = (code) => { res.statusCode = code; return res; };
+  }
+  if (typeof res.json !== "function") {
+    res.json = (obj) => {
+      if (!res.headersSent) res.setHeader("Content-Type", "application/json");
+      const buf = Buffer.from(JSON.stringify(obj));
+      if (!res.getHeader("Content-Length")) res.setHeader("Content-Length", buf.length);
+      res.end(buf);
+      return res;
+    };
+  }
+  if (typeof res.send !== "function") {
+    res.send = (data) => {
+      if (Buffer.isBuffer(data) || typeof data === "string") res.end(data);
+      else res.end(JSON.stringify(data));
+      return res;
+    };
+  }
+  if (typeof res.redirect !== "function") {
+    res.redirect = (codeOrUrl, maybeUrl) => {
+      const code = typeof codeOrUrl === "number" ? codeOrUrl : 302;
+      const url  = typeof codeOrUrl === "number" ? maybeUrl : codeOrUrl;
+      res.writeHead(code, { Location: url });
+      res.end();
+      return res;
+    };
+  }
+  // Parse JSON body unless the caller opted out (stripe-webhook needs raw).
+  if (opts.parseBody !== false && (req.method === "POST" || req.method === "PUT" || req.method === "PATCH")) {
+    const ct = (req.headers["content-type"] || "").toLowerCase();
+    if (!ct.includes("multipart/form-data")) {
+      // readBody handles the size cap + parse-failure path.
+      req.body = await readBody(req, res);
+      if (res.headersSent) return; // body too large; already responded
+    }
+  }
+  // Compose req.query from URL search params + the path-derived segments.
+  const urlObj = new URL("http://x" + req.url);
+  const search = Object.fromEntries(urlObj.searchParams);
+  req.query = { ...search, ...(opts.query || {}) };
+  return handler(req, res);
 }
 
 // ── Response helpers ──────────────────────────────────────────────────────────
@@ -1989,6 +2055,61 @@ async function handler(req, res) {
     return json(res, 200, { ok: true });
   }
 
+  // ── Vercel-handler delegated routes ───────────────────────────────────────
+  // Each route below delegates to the same handler that runs on Vercel, via
+  // callVercelHandler(). Local-dev state persistence requires either
+  // REDIS_URL or LOCAL_KV_DIR to be set; without either, the Vercel handlers
+  // operate on the seed data only (their reads return defaults, writes throw).
+
+  // POST /api/orders/:id/save-to-sharepoint  (admin — retroactive SP archival)
+  const saveToSpMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/save-to-sharepoint$/);
+  if (saveToSpMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: saveToSpMatch[1], action: "save-to-sharepoint" },
+    });
+  }
+
+  // POST /api/orders/:id/check-piq-payment  (admin — manual PIQ poll)
+  const checkPiqMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/check-piq-payment$/);
+  if (checkPiqMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: checkPiqMatch[1], action: "check-piq-payment" },
+    });
+  }
+
+  // POST /api/orders/:id/stripe-confirm  (public — browser callback)
+  const stripeConfirmMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/stripe-confirm$/);
+  if (stripeConfirmMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: stripeConfirmMatch[1], action: "stripe-confirm" },
+    });
+  }
+
+  // POST /api/orders/:id/stripe-cancel  (public — browser cancel callback)
+  const stripeCancelMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/stripe-cancel$/);
+  if (stripeCancelMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: stripeCancelMatch[1], action: "stripe-cancel" },
+    });
+  }
+
+  // POST /api/stripe-webhook  (Stripe-signed; reads raw body via getRawBody)
+  if (urlPath === "/api/stripe-webhook" && method === "POST") {
+    return callVercelHandler(stripeWebhookHandler, req, res, { parseBody: false });
+  }
+
+  // GET /api/orders?action=poll-piq  (cron-triggered manual PIQ poll)
+  // GET /api/orders?action=poll-piq-status  (admin — last cron summary)
+  // GET /api/orders?action=refresh-piq-payments  (admin — bulk re-poll)
+  // These all delegate to api/orders/index.js (not the [action] handler).
+  if (urlPath === "/api/orders" && method === "GET") {
+    const action = new URL("http://x" + req.url).searchParams.get("action");
+    if (action === "poll-piq" || action === "poll-piq-status" || action === "refresh-piq-payments") {
+      const { default: ordersIndexHandler } = await import("../api/orders/index.js");
+      return callVercelHandler(ordersIndexHandler, req, res, { parseBody: false });
+    }
+  }
+
   // ── 405 / 404 for unmatched /api/ routes ──────────────────────────────────
   if (urlPath.startsWith("/api/")) {
     // Return 405 if the path is known but the method is wrong
@@ -2006,6 +2127,12 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/notify$/, ["POST"]],
+      // Vercel-handler-delegated routes (mounted via callVercelHandler):
+      [/^\/api\/orders\/[^/]+\/save-to-sharepoint$/, ["POST"]],
+      [/^\/api\/orders\/[^/]+\/check-piq-payment$/,  ["POST"]],
+      [/^\/api\/orders\/[^/]+\/stripe-confirm$/,     ["POST"]],
+      [/^\/api\/orders\/[^/]+\/stripe-cancel$/,      ["POST"]],
+      [/^\/api\/stripe-webhook$/,                     ["POST"]],
       [/^\/api\/lots\/import$/, ["POST"]],
       [/^\/api\/plans$/, ["POST"]],
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
