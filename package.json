@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint": "eslint OCOrder/src api"
   },
   "dependencies": {
     "@azure/identity": "^4.13.0",
@@ -27,6 +28,10 @@
     "@playwright/test": "^1.49.0",
     "@vitest/coverage-v8": "^2.1.8",
     "esbuild": "^0.27.4",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.0.0",
     "vitest": "^2.1.8"
   },
   "engines": {

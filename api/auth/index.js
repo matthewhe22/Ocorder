@@ -5,11 +5,22 @@
 //   "add-admin"          — add a new admin user
 //   "remove-admin"       — remove an admin by id (cannot remove last)
 //   "change-credentials" — update own username/password
-import { readConfig, writeConfig, createSession, validToken, extractToken,
-         invalidateAllSessions, cors, kvGet, kvSet, kvDel, KV_AVAILABLE } from "../_lib/store.js";
+import { readConfig, writeConfig, createSession, validToken, verifyToken, extractToken,
+         invalidateAllSessions, cors, kvGet, kvSet, kvDel, clientIp, KV_AVAILABLE } from "../_lib/store.js";
+import { hashPassword, verifyPassword, needsRehash } from "../_lib/password.js";
+import { createHash, timingSafeEqual } from "crypto";
 
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_TTL = 15 * 60; // seconds
+
+// Constant-time string comparison via SHA-256 digests — prevents timing
+// attacks on credential validation. Length differences are masked because
+// both inputs are hashed to a fixed 32-byte digest before comparison.
+function constantTimeStrEqual(a, b) {
+  const ah = createHash("sha256").update(String(a == null ? "" : a)).digest();
+  const bh = createHash("sha256").update(String(b == null ? "" : b)).digest();
+  return timingSafeEqual(ah, bh);
+}
 
 // Returns the admins array from cfg, migrating from legacy single-user format if needed.
 function getAdmins(cfg) {
@@ -23,14 +34,6 @@ function getAdmins(cfg) {
   }];
 }
 
-// Decode token payload without re-validating (call only after validToken succeeds).
-function decodeToken(token) {
-  try {
-    const [payload] = token.split(".");
-    return JSON.parse(Buffer.from(payload, "base64url").toString());
-  } catch { return null; }
-}
-
 export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -41,9 +44,11 @@ export default async function handler(req, res) {
 
   // ── POST action=login ──────────────────────────────────────────────────────
   if (action === "login") {
-    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
-      || req.socket?.remoteAddress
-      || "unknown";
+    // Use the shared, XFF-spoofing-resistant clientIp helper. The previous
+    // inline `xff.split(",")[0]` took the *client-supplied* leftmost entry on
+    // Vercel and let an attacker defeat the 15-min brute-force lockout by
+    // rotating the header per request.
+    const ip = clientIp(req);
     const rateLimitKey = `tocs:login:attempts:${ip}`;
 
     if (KV_AVAILABLE) {
@@ -63,12 +68,47 @@ export default async function handler(req, res) {
 
       const cfg = await readConfig();
       const admins = getAdmins(cfg);
-      const match = admins.find(a => a.username.toLowerCase() === user.toLowerCase() && a.password === pass);
+      // Iterate every admin so the response time does not disclose whether
+      // the username or the password was the failing branch. The username
+      // match is constant-time; the password verify is run for every admin
+      // with a non-empty stored password and the result OR'd into match.
+      let match = null;
+      const userLower = String(user).toLowerCase();
+      for (const a of admins) {
+        const userOk = constantTimeStrEqual(String(a.username || "").toLowerCase(), userLower);
+        // verifyPassword handles both scrypt-hashed values and legacy plaintext.
+        const passOk = await verifyPassword(a.password || "", pass);
+        if (userOk && passOk) match = a;
+      }
 
       if (match) {
         if (KV_AVAILABLE) {
           try { await kvDel(rateLimitKey); } catch { /* best-effort */ }
         }
+
+        // Migrate plaintext / weak-cost password to current scrypt hash on
+        // successful login. Best-effort: a write failure must not block the
+        // login response.
+        if (needsRehash(match.password)) {
+          try {
+            const upgraded = await hashPassword(pass);
+            const fresh = await readConfig();
+            const freshAdmins = getAdmins(fresh);
+            const idx = freshAdmins.findIndex(a => a.id === match.id);
+            if (idx !== -1) {
+              freshAdmins[idx] = { ...freshAdmins[idx], password: upgraded };
+              fresh.admins = freshAdmins;
+              // Drop legacy plaintext mirror so it can never be read again.
+              delete fresh.pass;
+              fresh.user = freshAdmins[0].username;
+              await writeConfig(fresh);
+              console.log(`[auth] Upgraded admin ${match.username} password to scrypt hash.`);
+            }
+          } catch (e) {
+            console.error("[auth] Password rehash on login failed:", e.message);
+          }
+        }
+
         const token = await createSession(match.username);
         return res.status(200).json({ token, user: match.username, name: match.name });
       }
@@ -84,8 +124,10 @@ export default async function handler(req, res) {
 
       return res.status(401).json({ error: "Incorrect username or password." });
     } catch (err) {
+      // Log full error server-side; return generic message to avoid leaking
+      // stack traces / dependency error text (Stripe, KV, SMTP) to clients.
       console.error("Login error:", err);
-      return res.status(500).json({ error: "Server error: " + (err.message || "Unknown error") });
+      return res.status(500).json({ error: "Internal server error." });
     }
   }
 
@@ -121,7 +163,7 @@ export default async function handler(req, res) {
     const newAdmin = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       username: username.trim(),
-      password,
+      password: await hashPassword(password),
       name: name?.trim() || username.trim(),
     };
 
@@ -150,9 +192,9 @@ export default async function handler(req, res) {
     }
 
     cfg.admins = admins.filter(a => a.id !== id);
-    // Keep legacy fields in sync with first remaining admin
+    // Keep legacy username field in sync; never persist plaintext password mirror.
     cfg.user = cfg.admins[0].username;
-    cfg.pass = cfg.admins[0].password;
+    delete cfg.pass;
 
     await writeConfig(cfg);
     return res.status(200).json({ ok: true });
@@ -173,10 +215,10 @@ export default async function handler(req, res) {
     const idx = admins.findIndex(a => a.id === id);
     if (idx === -1) return res.status(404).json({ error: "Admin not found." });
 
-    admins[idx] = { ...admins[idx], password: newPassword };
+    admins[idx] = { ...admins[idx], password: await hashPassword(newPassword) };
     cfg.admins = admins;
     cfg.user = cfg.admins[0].username;
-    cfg.pass = cfg.admins[0].password;
+    delete cfg.pass;
 
     await writeConfig(cfg);
     await invalidateAllSessions();
@@ -186,9 +228,12 @@ export default async function handler(req, res) {
   // ── POST action=change-credentials ────────────────────────────────────────
   if (action === "change-credentials") {
     const token = extractToken(req);
-    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+    // Use the cryptographically-verified payload — never trust unverified
+    // base64. verifyToken returns null for any failure, including stale epoch.
+    const verified = await verifyToken(token);
+    if (!verified) return res.status(401).json({ error: "Not authenticated." });
 
-    const tokenUser = decodeToken(token)?.user;
+    const tokenUser = verified.user;
     const { currentPass, newUser, newPass } = body;
 
     const cfg = await readConfig();
@@ -196,20 +241,21 @@ export default async function handler(req, res) {
     const idx = admins.findIndex(a => a.username === tokenUser);
     if (idx === -1) return res.status(404).json({ error: "Your admin account was not found." });
 
-    if (currentPass !== admins[idx].password) {
+    if (!(await verifyPassword(admins[idx].password || "", currentPass || ""))) {
       return res.status(400).json({ error: "Current password is incorrect." });
     }
     if (newPass) {
       if (newPass.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters." });
-      if (newPass === admins[idx].password) return res.status(400).json({ error: "New password must differ from the current password." });
-      admins[idx].password = newPass;
+      if (await verifyPassword(admins[idx].password || "", newPass)) {
+        return res.status(400).json({ error: "New password must differ from the current password." });
+      }
+      admins[idx].password = await hashPassword(newPass);
     }
     if (newUser?.trim()) admins[idx].username = newUser.trim();
 
     cfg.admins = admins;
-    // Keep legacy fields in sync with first admin
     cfg.user = cfg.admins[0].username;
-    cfg.pass = cfg.admins[0].password;
+    delete cfg.pass;
 
     await writeConfig(cfg);
     await invalidateAllSessions();

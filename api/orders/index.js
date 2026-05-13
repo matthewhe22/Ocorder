@@ -1,11 +1,23 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
-import { readData, writeData, readConfig, cors, writeAuthority, KV_AVAILABLE } from "../_lib/store.js";
+import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, KV_AVAILABLE } from "../_lib/store.js";
+import { randomBytes } from "crypto";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
 import { detectPiqPayment } from "../_lib/piq.js";
 import Stripe from "stripe";
+
+// Cold-start assertion: log loudly if CRON_SECRET is missing. Without it, the
+// Vercel cron at 02:30 UTC is rejected with 401 inside the handler below and
+// payments stop syncing automatically. Surfacing this at module load means a
+// single deploy log line is enough to catch the misconfiguration — the user
+// no longer has to wait for a missed run to notice.
+if (!process.env.CRON_SECRET) {
+  console.error("[startup][CRITICAL] CRON_SECRET is not set. The poll-piq cron will be rejected with 401 until CRON_SECRET is configured in Vercel → Settings → Environment Variables. Manual admin 'Check PIQ' will continue to work.");
+} else {
+  console.log("[startup] CRON_SECRET is configured; poll-piq cron auth is wired up.");
+}
 
 async function sendMail(smtp, mailOpts) {
   const transporter = createTransporter(smtp);
@@ -20,12 +32,12 @@ async function applyPiqPayment(order, result, cfg, data) {
   order.piqLevyTotalDue    = result.totalDue    ?? order.piqLevyTotalDue    ?? null;
   order.piqLevyTotalNett   = result.totalNett   ?? (result.paid ? 0 : null);
   if (result.paid) {
-    order.piqPaymentDate      = result.paymentDate      || null;
+    // Use server time as payment date on first confirmation only — never overwrite.
+    if (!order.piqPaymentDate) order.piqPaymentDate = now;
     order.piqPaymentReference = result.paymentReference || null;
-    order.status              = "Paid";
-    const dateStr = result.paymentDate
-      ? new Date(result.paymentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" })
-      : "—";
+    // Don't regress status from "Issued" — keys were already dispatched; just record payment details.
+    if (order.status !== "Issued") order.status = "Paid";
+    const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
     order.auditLog = [...(order.auditLog || []), {
       ts:     now,
       action: "Payment confirmed via PropertyIQ",
@@ -43,7 +55,7 @@ async function applyPiqPayment(order, result, cfg, data) {
           from:    `"TOCS Order Portal" <${toEmail}>`,
           to:      toEmail,
           subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
-          html:    buildPiqPaymentEmailHtml(order, result.paymentDate, result.paymentReference, result.totalPaid),
+          html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
         });
         console.log(`PIQ payment notification sent for order ${order.id}`);
       }
@@ -58,36 +70,96 @@ export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // ── GET /api/orders?action=poll-piq  (called by Vercel cron hourly) ─────────
+  // ── GET /api/orders?action=poll-piq  (called by Vercel cron daily at 02:30 UTC) ─
   // Also accepts admin Bearer token for manual triggers.
   // Scans all keys orders awaiting payment and polls their PIQ lot ledgers.
   if (req.method === "GET" && req.query?.action === "poll-piq") {
-    // Allow either: Vercel cron (no auth needed from internal scheduler)
-    // or admin Bearer token (for manual trigger via admin UI)
+    // Allow either: a valid CRON_SECRET (Vercel cron / scheduled trigger)
+    // or an admin Bearer token (manual trigger via admin UI). When CRON_SECRET
+    // is unset we MUST deny rather than allow — silently allowing cron
+    // requests without a secret would let any unauthenticated caller drive
+    // the PIQ poll loop and potentially flip order statuses.
+    //
+    // Cron secret may arrive as either:
+    //   - x-cron-secret: <secret>            (custom header from external schedulers)
+    //   - authorization: Bearer <secret>     (Vercel cron's native format)
+    // Both are checked with crypto.timingSafeEqual against CRON_SECRET.
     const cronSecret = process.env.CRON_SECRET;
     const reqSecret  = req.headers["x-cron-secret"];
     const token      = req.headers["authorization"]?.replace("Bearer ", "");
     const { validToken } = await import("../_lib/store.js");
+    const { timingSafeEqual, createHash } = await import("crypto");
+    const tsHashEqual = (a, b) => {
+      const ah = createHash("sha256").update(String(a == null ? "" : a)).digest();
+      const bh = createHash("sha256").update(String(b == null ? "" : b)).digest();
+      return timingSafeEqual(ah, bh);
+    };
     const isAdmin = await validToken(token);
-    const isCron  = cronSecret ? reqSecret === cronSecret : true; // if no CRON_SECRET set, allow
-    if (!isAdmin && !isCron) return res.status(401).json({ error: "Not authenticated." });
+    const cronViaHeader = !!(cronSecret && reqSecret && tsHashEqual(reqSecret, cronSecret));
+    const cronViaBearer = !!(cronSecret && token && tsHashEqual(token, cronSecret));
+    const isCron = cronViaHeader || cronViaBearer;
+    if (!isAdmin && !isCron) {
+      if (!cronSecret) {
+        console.error("[CRITICAL] CRON_SECRET not set — refusing cron request. Set CRON_SECRET in the deployment environment.");
+        // Record the rejection so admins can see it via poll-piq-status without
+        // grepping Vercel logs. Best-effort — don't fail the response on KV error.
+        await writePiqPollStatus({
+          ok:        false,
+          trigger:   "cron",
+          error:     "CRON_SECRET not configured — cron request rejected with 401.",
+        }).catch(() => {});
+      }
+      return res.status(401).json({ error: "Not authenticated." });
+    }
 
+    const trigger = isCron ? "cron" : "manual";
     try {
       const cfg  = await readConfig();
       const data = await readData();
 
-      // Find all keys orders that: have piqLotId, are invoice-payment type, and aren't already resolved
+      // Find all keys/invoice orders not yet resolved.
+      // "Issued" is intentionally NOT excluded — if keys were dispatched before payment was confirmed
+      // in the system, the payment must still be detected and recorded for proper reconciliation.
+      // piqLotId is NOT required here — auto-link runs below for orders that are missing it.
       const candidates = data.orders.filter(o =>
         o.orderCategory === "keys" &&
-        o.piqLotId &&
         o.payment === "invoice" &&
-        !["Paid", "Issued", "Cancelled"].includes(o.status)
+        !["Paid", "Cancelled"].includes(o.status)
       );
 
-      let checked = 0, confirmed = 0;
+      // Normalise lot-number strings for matching (strips common prefixes like "Lot ", "Unit ", etc.)
+      const normLotStr = s => String(s || "").trim().toLowerCase()
+        .replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
+
+      let checked = 0, confirmed = 0, linked = 0;
       const errors = [];
 
       for (const order of candidates) {
+        // Auto-link piqLotId from plan data for orders created before PIQ was synced.
+        // Uses only local data — no extra API call needed.
+        if (!order.piqLotId) {
+          const lotNumber = order.items?.[0]?.lotNumber || "";
+          const lotId     = order.items?.[0]?.lotId     || "";
+          const planId    = order.items?.[0]?.planId    || "";
+          const plan      = data.strataPlans?.find(p => p.id === planId);
+          const lots      = plan?.lots || [];
+          const matches   = l =>
+            (lotNumber && normLotStr(l.number) === normLotStr(lotNumber)) ||
+            (lotId     && l.id === lotId);
+          const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
+          if (lot?.piqLotId) {
+            order.piqLotId = lot.piqLotId;
+            order.auditLog = [...(order.auditLog || []), {
+              ts:     new Date().toISOString(),
+              action: "PIQ lot linked",
+              note:   `piqLotId ${lot.piqLotId} auto-linked by poll-piq cron`,
+            }];
+            linked++;
+          }
+        }
+
+        if (!order.piqLotId) continue; // plan not yet synced from PIQ — skip
+
         try {
           const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
           await applyPiqPayment(order, result, cfg, data);
@@ -101,18 +173,101 @@ export default async function handler(req, res) {
         }
       }
 
-      // Only write back when a payment was actually confirmed.  Writing on every
-      // "no payment found" poll creates a race with send-invoice: the cron reads a
-      // stale snapshot (status = "Invoice to be issued"), then writes it back after
-      // send-invoice has already updated the status to "Pending Payment", silently
-      // reverting the change.
-      if (confirmed > 0) {
-        await writeData(data);
+      // Write back if: a payment was confirmed OR new lot IDs were auto-linked.
+      // We still avoid writing on pure "no payment found" runs to prevent a race
+      // with send-invoice: the cron could read a stale snapshot and then overwrite
+      // a concurrent status update made by send-invoice.
+      if (confirmed > 0 || linked > 0) {
+        await writeData(data).catch(err => {
+          console.error("poll-piq: writeData failed:", err.message);
+        });
       }
 
-      return res.status(200).json({ ok: true, checked, confirmed, errors: errors.length ? errors : undefined });
+      // Record this run so the admin UI can show "last auto-poll" status.
+      // ok=false when ANY per-order detectPiqPayment threw (e.g. PIQ down or
+      // credentials rejected) — those orders were not actually checked, so the
+      // banner must surface this even if some other orders succeeded. The
+      // first error message is included as a hint without leaking all of them.
+      await writePiqPollStatus({
+        ok:         errors.length === 0,
+        trigger,
+        checked,
+        confirmed,
+        linked,
+        errorCount: errors.length,
+        firstError: errors[0]?.error || null,
+      }).catch(e => console.error("poll-piq: writePiqPollStatus failed:", e.message));
+
+      return res.status(200).json({ ok: true, checked, confirmed, linked: linked || undefined, errors: errors.length ? errors : undefined });
     } catch (err) {
       console.error("poll-piq error:", err.message);
+      await writePiqPollStatus({
+        ok:      false,
+        trigger,
+        error:   err.message?.substring(0, 240) || "unknown error",
+      }).catch(() => {});
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── GET /api/orders?action=poll-piq-status (admin only) ──────────────────────
+  // Returns the most recent poll-piq run summary plus whether CRON_SECRET is
+  // configured in this deployment. Used by the admin Orders panel so a missed
+  // or broken cron is visible without scraping Vercel logs.
+  if (req.method === "GET" && req.query?.action === "poll-piq-status") {
+    const token = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    // KV value shape: { lastCron?: {...}, lastManual?: {...} }. Returned as
+    // distinct fields so the UI can judge auto-poll freshness against the cron
+    // slot only — a recent manual run must NOT mask a broken Vercel cron.
+    const status = await readPiqPollStatus().catch(() => null);
+    return res.status(200).json({
+      cronSecretConfigured: !!process.env.CRON_SECRET,
+      schedule:             "30 2 * * * (UTC)",
+      lastCronRun:          status?.lastCron   || null,
+      lastManualRun:        status?.lastManual || null,
+    });
+  }
+
+  // ── GET /api/orders?action=refresh-piq-payments  (admin only) ────────────────
+  // Re-polls all already-paid PIQ orders and updates piqPaymentDate/piqPaymentReference
+  // without re-sending emails. Used to correct dates stored before the piq.js bug fix.
+  if (req.method === "GET" && req.query?.action === "refresh-piq-payments") {
+    const token   = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    try {
+      const cfg  = await readConfig();
+      const data = await readData();
+
+      const candidates = data.orders.filter(o =>
+        o.orderCategory === "keys" && o.piqLotId && o.status === "Paid"
+      );
+
+      let refreshed = 0;
+      const errors  = [];
+
+      for (const order of candidates) {
+        try {
+          const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+          if (result.paid) {
+            if (!order.piqPaymentDate) order.piqPaymentDate = new Date().toISOString();
+            if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
+            refreshed++;
+          }
+        } catch (err) {
+          console.error(`refresh-piq-payments: failed for ${order.id}:`, err.message);
+          errors.push({ orderId: order.id, error: err.message?.substring(0, 120) });
+        }
+      }
+
+      if (refreshed > 0) await writeData(data);
+      return res.status(200).json({ ok: true, refreshed, total: candidates.length, errors: errors.length ? errors : undefined });
+    } catch (err) {
+      console.error("refresh-piq-payments error:", err.message);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -132,12 +287,17 @@ export default async function handler(req, res) {
     const spConfig = cfg?.sharepoint || {};
     const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
 
-    // CRIT-1: Generate order ID server-side
-    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+    // CRIT-1: Generate order ID server-side. The suffix uses 8 cryptographically
+    // random bytes (~48 bits of entropy in the encoded form) — 65k× harder to
+    // guess than the previous 3-char Math.random suffix and resistant to
+    // /track endpoint enumeration.
+    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase()
+      + "-" + randomBytes(8).toString("base64url").replace(/[-_]/g, "").slice(0, 10).toUpperCase();
     order.id = serverId;
 
-    // CRIT-2: Validate payment method
+    // CRIT-2: Validate payment method and order category
     if (!["bank", "payid", "stripe", "invoice"].includes(order.payment)) return res.status(400).json({ error: "Invalid payment method." });
+    if (!["oc", "keys"].includes(order.orderCategory)) return res.status(400).json({ error: "Invalid orderCategory — must be 'oc' or 'keys'." });
 
     // CRIT-2: Sanitise total
     order.total = Math.max(0, Number(order.total) || 0);

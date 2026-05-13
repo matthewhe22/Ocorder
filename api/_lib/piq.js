@@ -137,7 +137,7 @@ export async function getPiqLots(cfg, buildingId) {
     const result    = await piqGet(access_token, baseUrl, `/buildings/${buildingId}/lots`, {
       number: PAGE_SIZE,
       page,
-      include: "ownerContact",
+      include: "ownerContact,address",
     });
     const pageData = Array.isArray(result) ? result : (result?.data || []);
     if (!pageData.length) break;
@@ -166,12 +166,49 @@ export async function getPiqLotLedger(cfg, piqLotId) {
 
 // ── Payment detection ─────────────────────────────────────────────────────────
 
+// Field names on a PIQ ledger transaction that can carry the order ID.
+// PIQ tenants vary in shape — some use `details`, others `description` /
+// `narrative`. Reference IDs may live under `reference` or `referenceNumber`.
+const LEVY_TEXT_FIELDS = ["details", "description", "narrative", "memo", "note"];
+const LEVY_REF_FIELDS  = ["reference", "referenceNumber", "referenceNo", "ref"];
+
+// Normalise a PIQ transaction `type` field to a comparable lowercase token.
+// "Special Levy" → "speciallevy", " specialFee " → "specialfee", etc.
+const normType = v => String(v ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+
+// True for any levy-family transaction. Covers "levy", "Special Levy",
+// "specialLevy", "Special Fee", "specialFee" — PIQ tenants categorise
+// admin-raised one-off charges under several of these labels.
+export function isLevyTransaction(t) {
+  const n = normType(t?.type);
+  return n === "levy" || n === "speciallevy" || n === "specialfee";
+}
+
+// Pure matcher: find the levy transaction whose description or reference
+// contains the platform order ID (case-insensitive substring match).
+// Exported for unit testing without mocking the PIQ HTTP client.
+export function findLevyForOrderId(transactions, orderId) {
+  const needle = String(orderId).toLowerCase();
+  if (!needle) return null;
+  return transactions.find(t => {
+    if (!isLevyTransaction(t)) return false;
+    for (const f of LEVY_TEXT_FIELDS) {
+      if (t[f] && String(t[f]).toLowerCase().includes(needle)) return true;
+    }
+    for (const f of LEVY_REF_FIELDS) {
+      if (t[f] && String(t[f]).toLowerCase().includes(needle)) return true;
+    }
+    return false;
+  }) || null;
+}
+
 /**
  * Detect whether a special levy has been paid for a given order.
  *
- * Mechanism: admin creates a Special Levy in PIQ with the platform orderId
- * in the description/reference field. This function searches the lot ledger
- * for a matching levy entry and checks if totalNett <= 0 (fully paid).
+ * Mechanism: admin creates a Special Levy / Special Fee in PIQ with the
+ * platform orderId in the description (or reference) field. This function
+ * searches the lot ledger for a matching levy entry and checks if
+ * totalNett <= 0 (fully paid).
  *
  * If paid, finds the matching receipt transaction for payment date + reference.
  *
@@ -186,15 +223,7 @@ export async function getPiqLotLedger(cfg, piqLotId) {
  */
 export async function detectPiqPayment(cfg, piqLotId, orderId) {
   const transactions = await getPiqLotLedger(cfg, piqLotId);
-  const lowerOrderId = String(orderId).toLowerCase();
-
-  // Find the levy whose description or reference contains the platform order ID
-  const levy = transactions.find(t =>
-    t.type === "levy" && (
-      (t.details   && t.details.toLowerCase().includes(lowerOrderId)) ||
-      (t.reference && t.reference.toLowerCase().includes(lowerOrderId))
-    )
-  );
+  const levy = findLevyForOrderId(transactions, orderId);
 
   if (!levy) return { levyFound: false };
 
@@ -207,20 +236,31 @@ export async function detectPiqPayment(cfg, piqLotId, orderId) {
     return { levyFound: true, paid: false, totalDue, totalNett };
   }
 
-  // Payment confirmed — find the matching receipt entry for date + reference
-  const receipt = transactions.find(t =>
-    t.type === "receipt" &&
-    t.levyId != null &&
-    t.levyId === levy.levyId
-  );
+  // Payment confirmed — find the matching receipt entry for date + reference.
+  // Try multiple levy-linking field patterns since PIQ API shape varies by tenant.
+  const receipt = transactions.find(t => {
+    if (t.type !== "receipt") return false;
+    if (t.levyId   != null && levy.levyId != null && t.levyId   === levy.levyId) return true;
+    if (t.levyId   != null && levy.id     != null && t.levyId   === levy.id)     return true;
+    if (t.invoiceId != null && levy.id    != null && t.invoiceId === levy.id)    return true;
+    if (t.chargeId  != null && levy.id    != null && t.chargeId  === levy.id)    return true;
+    return false;
+  });
+
+  // PIQ ledger does not expose the actual payment date; callers use server time instead.
+  // Try every plausible reference field name across receipt and levy objects.
+  const paymentReference =
+    receipt?.reference            || receipt?.receiptNumber || receipt?.receiptNo ||
+    receipt?.transactionReference || receipt?.transactionRef ||
+    levy.receiptNumber            || levy.paymentReference  || levy.paidReference ||
+    null;
 
   return {
     levyFound:        true,
     paid:             true,
     totalDue,
-    totalPaid:        totalPaid || totalDue, // if totalPaid missing, assume full payment
-    paymentDate:      receipt?.date      || levy.date  || null,
-    paymentReference: receipt?.reference || null,
+    totalPaid:        totalPaid || totalDue,
+    paymentReference,
   };
 }
 

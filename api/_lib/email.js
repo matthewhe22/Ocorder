@@ -54,18 +54,22 @@ function deliveryAddressHtml(sa) {
     </table>`;
 }
 
-export function buildOrderEmailHtml(order, cfg) {
+export function buildOrderEmailHtml(order, cfg, opts = {}) {
   const contact = order.contactInfo || {};
   const items = order.items || [];
   let date = "—";
   try { date = new Date(order.date).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "long", timeStyle: "short" }); } catch {}
   const payment = formatPayment(order.payment);
+  const subtitle = opts.isAmendment ? "Order Amendment Notification" : "New Order Notification";
+  const intro = opts.isAmendment
+    ? "An existing order has been amended. The updated details are below."
+    : (cfg?.emailTemplate?.adminNotificationIntro || "A new order has been placed.");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="${WRAPPER}">
-    <div style="${BANNER}"><h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1><p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">New Order Notification</p></div>
+    <div style="${BANNER}"><h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1><p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">${esc(subtitle)}</p></div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">${esc(cfg?.emailTemplate?.adminNotificationIntro || "A new order has been placed.")}</p>
+      <p style="margin-top:0;">${esc(intro)}</p>
       <h3 style="${HEADING}">Order Details</h3>
       <table style="${TBL}">
         <tr><td style="${LABEL_W}">Order ID</td><td style="${VAL}font-weight:600;">${esc(order.id)}</td></tr>
@@ -122,7 +126,7 @@ function paymentDetailsHtml(order, pd) {
   return "";
 }
 
-export function buildCustomerEmailHtml(order, cfg) {
+export function buildCustomerEmailHtml(order, cfg, opts = {}) {
   const contact = order.contactInfo || {};
   const items = order.items || [];
   const pd = cfg.paymentDetails || {};
@@ -131,6 +135,7 @@ export function buildCustomerEmailHtml(order, cfg) {
   const buildingName = items[0]?.planName || "";
   const lotNumber = items[0]?.lotNumber || "";
   const orderDesc = buildingName && lotNumber ? ` for ${buildingName} - ${lotNumber}` : buildingName ? ` for ${buildingName}` : "";
+  const subtitle = opts.isAmendment ? "Order Amendment Confirmation" : "Order Confirmation";
   const shippingRow = order.selectedShipping?.name
     ? `<tr><td colspan="2" style="padding:8px 12px;font-size:0.78rem;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;font-size:0.78rem;color:#666;">$${(order.selectedShipping.cost||0).toFixed(2)}</td></tr>`
     : "";
@@ -146,15 +151,17 @@ export function buildCustomerEmailHtml(order, cfg) {
   <div style="${WRAPPER}">
     <div style="${BANNER}">
       <h1 style="color:#fff;margin:0;font-size:1.35rem;">TOCS Order Portal</h1>
-      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Confirmation</p>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">${esc(subtitle)}</p>
     </div>
     <div style="padding:32px;">
       <p style="margin-top:0;">Dear ${esc(contact.name)||"Applicant"},</p>
-      <p>${isPending
-        ? `Your ${orderType}${orderDesc} has been received and is <strong>awaiting payment</strong>. Processing will begin once payment is confirmed.`
-        : order.orderCategory === "keys"
-          ? esc(cfg?.emailTemplate?.keysOrderConfirmation || "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.").replace("{orderDesc}", orderDesc)
-          : `Your ${orderType}${orderDesc} has been received and your ${orderType} will be processed within the stated turnaround time.`
+      <p>${opts.isAmendment
+        ? `Your ${orderType}${orderDesc} has been <strong>updated</strong>. The amended details and new total are below — your order reference number stays the same.`
+        : isPending
+          ? `Your ${orderType}${orderDesc} has been received and is <strong>awaiting payment</strong>. Processing will begin once payment is confirmed.`
+          : order.orderCategory === "keys"
+            ? esc(cfg?.emailTemplate?.keysOrderConfirmation || "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.").replace("{orderDesc}", orderDesc)
+            : `Your ${orderType}${orderDesc} has been received and your ${orderType} will be processed within the stated turnaround time.`
       }</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:12px 16px;border-radius:4px;margin:20px 0;">
         <div style="font-size:0.78rem;color:#666;margin-bottom:4px;">Your order reference number</div>
@@ -191,7 +198,7 @@ export function buildCustomerEmailHtml(order, cfg) {
 
 /**
  * Admin notification email sent when PIQ confirms payment of a special levy.
- * Triggered by both the hourly cron poll and the manual "Check Now" button.
+ * Triggered by both the daily cron poll and the manual "Check Now" button.
  *
  * @param {object} order            - the order object from Redis
  * @param {string|null} paymentDate - ISO date string from PIQ receipt transaction

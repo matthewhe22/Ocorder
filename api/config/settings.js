@@ -196,15 +196,27 @@ export default async function handler(req, res) {
         name:          s.name || `Schedule ${s.id}`,
       }));
 
-      // Map PIQ lots → platform lot format
-      const lots = rawLots.map(l => ({
-        piqLotId:   l.id,
-        lotNumber:  l.lotNumber  || l.number || String(l.id),
-        unitNumber: l.unitNumber || "",
-        ownerName:  l.ownerContact?.name || l.name || "",
-      }));
+      // Map PIQ lots → platform lot format.
+      // Address fields may be top-level scalars OR nested under l.address / l.propertyAddress.
+      const lots = rawLots.map(l => {
+        const addr = l.address || l.propertyAddress || l.physicalAddress || {};
+        return {
+          piqLotId:     l.id,
+          lotNumber:    l.lotNumber  || l.lot    || l.number || String(l.id),
+          unitNumber:   l.unitNumber || l.unit   || addr.unitNumber || addr.unit || "",
+          streetNumber: l.streetNumber || l.houseNumber || l.streetNo ||
+                        addr.streetNumber || addr.houseNumber || addr.streetNo || "",
+          streetName:   l.streetName || l.street ||
+                        addr.streetName || addr.street || "",
+          ownerName:    l.ownerContact?.name || l.name || "",
+        };
+      });
 
-      const response = { ok: true, piqBuildingId, schedules, lots };
+      // Include raw first lot for debugging — lets admin inspect what fields PIQ actually returns
+      // so field-name mapping can be verified/corrected without guessing.
+      const _debugRawLot = rawLots.length > 0 ? rawLots[0] : null;
+
+      const response = { ok: true, piqBuildingId, schedules, lots, _debugRawLot };
       if (buildingName    !== undefined) response.buildingName    = buildingName;
       if (buildingAddress !== undefined && buildingAddress !== null) response.address = buildingAddress;
       return res.status(200).json(response);

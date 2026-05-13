@@ -4,3 +4,28 @@ OCOrder/node_modules/
 OCOrder/dist/
 .worktrees/
 .vercel
+
+# Secrets & environment files — never commit
+.env
+.env.*
+!.env.example
+
+# Live data / config (commit only sanitised samples)
+config.json
+data.json
+demo-config.json.local
+demo-data.json.local
+
+# Local test fixtures (created by Playwright webServer + smoke probes)
+test-data.json
+test-config.json
+test-uploads/
+test-results/
+playwright-report/
+
+# Local backups created by maintenance scripts
+*.bak.*
+*.bak
+
+# OS / editor cruft
+.DS_Store
