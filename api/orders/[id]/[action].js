@@ -429,6 +429,14 @@ export default async function handler(req, res) {
     if (!order) return res.status(404).json({ error: "Order not found." });
 
     if (order.certificateUrl) {
+      // Mirror /authority — validate the stored URL against the SharePoint
+      // host allow-list before exposing it to the admin client. Without this,
+      // a corrupted certificateUrl would become a phishing primitive when
+      // the frontend opens it in a new tab.
+      if (!isAllowedRedirectHost(order.certificateUrl)) {
+        console.error(`Certificate URL blocked — non-allowed host: ${order.certificateUrl}`);
+        return res.status(502).json({ error: "Stored certificate URL is not on an allowed host." });
+      }
       res.setHeader("X-Doc-Source", "sharepoint");
       return res.status(200).json({ url: order.certificateUrl });
     }

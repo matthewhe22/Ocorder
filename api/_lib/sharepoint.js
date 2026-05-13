@@ -167,18 +167,23 @@ export function pushAuditOnce(auditLog, action, note, withinMs = 24 * 60 * 60 * 
 // `planName` submitted at order creation, or an authority-doc filename) write
 // files outside the configured base folder — so any segment that ends up
 // empty after sanitisation falls back to the supplied default.
-// Unicode format / bidi / zero-width range to strip. Targets RTL-override
-// (U+202E) and zero-width joiners that render confusingly in admin views and
-// audit-log surfaces. Built as an explicit-escape RegExp so the source file
-// stays ASCII-only.
+// Unicode format / bidi / zero-width / invisible chars to strip. Targets:
+//   - RTL override (U+202E) and zero-width joiners — UI/audit-log spoofs
+//   - Soft hyphen (U+00AD) — classic invisible-in-rendered-text spoof
+//   - Unicode "Tags" plane (U+E0000–U+E007F) — invisible by design
+// Built as an explicit-escape RegExp so the source file stays ASCII-only.
+// Note: the Tags block is in a supplementary plane (above U+FFFF) so we use
+// the `u` flag and a surrogate-pair-aware range.
 const BIDI_FORMAT_CHARS_RE = new RegExp(
   "[" +
-  "\\u200B-\\u200F" + // zero-width space / non-joiner / joiner / LRM / RLM
-  "\\u202A-\\u202E" + // LRE / RLE / PDF / LRO / RLO
-  "\\u2066-\\u2069" + // LRI / RLI / FSI / PDI
-  "\\uFEFF" +         // zero-width no-break space
+  "\\u00AD" +          // soft hyphen
+  "\\u200B-\\u200F" +  // zero-width space / non-joiner / joiner / LRM / RLM
+  "\\u202A-\\u202E" +  // LRE / RLE / PDF / LRO / RLO
+  "\\u2066-\\u2069" +  // LRI / RLI / FSI / PDI
+  "\\uFEFF" +          // zero-width no-break space
+  "\\u{E0000}-\\u{E007F}" + // Tags plane (invisible language tags + cancellable chars)
   "]",
-  "g",
+  "gu",
 );
 
 function sanitiseSegment(raw, fallback) {

@@ -3519,16 +3519,30 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // Parse a Content-Disposition filename. Handles the modern RFC 5987 form
   // (`filename*=UTF-8''…`) which SharePoint and some Graph endpoints emit
   // for non-ASCII filenames, and falls back to the legacy `filename="…"`.
+  //
+  // Both forms are sanitised before return: path separators (`/`, `\`) and
+  // leading dots are stripped so a malicious or malformed server response
+  // can't direct the download to a parent directory. Modern browsers also
+  // sanitise the `download` attribute, but mirroring the server-side
+  // sanitiseSegment policy keeps the chain consistent.
+  const sanitiseFilename = (name) => {
+    if (!name) return null;
+    let s = String(name).replace(/[\\/]/g, "_").replace(/^[.\s]+/, "").trim();
+    return s || null;
+  };
   const parseContentDispositionFilename = (cd) => {
     if (!cd) return null;
     // Prefer filename*= when present — RFC 5987 says it overrides filename=.
     const extMatch = /filename\*=(?:[\w-]+'')?([^;]+)/i.exec(cd);
     if (extMatch?.[1]) {
-      try { return decodeURIComponent(extMatch[1].trim().replace(/^"|"$/g, "")); }
+      try { return sanitiseFilename(decodeURIComponent(extMatch[1].trim().replace(/^"|"$/g, ""))); }
       catch { /* fall through to legacy form */ }
     }
-    const legacy = /filename="?([^";]+)"?/i.exec(cd);
-    return legacy?.[1] || null;
+    // Anchor at the start of the header or after `;` so we don't grab a
+    // half-decoded `filename*=` token by accident when both directives are
+    // present and the RFC 5987 form is malformed.
+    const legacy = /(?:^|;)\s*filename="?([^";]+)"?/i.exec(cd);
+    return sanitiseFilename(legacy?.[1]);
   };
 
   // Stream a binary fetch response to disk via a temporary <a download>.
@@ -4557,7 +4571,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                       : "Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."}
                                     onClick={() => saveOrderToSharePoint(o)}>
                                     {savingToSp === o.id
-                                      ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>
+                                      ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>
                                       : <>↑ Save to SharePoint</>
                                     }
                                   </button>
@@ -6645,11 +6659,17 @@ function StorageTab({ adminToken, setPubConfig }) {
         setSaved(true); setTimeout(() => setSaved(false), 3500);
         // Refresh public config so the "Save to SharePoint" button in the
         // Orders tab appears immediately after enabling SP, without requiring
-        // a full page reload.
+        // a full page reload. Guard against a 500 returning a JSON body that
+        // would otherwise clobber `pubConfig.sharepointEnabled` with undefined.
         try {
-          const pc = await fetch("/api/config/public").then(rr => rr.json());
-          setPubConfig?.(pc);
-        } catch { /* non-fatal */ }
+          const rr = await fetch("/api/config/public");
+          if (rr.ok) {
+            const pc = await rr.json();
+            setPubConfig?.(pc);
+          } else {
+            console.warn("pubConfig refresh failed:", rr.status);
+          }
+        } catch (e) { console.warn("pubConfig refresh error:", e?.message); }
       }
       else { const d = await r.json(); setErr(d.error || "Save failed."); }
     } catch { setErr("Unable to connect to server."); }

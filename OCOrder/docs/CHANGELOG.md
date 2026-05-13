@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-05-13 — Hotfix round: login XFF spoofing, /certificate open-redirect, x-vercel-forwarded-for direction
+
+Findings from a third agent review pass over the previous three rounds.
+
+### High (real defects)
+- **Login rate-limiter still used leftmost-XFF** (`api/auth/index.js`). The tier-3 round updated `clientIp()` in `_lib/store.js` but missed this older inline call site. An attacker could defeat the 10-attempts/15-min lockout by rotating `X-Forwarded-For` per request. Now uses the shared `clientIp()` helper.
+- **`GET /api/orders/:id/certificate` JSON path skipped `isAllowedRedirectHost`** (`api/orders/[id]/[action].js`). The symmetric `/authority` endpoint validated the SharePoint host before exposing the URL; this one didn't. A corrupted `certificateUrl` would have become a phishing primitive when the admin client opened it in a new tab. Now mirrors `/authority`: 502 if the host isn't on the allow-list.
+- **`x-vercel-forwarded-for` direction was wrong** (`api/_lib/store.js`). I used `.pop()` (rightmost) for both XFF and `x-vercel-forwarded-for`, but per Vercel's docs the *leftmost* entry of `x-vercel-forwarded-for` is the originating client (Vercel's own hops, if any, are appended to the right). `.pop()` rate-limited the wrong IP. Now uses `[0]` for `x-vercel-forwarded-for`; `.pop()` remains correct for the XFF fallback.
+
+### Medium
+- **`sanitiseSegment` now strips soft hyphen (U+00AD) and the Unicode Tags plane** (`api/_lib/sharepoint.js`). Soft hyphen is the classic invisible-in-rendered-text spoof; Tags are invisible by design. NFKC normalisation still runs first.
+- **`parseContentDispositionFilename` strips path separators + leading dots** from the parsed filename (`OCOrder/src/App.jsx`) before assigning to `a.download`. Browsers also sanitise this, but mirroring the server-side policy keeps the chain consistent.
+- **Legacy `filename=` regex anchored** to `(?:^|;)\s*filename=` so a malformed `filename*=` token can't be mis-parsed as `filename=`.
+- **`pubConfig` refresh now checks `rr.ok`** (`OCOrder/src/App.jsx`). A 500 from `/api/config/public` no longer clobbers `sharepointEnabled` with `undefined`; logs a `console.warn` on failure so ops can diagnose.
+
+### Low
+- **`aria-hidden="true"` on the new Save-to-SharePoint spinner glyph** — paired with the existing `aria-busy` on the button so screen readers announce "busy" without also reading the decorative glyph.
+
+---
+
 ## 2026-05-13 — Cosmetic / leftover polish round
 
 Cleared the remaining items from the review backlog.

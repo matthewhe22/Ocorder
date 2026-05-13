@@ -572,25 +572,32 @@ export async function rateLimit(key, max, windowSeconds) {
 // Returns the originating client IP for rate-limiting purposes.
 //
 // Selection order:
-//   1. `x-vercel-forwarded-for` — set by Vercel's edge from the TLS-terminated
-//      socket. Clients cannot forge this header at Vercel because the platform
-//      overwrites it on ingress. Preferred on Vercel.
-//   2. The *last* (rightmost) entry of `x-forwarded-for`. On a single-hop
-//      Vercel deploy the rightmost entry is what Vercel inserted itself; any
-//      client-supplied values land further left and must be ignored or the
-//      rate limiter is bypassable by rotating the header.
-//   3. `req.socket?.remoteAddress` — direct-connection fallback (local dev).
+//   1. `x-vercel-forwarded-for` — set by Vercel's edge. Clients cannot forge
+//      this header at Vercel (the platform overwrites it on ingress).
+//      Vercel populates it such that the **leftmost** entry is the
+//      originating client (Vercel's own hops, if any, are appended right of
+//      that), so we take `[0]`.
+//   2. The **rightmost** entry of `x-forwarded-for`. Outside of Vercel
+//      `x-vercel-forwarded-for` is absent; XFF is the next-most-trustworthy
+//      signal but only when *something* trustworthy appended Vercel-side.
+//      A bare client-supplied XFF (no proxy hop) would still be spoofable
+//      here — local dev / non-Vercel deployments should rely on a proxy
+//      that appends its own IP rightmost.
+//   3. `req.socket?.remoteAddress` — direct-connection fallback.
 //
 // Naive `xff.split(",")[0]` (the previous implementation) returned the
 // *client-supplied* leftmost entry on Vercel and was trivially spoofable.
 export function clientIp(req) {
   const vercel = req.headers["x-vercel-forwarded-for"];
   if (typeof vercel === "string" && vercel.trim()) {
-    return vercel.split(",").pop().trim();
+    // Leftmost = originating client per Vercel's documented format.
+    const first = vercel.split(",")[0]?.trim();
+    if (first) return first;
   }
   const xff = req.headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.trim()) {
-    return xff.split(",").pop().trim();
+    const last = xff.split(",").pop()?.trim();
+    if (last) return last;
   }
   return req.socket?.remoteAddress || "unknown";
 }
