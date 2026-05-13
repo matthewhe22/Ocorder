@@ -218,6 +218,20 @@ async function readMessageAndAttachments(req) {
   };
 }
 
+// ── Redirect target allow-list ────────────────────────────────────────────────
+// Limits the hosts the authority/cert 302 redirects can point at so a corrupted
+// or forged URL on the order cannot turn the portal into an open redirector.
+// SharePoint Online + Microsoft Graph share-link domains are the only legitimate
+// targets here; anything else is treated as a misconfiguration.
+const ALLOWED_REDIRECT_HOSTS = /^(?:[a-z0-9-]+\.)*(?:sharepoint\.com|onmicrosoft\.com|microsoft\.com)$/i;
+function isAllowedRedirectHost(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "https:") return false;
+    return ALLOWED_REDIRECT_HOSTS.test(u.hostname);
+  } catch { return false; }
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   cors(res, req);
@@ -235,9 +249,15 @@ export default async function handler(req, res) {
     if (!order) return res.status(404).json({ error: "Order not found." });
     if (!order.lotAuthorityFile && !order.lotAuthorityUrl) return res.status(404).json({ error: "No authority document for this order." });
 
-    // Preferred: redirect to SharePoint URL (opens directly in browser)
+    // Preferred: redirect to SharePoint URL (opens directly in browser).
+    // Validate the host against a fixed allow-list so a corrupted / forged
+    // value cannot turn the portal into an open-redirect / phishing chain.
     if (order.lotAuthorityUrl) {
-      return res.redirect(302, order.lotAuthorityUrl);
+      if (isAllowedRedirectHost(order.lotAuthorityUrl)) {
+        return res.redirect(302, order.lotAuthorityUrl);
+      }
+      console.error(`Authority redirect blocked — non-allowed host: ${order.lotAuthorityUrl}`);
+      return res.status(502).json({ error: "Stored authority URL is not on an allowed host." });
     }
 
     // Fallback: serve from Redis KV
@@ -269,6 +289,15 @@ export default async function handler(req, res) {
   if (action === "save-to-sharepoint" && req.method === "POST") {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    // PDF generation is CPU-bound and each call hits the Graph API; rate-limit
+    // to stop a script (or a leaked token) from amplifying into a function /
+    // Graph-quota DoS.
+    const rl = await rateLimit(`sp-save:${clientIp(req)}`, 10, 60);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({ error: "Too many SharePoint saves — please wait a moment and try again." });
+    }
 
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
@@ -311,25 +340,39 @@ export default async function handler(req, res) {
     }
     const { authUrl, summaryUrl, receiptUrl, errors } = result;
 
-    const fresh = await readData();
-    const fi = fresh.orders.findIndex(o => o.id === id);
-    if (fi === -1) return res.status(404).json({ error: "Order vanished mid-upload." });
-    const fo = fresh.orders[fi];
-    fo.auditLog = fo.auditLog || [];
-    const ts = () => new Date().toISOString();
-    if (needAuth) {
-      if (authUrl) { fo.lotAuthorityUrl = authUrl; fo.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: `Manual: ${authUrl}` }); }
-      else         { fo.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: "Manual: " + (errors.auth?.message?.slice(0, 180) || "See Vercel logs") }); }
+    // Wrap the audit-log write in the order lock so a concurrent amend / status
+    // / piq / send-cert can't clobber the URLs or entries we just produced.
+    let finalOrder;
+    try {
+      const lockRes = await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const fi = fresh.orders.findIndex(o => o.id === id);
+        if (fi === -1) return { missing: true };
+        const fo = fresh.orders[fi];
+        fo.auditLog = fo.auditLog || [];
+        const ts = () => new Date().toISOString();
+        if (needAuth) {
+          if (authUrl) { fo.lotAuthorityUrl = authUrl; fo.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: `Manual: ${authUrl}` }); }
+          else         { fo.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: "Manual: " + (errors.auth?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
+        if (needSummary) {
+          if (summaryUrl) { fo.summaryUrl = summaryUrl; fo.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: `Manual: ${summaryUrl}` }); }
+          else            { fo.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: "Manual: " + (errors.summary?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
+        if (needReceipt) {
+          if (receiptUrl) { fo.receiptUrl = receiptUrl; fo.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: `Manual: ${receiptUrl}` }); }
+          else            { fo.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: "Manual: " + (errors.receipt?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
+        await writeData(fresh);
+        return { order: fo };
+      });
+      if (lockRes.missing) return res.status(404).json({ error: "Order vanished mid-upload." });
+      finalOrder = lockRes.order;
+    } catch (e) {
+      console.error(`save-to-sharepoint persist failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
     }
-    if (needSummary) {
-      if (summaryUrl) { fo.summaryUrl = summaryUrl; fo.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: `Manual: ${summaryUrl}` }); }
-      else            { fo.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: "Manual: " + (errors.summary?.message?.slice(0, 180) || "See Vercel logs") }); }
-    }
-    if (needReceipt) {
-      if (receiptUrl) { fo.receiptUrl = receiptUrl; fo.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: `Manual: ${receiptUrl}` }); }
-      else            { fo.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: "Manual: " + (errors.receipt?.message?.slice(0, 180) || "See Vercel logs") }); }
-    }
-    await writeData(fresh);
+    const fo = finalOrder;
     return res.status(200).json({
       ok: true,
       authUrl, summaryUrl, receiptUrl,
@@ -346,7 +389,11 @@ export default async function handler(req, res) {
   //     admin saw a generic "could not download" toast on the happy path.
   //   - SharePoint URL missing → stream the bytes from Redis KV.
   if (action === "certificate" && req.method === "GET") {
-    const token = extractToken(req) || req.query?.token;
+    // Bearer header only — the previous ?token= fallback leaked the long-lived
+    // admin token via Vercel access logs, browser history, and the Referer
+    // header on the SP-redirect path. The frontend always passes the token
+    // via the Authorization header.
+    const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const data = await readData();

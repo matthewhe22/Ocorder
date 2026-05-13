@@ -3520,6 +3520,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         method: "POST",
         headers: { "Authorization": "Bearer " + adminToken },
       });
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (r.status === 429) { showAdminToast("err", "Too many SharePoint saves — please wait a moment and try again."); return; }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         showAdminToast("err", d.error || "Save to SharePoint failed.");
@@ -4440,7 +4442,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                               missing an SP summary or, for Stripe, missing the receipt) so admin can
                               repair pre-May-13 webhook orders. */}
                           {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.certificateFile || o.invoiceUrl
-                            || (["Paid", "Issued", "Processing"].includes(o.status) && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)))) && (
+                            || (pubConfig?.sharepointEnabled && ["Paid", "Issued", "Processing"].includes(o.status) && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)))) && (
                             <div style={{ marginBottom: "1rem" }}>
                               <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Documents</div>
                               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -4460,9 +4462,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     </button>
                                   )
                                 )}
-                                {(o.certificateUrl || o.certificateFile || o.status === "Issued") && (
+                                {/* Hide unless we actually have a stored copy. Legacy Issued orders with no
+                                    certificateUrl / certificateFile would hit a 404 — re-send the cert first. */}
+                                {(o.certificateUrl || o.certificateFile) && (
                                   <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
-                                    title={o.certificateUrl ? "Open the certificate from SharePoint" : (o.certificateFile ? "Download the stored copy of the certificate" : "Certificate was issued before re-download was supported — re-send to enable")}
+                                    title={o.certificateUrl ? "Open the certificate from SharePoint" : "Download the stored copy of the certificate"}
                                     onClick={() => downloadCertificate(o)}>
                                     <Ic n="doc" s={13}/> Download Certificate
                                   </button>
@@ -4472,8 +4476,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     <Ic n="invoice" s={13}/> Invoice
                                   </a>
                                 )}
-                                {/* Retroactive SharePoint repair — surface only when SP folder is missing/partial */}
-                                {(!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
+                                {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial */}
+                                {pubConfig?.sharepointEnabled && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
                                   <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer", borderColor: "var(--amber)", color: "var(--amber)" }}
                                     disabled={savingToSp === o.id}
                                     title="Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."

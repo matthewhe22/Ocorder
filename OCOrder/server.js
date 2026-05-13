@@ -1451,8 +1451,8 @@ async function handler(req, res) {
   const certificateMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/certificate$/);
   if (certificateMatch && method === "GET") {
     const orderId = certificateMatch[1];
-    const queryToken = new URL("http://x" + req.url).searchParams.get("token");
-    const token = authHeader(req) || queryToken;
+    // Bearer header only — query-string token would leak via logs/history.
+    const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
     const order = d.orders.find(o => o.id === orderId);
@@ -1840,12 +1840,16 @@ async function handler(req, res) {
     const cfg = readConfig();
     const pd = cfg.paymentDetails || {};
     const pm = cfg.paymentMethods || {};
+    const sp = cfg.sharepoint || {};
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     return json(res, 200, {
       logo: cfg.logo || "",
       stripeEnabled: !!(cfg.stripe?.secretKey),
       bankEnabled:   pm.bankEnabled  !== false,
       payidEnabled:  pm.payidEnabled !== false,
+      // SharePoint archival enabled — boolean only, used by admin UI to gate
+      // the "↑ Save to SharePoint" button on deployments without SP creds.
+      sharepointEnabled: !!(sp.tenantId && sp.clientId && sp.clientSecret && sp.siteId),
       paymentDetails: {
         accountName: pd.accountName || "Top Owners Corporation",
         bsb: pd.bsb || "033-065",
