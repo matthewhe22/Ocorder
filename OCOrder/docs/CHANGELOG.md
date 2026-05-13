@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-05-13 — Local server now mounts the missing Vercel-handler routes
+
+The end-to-end review's last remaining backlog item: `OCOrder/server.js` was missing handlers for `stripe-confirm`, `stripe-cancel`, `stripe-webhook`, `save-to-sharepoint`, `check-piq-payment`, `poll-piq`, and `refresh-piq-payments`. Dev couldn't exercise those flows at all — every PR touching them was deploy-tested only.
+
+### Fix
+- **`callVercelHandler()` adapter** in `OCOrder/server.js` shims `res.status()`/`res.json()`/`res.send()`/`res.redirect()` + `req.body`/`req.query` onto Node's raw HTTP shapes so the existing Vercel handlers run unchanged. `opts.parseBody: false` skips the JSON parse for the Stripe webhook, which reads the raw stream itself.
+- **The 7 missing routes** now delegate directly to `api/orders/[id]/[action].js`, `api/orders/index.js`, or `api/stripe-webhook/index.js` — no duplicated logic, no drift.
+- **`LOCAL_KV_DIR` file-based KV fallback** added to `api/_lib/store.js`: when set, `kvGet/kvSet/kvDel` read/write one JSON file per key under that directory (TTL recorded as a sidecar field, honoured lazily on read). Lets the Vercel handlers persist state locally without Redis. Falls back to the existing no-op semantics when neither `LOCAL_KV_DIR` nor `REDIS_URL` is set.
+
+### Verified
+- `POST /api/orders/:id/save-to-sharepoint` with a fake bearer → 401 (handler rejected token)
+- `POST /api/orders/:id/stripe-cancel` with unknown id → 200 (idempotent path)
+- `POST /api/stripe-webhook` without `STRIPE_WEBHOOK_SECRET` → 503 (signature gate)
+- `GET /api/orders?action=poll-piq-status` without admin token → 401
+
+### Out of scope
+The local server's existing `data.json` / `config.json` (sync `readData/writeData`) and `api/_lib/store.js`'s readData (async) target separate stores by default. Set `REDIS_URL` or accept that the delegated routes don't share state with the legacy local data file unless storage is unified — a separate refactor.
+
+---
+
 ## 2026-05-13 — Medium + Low tier sweep: input validation, race/idempotency, a11y, secret cleanup
 
 Eighteen items from the end-to-end review backlog, batched into one PR.

@@ -291,7 +291,53 @@ export async function bumpSessionEpoch() {
 }
 
 // ── Safe Redis wrapper ────────────────────────────────────────────────────────
+// ── File-based KV fallback ────────────────────────────────────────────────────
+// Local dev (no Redis) needs a working KV so the Vercel handlers can be
+// exercised end-to-end via the local server's Vercel-handler adapter. When
+// `LOCAL_KV_DIR` is set, kvGet/kvSet/kvDel persist one JSON file per key in
+// that directory. TTLs are recorded as a sidecar field and lazily honoured
+// on read (no scheduled cleanup; expired keys come back as null).
+//
+// Sanitise key → filename by replacing `:` with `--` and rejecting anything
+// outside `[\w.-]` so a malicious key can't escape the directory.
+const LOCAL_KV_DIR = process.env.LOCAL_KV_DIR || null;
+async function _fileKvPath(key) {
+  const { default: fs }   = await import("node:fs/promises");
+  const { default: path } = await import("node:path");
+  const safe = String(key).replace(/[^A-Za-z0-9._-]+/g, "_");
+  await fs.mkdir(LOCAL_KV_DIR, { recursive: true });
+  return path.join(LOCAL_KV_DIR, safe + ".json");
+}
+async function _fileKvGet(key) {
+  try {
+    const { default: fs } = await import("node:fs/promises");
+    const file = await _fileKvPath(key);
+    const text = await fs.readFile(file, "utf8");
+    const entry = JSON.parse(text);
+    if (entry?.exp && Date.now() > entry.exp) return null;
+    return entry?.v ?? null;
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+}
+async function _fileKvSet(key, value, ttlSeconds) {
+  const { default: fs } = await import("node:fs/promises");
+  const file = await _fileKvPath(key);
+  const entry = { v: value };
+  if (ttlSeconds) entry.exp = Date.now() + ttlSeconds * 1000;
+  await fs.writeFile(file, JSON.stringify(entry, null, 2));
+}
+async function _fileKvDel(key) {
+  try {
+    const { default: fs } = await import("node:fs/promises");
+    const file = await _fileKvPath(key);
+    await fs.unlink(file);
+  } catch (e) { if (e.code !== "ENOENT") throw e; }
+}
+
 async function kvGet(key) {
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return _fileKvGet(key);
   if (!KV_AVAILABLE) return null;
   try {
     const client = await getClient();
@@ -305,6 +351,7 @@ async function kvGet(key) {
 
 // ttlSeconds is optional; when provided, the key expires after that many seconds.
 async function kvSet(key, value, ttlSeconds) {
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return _fileKvSet(key, value, ttlSeconds);
   if (!KV_AVAILABLE) {
     throw new Error(NO_KV_MSG);
   }
@@ -322,6 +369,7 @@ async function kvSet(key, value, ttlSeconds) {
 }
 
 async function kvDel(key) {
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return _fileKvDel(key);
   if (!KV_AVAILABLE) return;
   try {
     const client = await getClient();
