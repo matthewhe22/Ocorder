@@ -1238,7 +1238,7 @@ export default function App() {
         <main className="main">
           {appLoading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+              <div aria-hidden="true" style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
               <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
@@ -1321,19 +1321,37 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const [trackResult, setTrackResult] = useState(null);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
+  // AbortController so a rapid second click cancels the in-flight request
+  // — without this the LAST-RESOLVED (not last-clicked) result would win,
+  // showing the wrong order if the user typed two refs in quick succession.
+  const trackAbortRef = useRef(null);
   const handleTrackOrder = async () => {
     const ref = trackRef.trim().toUpperCase();
     if (!ref) return;
+    if (trackAbortRef.current) trackAbortRef.current.abort();
+    const ctrl = new AbortController();
+    trackAbortRef.current = ctrl;
     setTrackLoading(true);
     setTrackError("");
     setTrackResult(null);
     try {
-      const r = await fetch(`/api/orders/${encodeURIComponent(ref)}/track`);
+      const r = await fetch(`/api/orders/${encodeURIComponent(ref)}/track`, { signal: ctrl.signal });
+      if (ctrl.signal.aborted) return;
       const data = await r.json();
-      if (!r.ok) setTrackError(data.error || "Order not found. Please check your reference number.");
+      if (ctrl.signal.aborted) return;
+      if (r.status === 429) setTrackError("Too many lookups — please wait a moment and try again.");
+      else if (!r.ok) setTrackError(data.error || "Order not found. Please check your reference number.");
       else setTrackResult(data);
-    } catch { setTrackError("Unable to connect. Please try again."); }
-    finally { setTrackLoading(false); }
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+      setTrackError("Unable to connect. Please try again.");
+    }
+    finally {
+      if (trackAbortRef.current === ctrl) {
+        trackAbortRef.current = null;
+        setTrackLoading(false);
+      }
+    }
   };
 
   const filteredPlans = (data.strataPlans || []).filter(p => {
@@ -2354,7 +2372,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
       {/* ── STEP 6: CONFIRMATION ── */}
       {step === 6 && stripeConfirming && (
         <div style={{ textAlign: "center", padding: "4rem 0" }}>
-          <div style={{ display:"inline-block", animation:"spin 1s linear infinite", border:"3px solid rgba(28,51,38,0.15)", borderTop:"3px solid var(--forest)", borderRadius:"50%", width:48, height:48, marginBottom:"1.5rem" }}/>
+          <div aria-hidden="true" style={{ display:"inline-block", animation:"spin 1s linear infinite", border:"3px solid rgba(28,51,38,0.15)", borderTop:"3px solid var(--forest)", borderRadius:"50%", width:48, height:48, marginBottom:"1.5rem" }}/>
           <p style={{ color:"var(--forest)", fontFamily:"'Cormorant Garamond',serif", fontSize:"1.4rem" }}>Confirming your payment…</p>
           <p style={{ color:"var(--muted)", fontSize:"0.85rem" }}>Please wait while we verify your payment with Stripe.</p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -2515,7 +2533,7 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
           onClick={handleConfirm}
         >
           {placing
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Processing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Processing…</>
             : <>Confirm Order <Ic n="arrow" s={14}/></>
           }
         </button>
@@ -2824,6 +2842,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const fetchPiqPollStatus = async () => {
     try {
       const r = await fetch("/api/orders?action=poll-piq-status", { headers: { "Authorization": "Bearer " + adminToken } });
+      // Surface session-expiry through the global auth-fail event so the
+      // login screen kicks in (matches every other admin fetcher).
+      if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} setPiqPollStatus(null); return; }
       if (!r.ok) { setPiqPollStatus(null); return; }
       setPiqPollStatus(await r.json());
     } catch { setPiqPollStatus(null); }
@@ -2857,6 +2878,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ planId }),
       });
+      if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} setPiqSyncModal(null); return; }
       const d = await r.json();
       if (!r.ok || !d.ok) {
         setPiqSyncModal({ planId, loading: false, result: null, error: d.error || "PIQ sync failed." });
@@ -3903,6 +3925,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify(payload),
       });
+      if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} return; }
       if (r.ok) {
         const rj = await r.json();
         // Reload fresh data — failure here is non-fatal; stale state is better than crashing
@@ -4220,7 +4243,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                   finally { setCheckingAllPiq(false); fetchPiqPollStatus(); }
                 }}>
                 {checkingAllPiq
-                  ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
+                  ? <><span aria-hidden="true" style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
                   : <><Ic n="refresh" s={13}/> Check PIQ</>
                 }
               </button>
@@ -4871,7 +4894,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <div style={{ padding:"24px" }}>
               {piqSyncModal.loading && (
                 <div style={{ textAlign:"center", padding:"2rem", color:"var(--muted)" }}>
-                  <div style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"3px solid rgba(0,0,0,0.1)", borderTop:"3px solid #1c3326", borderRadius:"50%", width:28, height:28, marginBottom:"12px" }}/>
+                  <div aria-hidden="true" style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"3px solid rgba(0,0,0,0.1)", borderTop:"3px solid #1c3326", borderRadius:"50%", width:28, height:28, marginBottom:"12px" }}/>
                   <div>Fetching data from PropertyIQ…</div>
                 </div>
               )}
@@ -5059,7 +5082,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── SECURITY ── */}
       {adminTab === "settings" && (
-        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} onAuthFail={handleLogout} />
+        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} onAuthFail={handleLogout} />
       )}
 
       {adminTab === "payment" && (
@@ -5380,7 +5403,7 @@ function AdminLogin({ onAuth, pubConfig }) {
 
         <button className="btn btn-blk btn-block" onClick={attempt} disabled={loading}>
           {loading
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Signing in…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Signing in…</>
             : <><Ic n="lock" s={15}/> Sign In</>
           }
         </button>
@@ -5551,7 +5574,7 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
             disabled={saving}
           >
             {saving
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Cancelling…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Cancelling…</>
               : <><Ic n="trash" s={15}/> Cancel Order</>
             }
           </button>
@@ -5726,7 +5749,7 @@ function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
             onClick={handleSave}
             disabled={saving || items.length === 0 || !totalChanged && items.length === (order.items || []).length}>
             {saving
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
               : <>Save Amendment</>
             }
           </button>
@@ -5856,7 +5879,7 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
           <button className="btn btn-out" onClick={onClose}>Cancel</button>
           <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending || oversized || certFiles.length === 0} title={certFiles.length === 0 ? "Attach the certificate PDF before sending" : ""}>
             {sending
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
               : <><Ic n="mail" s={15}/> Send Certificate</>
             }
           </button>
@@ -5950,7 +5973,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
           <button className="btn btn-out" onClick={onClose}>Cancel</button>
           <button className="btn btn-lg" style={{ flex: 1, justifyContent: "center", background: "#0d6e62", color: "#fff", border: "none", borderRadius: "28px" }} onClick={handleSend} disabled={sending}>
             {sending
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
               : <><Ic n="invoice" s={15}/> Send Invoice</>
             }
           </button>
@@ -5962,7 +5985,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
+function SettingsTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const codeStyle = { background: "var(--cream)", padding: "1px 4px", borderRadius: "3px" };
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_TPL = {
@@ -6021,7 +6044,19 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
         }),
       });
       if (r.status === 401) { if (onAuthFail) onAuthFail(); return; }
-      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
+      if (r.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 3500);
+        // Refresh /api/config/public so any field mirrored there (logo,
+        // sharepointEnabled, etc.) updates immediately rather than after a
+        // full page reload. Matches the StorageTab refresh pattern.
+        try {
+          const rr = await fetch("/api/config/public");
+          if (rr.ok) {
+            const pc = await rr.json();
+            setPubConfig?.(pc);
+          }
+        } catch (e) { console.warn("pubConfig refresh after settings save:", e?.message); }
+      }
       else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
     } catch { setSaveErr("Unable to connect to server."); }
   };
@@ -6177,7 +6212,7 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testEmail} disabled={testing}>
           {testing
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Sending…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Sending…</>
             : <><Ic n="mail" s={15}/> Test Email</>
           }
         </button>
@@ -6372,7 +6407,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
         {stripeTestResult?.ok === false && <div className="alert alert-err" style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
         <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || stripeSecretKey === "••••••••" || (!stripeSecretKey && !pubConfig?.stripeEnabled)}>
           {testingStripe
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
             : <><Ic n="check" s={15}/> Test Stripe Connection</>
           }
         </button>
@@ -6462,7 +6497,7 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 
       <button className="btn btn-blk" onClick={save} disabled={saving}>
         {saving
-          ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+          ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
           : <><Ic n="check" s={15}/> Save Logo</>
         }
       </button>
@@ -6493,7 +6528,19 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify(body),
       });
-      const d = await r.json();
+      // Mirror the 401/429 toast pattern used by other admin handlers so a
+      // stale session or rate-limited burst doesn't get buried inside the
+      // generic error string returned via checkResult.
+      if (r.status === 401) {
+        setCheckResult({ ok: false, error: "Session expired — please log in again." });
+        return;
+      }
+      if (r.status === 429) {
+        const retry = Number(r.headers.get("Retry-After")) || 60;
+        setCheckResult({ ok: false, error: `Too many PIQ checks — try again in ${retry}s.` });
+        return;
+      }
+      const d = await r.json().catch(() => ({}));
       setCheckResult(d);
       if (d.ok && onPaid) {
         onPaid({ ...order, status: d.orderStatus || order.status, piqPaymentDate: d.paymentDate || order.piqPaymentDate, piqPaymentReference: d.paymentReference || order.piqPaymentReference, piqLevyFound: d.levyFound ?? order.piqLevyFound, piqLevyTotalNett: d.totalNett ?? order.piqLevyTotalNett });
@@ -6619,7 +6666,7 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
           <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
             <button className="btn btn-out" style={{ fontSize:"0.78rem" }} onClick={checkNow} disabled={checking}>
               {checking
-                ? <><span style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
+                ? <><span aria-hidden="true" style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
                 : <><Ic n="refresh" s={13}/> Check Now</>
               }
             </button>
@@ -6802,7 +6849,7 @@ function StorageTab({ adminToken, setPubConfig }) {
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testSharePoint} disabled={spTesting}>
           {spTesting
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
             : <><Ic n="cloud" s={15}/> Test SharePoint</>}
         </button>
       </div>
@@ -6867,7 +6914,7 @@ function StorageTab({ adminToken, setPubConfig }) {
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testPiq} disabled={piqTesting || (!piqCfg.clientId && !piqSecretPlaceholder)}>
           {piqTesting
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
             : <><Ic n="cloud" s={15}/> Test PIQ Connection</>}
         </button>
       </div>
@@ -6889,8 +6936,12 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
       body: JSON.stringify({ action: "list-admins" }),
     })
-      .then(r => r.json())
-      .then(d => { setAdmins(d.admins || []); setListLoading(false); })
+      .then(async r => {
+        if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} setListLoading(false); return; }
+        const d = await r.json();
+        setAdmins(d.admins || []);
+        setListLoading(false);
+      })
       .catch(() => { setListErr("Could not load admin list."); setListLoading(false); });
   };
 
@@ -7116,7 +7167,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
             <div style={{ display: "flex", gap: "10px", marginTop: "1.2rem" }}>
               <button className="btn btn-out" style={{ flex: 1 }} onClick={() => setResetTarget(null)}>Cancel</button>
               <button className="btn btn-blk" style={{ flex: 1 }} onClick={submitReset} disabled={resetLoading}>
-                {resetLoading ? <><span style={spinStyle}/> Saving…</> : "Reset Password"}
+                {resetLoading ? <><span aria-hidden="true" style={spinStyle}/> Saving…</> : "Reset Password"}
               </button>
             </div>
           </div>
@@ -7147,7 +7198,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
           </div>
         </div>
         <button className="btn btn-blk" style={{ marginTop: "0.5rem" }} onClick={submitAdd} disabled={addLoading}>
-          {addLoading ? <><span style={spinStyle}/> Adding…</> : <><Ic n="plus" s={14}/> Add Admin</>}
+          {addLoading ? <><span aria-hidden="true" style={spinStyle}/> Adding…</> : <><Ic n="plus" s={14}/> Add Admin</>}
         </button>
       </div>
 
@@ -7169,7 +7220,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
         <PwField label="Confirm New Password" k="confirm" fk="confirm"/>
 
         <button className="btn btn-blk btn-block" onClick={submit} disabled={loading}>
-          {loading ? <><span style={spinStyle}/> Saving…</> : <><Ic n="shield" s={15}/> Save Credentials</>}
+          {loading ? <><span aria-hidden="true" style={spinStyle}/> Saving…</> : <><Ic n="shield" s={15}/> Save Credentials</>}
         </button>
       </div>
     </div>

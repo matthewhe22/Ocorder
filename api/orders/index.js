@@ -6,6 +6,7 @@ import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment, p
 import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
 import { detectPiqPayment } from "../_lib/piq.js";
+import { normaliseLotNumber } from "../_lib/constants.js";
 import Stripe from "stripe";
 
 // Cold-start assertion: log loudly if CRON_SECRET is missing. Without it, the
@@ -137,9 +138,9 @@ export default async function handler(req, res) {
       // can copy only the entries this cron run actually appended.
       for (const c of candidates) c._auditStartLen = (c.auditLog || []).length;
 
-      // Normalise lot-number strings for matching (strips common prefixes like "Lot ", "Unit ", etc.)
-      const normLotStr = s => String(s || "").trim().toLowerCase()
-        .replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
+      // normaliseLotNumber strips common civic prefixes ("Lot 5", "Unit 5", …)
+      // — single source of truth in api/_lib/constants.js so this and the
+      // single-order check-piq-payment normaliser can't drift again.
 
       let checked = 0, confirmed = 0, linked = 0;
       const errors = [];
@@ -154,7 +155,7 @@ export default async function handler(req, res) {
           const plan      = data.strataPlans?.find(p => p.id === planId);
           const lots      = plan?.lots || [];
           const matches   = l =>
-            (lotNumber && normLotStr(l.number) === normLotStr(lotNumber)) ||
+            (lotNumber && normaliseLotNumber(l.number) === normaliseLotNumber(lotNumber)) ||
             (lotId     && l.id === lotId);
           const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
           if (lot?.piqLotId) {
@@ -497,10 +498,15 @@ export default async function handler(req, res) {
     }
 
     // Set filename synchronously — sanitise client-supplied name to prevent path traversal
-    // and HTTP header injection via Content-Disposition.
+    // and HTTP header injection via Content-Disposition. Use a strict allow-list
+    // matching the contentType validation above; anything else falls back to
+    // `bin` so a filename like `auth.` or `auth..pdf` doesn't yield empty/weird ext.
     if (body.lotAuthority?.data) {
       const rawName = String(body.lotAuthority.filename || "document");
-      const ext = rawName.includes(".") ? rawName.split(".").pop().replace(/[^\w]/g, "").slice(0, 5) : "bin";
+      const m = /\.([A-Za-z0-9]+)$/.exec(rawName);
+      const candidate = (m?.[1] || "").toLowerCase();
+      const ALLOWED_EXTS = new Set(["pdf", "jpg", "jpeg", "png"]);
+      const ext = ALLOWED_EXTS.has(candidate) ? candidate : "bin";
       order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
     }
 
@@ -736,10 +742,14 @@ export default async function handler(req, res) {
     }
 
     // ── RESPOND ───────────────────────────────────────────────────────────────
-    res.status(200).json({ ok: true, order, emailSentTo: toEmail });
-
-    // Allow SP uploads to finish if still in-flight (~1–2 s remaining after ~7 s emails)
+    // Await SP uploads BEFORE responding — Vercel Node serverless does NOT
+    // keep executing past res.end() (no `waitUntil` shim is in play here),
+    // so any audit-log write that happened after the response would be
+    // dropped. Same fix as PR #36 applied to the Stripe webhook. The SP
+    // IIFE was kicked off at T=0 in parallel with the ~7s email block, so
+    // the await here is usually a small tail (often already resolved).
     await spPromise;
+    return res.status(200).json({ ok: true, order, emailSentTo: toEmail });
 
   } catch (err) {
     console.error("Order creation failed:", err.message);

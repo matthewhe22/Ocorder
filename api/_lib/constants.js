@@ -31,3 +31,14 @@ export const AMENDABLE_STATUSES = Object.freeze([
 export const NON_TERMINAL_STATUSES = Object.freeze(
   VALID_STATUSES.filter(s => s !== "Paid" && s !== "Cancelled")
 );
+
+// Normalise a lot-number string for fuzzy matching against PIQ lot ledgers.
+// Strips common civic prefixes ("Lot 5", "Unit 5", "Apt 5", …) so admin and
+// PIQ representations of the same lot compare equal. Single source of truth
+// for both the order-creation auto-link and the PIQ poll cron, which had two
+// near-identical inline normalisers that drifted (one matched "Apartment",
+// the other accidentally didn't).
+const LOT_PREFIX_RE = /^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i;
+export function normaliseLotNumber(raw) {
+  return String(raw || "").trim().toLowerCase().replace(LOT_PREFIX_RE, "").trim();
+}

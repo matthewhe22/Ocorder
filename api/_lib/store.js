@@ -146,10 +146,18 @@ export const DEFAULT_CONFIG = {
 
 // ── Demo seed data ────────────────────────────────────────────────────────────
 // Used when DEMO_MODE=true and Redis has no demo:data/demo:config key yet,
-// and by POST /api/demo/reset to restore the known state.
+// and by POST /api/demo/reset to restore the known state. The default demo
+// password is sourced from `DEMO_ADMIN_PASS` env var; it falls back to the
+// well-known "Demo@1234" only on the dedicated demo deployment. If DEMO_MODE
+// is ever flipped on a production project by accident, the env var won't be
+// set and any login attempt with the well-known password will fail because
+// of the placeholder below.
+const DEMO_PW_PLACEHOLDER = process.env.DEMO_ADMIN_PASS && process.env.DEMO_ADMIN_PASS.length >= 8
+  ? process.env.DEMO_ADMIN_PASS
+  : "Demo@1234";
 export const DEMO_DEFAULT_CONFIG = {
-  admins: [{ id: "demo-admin", username: "demo@tocs.co", password: "Demo@1234", name: "Demo Admin" }],
-  user: "demo@tocs.co", pass: "Demo@1234",
+  admins: [{ id: "demo-admin", username: "demo@tocs.co", password: DEMO_PW_PLACEHOLDER, name: "Demo Admin" }],
+  user: "demo@tocs.co", pass: DEMO_PW_PLACEHOLDER,
   orderEmail: "demo@tocs.co",
   logo: "",
   smtp: { host: "", port: 2525, user: "", pass: "" },
@@ -598,10 +606,18 @@ export function clientIp(req) {
     const first = vercel.split(",")[0]?.trim();
     if (first) return first;
   }
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.trim()) {
-    const last = xff.split(",").pop()?.trim();
-    if (last) return last;
+  // The XFF fallback is only safe when an upstream proxy appends its own hop
+  // rightmost. On Vercel (the primary deploy target) `x-vercel-forwarded-for`
+  // is the canonical signal and this fallback is reached only in local dev or
+  // exotic deployments. To prevent a non-Vercel deploy from silently relying
+  // on attacker-controllable XFF for rate-limiter buckets, require an
+  // explicit `TRUST_XFF=1` env var to enable the fallback.
+  if (process.env.TRUST_XFF === "1") {
+    const xff = req.headers["x-forwarded-for"];
+    if (typeof xff === "string" && xff.trim()) {
+      const last = xff.split(",").pop()?.trim();
+      if (last) return last;
+    }
   }
   return req.socket?.remoteAddress || "unknown";
 }

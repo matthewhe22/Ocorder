@@ -14,7 +14,7 @@ import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrde
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 import { detectPiqPayment } from "../../_lib/piq.js";
-import { VALID_STATUSES, AMENDABLE_STATUSES } from "../../_lib/constants.js";
+import { VALID_STATUSES, AMENDABLE_STATUSES, normaliseLotNumber } from "../../_lib/constants.js";
 
 // ── HTML escape helper ────────────────────────────────────────────────────────
 function esc(str) {
@@ -1161,7 +1161,11 @@ export default async function handler(req, res) {
             const fresh = await readData();
             const oi = fresh.orders.find(o => o.id === id);
             if (oi) {
-              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed: " + msg, note: "" }));
+              // Keep the error text in `note` only (never in `action`).
+              // The audit-log UI renders `action` prominently; if any path
+              // ever skipped HTML-escaping, an attacker-controlled SMTP
+              // error response would become stored XSS.
+              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: String(msg).slice(0, 200) }));
               await writeData(fresh);
             }
           } catch (e) { console.error("Failed to persist email failure to audit log:", e.message); }
@@ -1299,8 +1303,13 @@ export default async function handler(req, res) {
 
     // 1. Admin-supplied piqLotId (manual link from the UI) takes top priority
     //    so admins can fix orders that PIQ sync couldn't auto-resolve.
-    const manualPiqLotId = req.body?.piqLotId ? Number(req.body.piqLotId) : null;
-    if (manualPiqLotId && Number.isFinite(manualPiqLotId)) {
+    // PIQ lot IDs are positive integers; reject floats / 0 / NaN explicitly
+    // so a typo like "5.5" or "0" doesn't silently link to nothing.
+    const manualPiqLotId = req.body?.piqLotId != null ? Number(req.body.piqLotId) : null;
+    if (manualPiqLotId != null && (!Number.isInteger(manualPiqLotId) || manualPiqLotId <= 0)) {
+      return res.status(400).json({ error: "piqLotId must be a positive integer." });
+    }
+    if (manualPiqLotId && Number.isInteger(manualPiqLotId) && manualPiqLotId > 0) {
       order.piqLotId = manualPiqLotId;
       order.auditLog = [...(order.auditLog || []), {
         ts:     new Date().toISOString(),
@@ -1320,14 +1329,13 @@ export default async function handler(req, res) {
     //    was synced from PIQ (piqLotId was missing at order-creation time).
     //    Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
     if (!order.piqLotId) {
-      const normStr = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
       const lotNumber = order.items?.[0]?.lotNumber || "";
       const lotId     = order.items?.[0]?.lotId     || "";
       const planId    = order.items?.[0]?.planId    || "";
       const plan      = data.strataPlans?.find(p => p.id === planId);
       const lots      = plan?.lots || [];
       const matches   = l =>
-        (lotNumber && normStr(l.number) === normStr(lotNumber)) ||
+        (lotNumber && normaliseLotNumber(l.number) === normaliseLotNumber(lotNumber)) ||
         (lotId     && l.id === lotId);
       const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
       if (lot?.piqLotId) {
@@ -1429,8 +1437,13 @@ export default async function handler(req, res) {
       res.setHeader("Retry-After", String(rl.retryAfter || 60));
       return res.status(429).json({ error: "Too many requests. Please try again shortly." });
     }
+    // Guard against missing/empty id — `.toUpperCase()` on undefined throws.
+    if (typeof id !== "string" || !id.trim()) {
+      return res.status(400).json({ error: "Order reference is required." });
+    }
+    const upperId = id.toUpperCase();
     const data = await readData();
-    const order = data.orders.find(o => o.id.toUpperCase() === id.toUpperCase());
+    const order = data.orders.find(o => typeof o.id === "string" && o.id.toUpperCase() === upperId);
     if (!order) return res.status(404).json({ error: "Order not found. Please check your reference number." });
     const firstItem = order.items?.[0] || {};
     return res.status(200).json({

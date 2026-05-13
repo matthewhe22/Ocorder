@@ -39,7 +39,12 @@ export default async function handler(req, res) {
           clientId:     sp.clientId     || "",
           clientSecret: sp.clientSecret ? "••••••••" : "",
           siteId:       sp.siteId       || "",
-          folderPath:   sp.folderPath   || "Top Owners Corporation Solution/ORDER DATABASE",
+          // Don't pre-fill the well-known default in the admin response —
+          // returning a blank string forces the admin to make an explicit
+          // choice and avoids advertising an internal folder name. The
+          // runtime fallback in api/_lib/sharepoint.js still applies if
+          // they save without setting one.
+          folderPath:   sp.folderPath   || "",
         },
         stripe: {
           secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
@@ -231,6 +236,18 @@ export default async function handler(req, res) {
       const cfg = await readConfig();
       if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
       if (logo !== undefined) {
+        // Validate the logo is a sane data: URL or empty (clears the logo).
+        // Without this an authenticated admin can plant arbitrary content
+        // (Redis-fill DoS, or non-image MIME reflected to every visitor via
+        // /api/config/public).
+        if (logo !== "" && logo !== null) {
+          if (typeof logo !== "string") return res.status(400).json({ error: "logo must be a data URL string." });
+          // Cap at 256 KB raw — generous for an SVG/PNG/JPEG company logo.
+          if (logo.length > 256 * 1024) return res.status(400).json({ error: "logo is too large (max 256 KB)." });
+          if (!/^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(logo)) {
+            return res.status(400).json({ error: "logo must be a base64 data URL with a recognised image MIME type." });
+          }
+        }
         if (KV_AVAILABLE) {
           // Store logo in its own Redis key so readConfig() never loads the large blob.
           await kvSet("tocs:logo", logo);
