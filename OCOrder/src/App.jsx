@@ -3490,18 +3490,105 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   // Opens an authority-document download via a short-lived signed URL so the
   // long-lived admin session token never appears in the URL / browser history.
+  // Open a URL in a new tab via a synthesised anchor click. Important: this
+  // is gesture-exempt in Safari/Firefox where `window.open(url)` is blocked
+  // when the user-gesture context has already been consumed by an awaited
+  // fetch — i.e. exactly the path that loads the URL from a server response.
+  const openUrlInNewTab = (url) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  // Decide whether the doc endpoint returned a SharePoint redirect (JSON
+  // `{url}`) vs streamed bytes. We prefer the explicit `X-Doc-Source` header
+  // the server sets (sharepoint vs blob) over Content-Type sniffing, which
+  // breaks if the response is `text/json` or has a missing charset.
+  const isDocRedirectResponse = (r) => {
+    const source = r.headers.get("X-Doc-Source");
+    if (source === "sharepoint") return true;
+    if (source === "blob") return false;
+    // Fallback: sniff Content-Type for legacy servers without the header.
+    return /^application\/(?:json|.*\+json)\b/i.test(r.headers.get("Content-Type") || "");
+  };
+
+  // Parse a Content-Disposition filename. Handles the modern RFC 5987 form
+  // (`filename*=UTF-8''…`) which SharePoint and some Graph endpoints emit
+  // for non-ASCII filenames, and falls back to the legacy `filename="…"`.
+  //
+  // Both forms are sanitised before return: path separators (`/`, `\`) and
+  // leading dots are stripped so a malicious or malformed server response
+  // can't direct the download to a parent directory. Modern browsers also
+  // sanitise the `download` attribute, but mirroring the server-side
+  // sanitiseSegment policy keeps the chain consistent.
+  const sanitiseFilename = (name) => {
+    if (!name) return null;
+    let s = String(name).replace(/[\\/]/g, "_").replace(/^[.\s]+/, "").trim();
+    return s || null;
+  };
+  const parseContentDispositionFilename = (cd) => {
+    if (!cd) return null;
+    // Prefer filename*= when present — RFC 5987 says it overrides filename=.
+    const extMatch = /filename\*=(?:[\w-]+'')?([^;]+)/i.exec(cd);
+    if (extMatch?.[1]) {
+      try { return sanitiseFilename(decodeURIComponent(extMatch[1].trim().replace(/^"|"$/g, ""))); }
+      catch { /* fall through to legacy form */ }
+    }
+    // Anchor at the start of the header or after `;` so we don't grab a
+    // half-decoded `filename*=` token by accident when both directives are
+    // present and the RFC 5987 form is malformed.
+    const legacy = /(?:^|;)\s*filename="?([^";]+)"?/i.exec(cd);
+    return sanitiseFilename(legacy?.[1]);
+  };
+
+  // Stream a binary fetch response to disk via a temporary <a download>.
+  // The <a>.click() download is queued by the browser synchronously, so we
+  // can revoke the object URL on the next microtask via queueMicrotask —
+  // avoids the previous setTimeout(…, 1000) which fired regardless of
+  // component lifecycle, hanging onto the blob's memory while we wait.
+  const streamResponseAsDownload = async (r, fallbackBase) => {
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = parseContentDispositionFilename(r.headers.get("Content-Disposition")) || `${fallbackBase}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      // Revoke after a single macrotask so the browser has scheduled the
+      // download from the synthetic click before we drop the URL.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+  };
+
+  // Open the authority document. Server returns either:
+  //   - 200 JSON { url } → SharePoint copy; we navigate to it in a new tab.
+  //   - 200 binary       → stream the bytes from Redis / local uploads.
+  // Both servers accept Bearer header auth on GET /authority.
   const openAuthorityDoc = async (orderId) => {
     try {
-      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/authority-link`, {
-        method: "POST",
+      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/authority`, {
         headers: { "Authorization": "Bearer " + adminToken },
       });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.url) {
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
         showAdminToast("err", d.error || "Could not open authority document.");
         return;
       }
-      window.location.href = d.url;
+      if (isDocRedirectResponse(r)) {
+        const d = await r.json().catch(() => ({}));
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
+        return;
+      }
+      streamResponseAsDownload(r, `authority-${orderId}`);
     } catch {
       showAdminToast("err", "Network error opening authority document.");
     }
@@ -3531,7 +3618,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         setData(p => ({ ...p, orders: p.orders.map(o => o.id !== d.order.id ? o : d.order) }));
       }
       if (d.alreadyPresent) {
-        showAdminToast("ok", "All documents are already in SharePoint — nothing to do.");
+        const present = [
+          d.summaryUrl && "order summary",
+          d.authUrl && "authority doc",
+          d.receiptUrl && "payment receipt",
+        ].filter(Boolean);
+        showAdminToast("ok", present.length
+          ? `SharePoint already has ${present.join(", ")} for this order — no re-upload needed.`
+          : "Nothing to upload — no authority doc on file and SharePoint is already up to date.");
         return;
       }
       const parts = [];
@@ -3565,27 +3659,13 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         showAdminToast("err", d.error || (r.status === 404 ? "No stored certificate. Re-send the certificate to enable re-download." : "Could not download certificate."));
         return;
       }
-      const ct = (r.headers.get("Content-Type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
+      if (isDocRedirectResponse(r)) {
         const d = await r.json().catch(() => ({}));
-        if (d.url) {
-          window.open(d.url, "_blank", "noopener,noreferrer");
-        } else {
-          showAdminToast("err", "Server did not return a download URL.");
-        }
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
         return;
       }
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const cd = r.headers.get("Content-Disposition") || "";
-      const filenameMatch = /filename="?([^"]+)"?/i.exec(cd);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filenameMatch?.[1] || `certificate-${order.id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      streamResponseAsDownload(r, `certificate-${order.id}`);
     } catch {
       showAdminToast("err", "Network error downloading certificate.");
     }
@@ -3603,9 +3683,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         body: JSON.stringify({ status }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
         // Revert optimistic update
         setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: prev }) }));
+        if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+        const d = await r.json().catch(() => ({}));
         showAdminToast("err", d.error || `Failed to update status to "${status}".`);
       }
     } catch {
@@ -4314,9 +4395,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                   }).then(ok => {
                                     if (!ok) return;
                                     fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
-                                      .then(r => r.json())
-                                      .then(d => {
-                                        if (d.ok) {
+                                      .then(async r => {
+                                        if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+                                        const d = await r.json().catch(() => ({}));
+                                        if (r.ok && d.ok) {
                                           setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
                                           showAdminToast("ok", `Order ${o.id} deleted.`);
                                         } else {
@@ -4453,11 +4535,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 )}
                                 {(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl) && (
                                   o.lotAuthorityUrl ? (
-                                    <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                                    <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
                                     </a>
                                   ) : (
-                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)}>
+                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
                                     </button>
                                   )
@@ -4467,23 +4549,29 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 {(o.certificateUrl || o.certificateFile) && (
                                   <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
                                     title={o.certificateUrl ? "Open the certificate from SharePoint" : "Download the stored copy of the certificate"}
+                                    aria-label={`Download certificate for order ${o.id}`}
                                     onClick={() => downloadCertificate(o)}>
                                     <Ic n="doc" s={13}/> Download Certificate
                                   </button>
                                 )}
                                 {o.invoiceUrl && (
-                                  <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                                  <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open invoice for order ${o.id}`}>
                                     <Ic n="invoice" s={13}/> Invoice
                                   </a>
                                 )}
-                                {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial */}
+                                {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial.
+                                    Disable on ALL rows while any save is in flight so a second click doesn't silently no-op. */}
                                 {pubConfig?.sharepointEnabled && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
-                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer", borderColor: "var(--amber)", color: "var(--amber)" }}
-                                    disabled={savingToSp === o.id}
-                                    title="Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."
+                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: !!savingToSp ? "not-allowed" : "pointer", borderColor: "var(--amber)", color: "var(--amber)", opacity: !!savingToSp && savingToSp !== o.id ? 0.5 : 1 }}
+                                    disabled={!!savingToSp}
+                                    aria-busy={savingToSp === o.id}
+                                    aria-label={`Save order ${o.id} documents to SharePoint`}
+                                    title={savingToSp && savingToSp !== o.id
+                                      ? "Another SharePoint save is in progress — please wait."
+                                      : "Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."}
                                     onClick={() => saveOrderToSharePoint(o)}>
                                     {savingToSp === o.id
-                                      ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>
+                                      ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>
                                       : <>↑ Save to SharePoint</>
                                     }
                                   </button>
@@ -4935,7 +5023,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       )}
 
       {adminTab === "storage" && (
-        <StorageTab adminToken={adminToken} />
+        <StorageTab adminToken={adminToken} setPubConfig={setPubConfig} />
       )}
 
       {adminTab === "security" && (
@@ -5473,7 +5561,8 @@ function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify(payload),
       });
-      const d = await r.json();
+      if (r.status === 401) { setErr("Session expired — please log in again."); setSaving(false); return; }
+      const d = await r.json().catch(() => ({}));
       if (!r.ok) { setErr(d.error || "Failed to amend order."); setSaving(false); return; }
       onAmended(d.order);
     } catch (e) {
@@ -6470,7 +6559,7 @@ function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
 }
 
 // ─── STORAGE TAB ──────────────────────────────────────────────────────────────
-function StorageTab({ adminToken }) {
+function StorageTab({ adminToken, setPubConfig }) {
   const DEF_SP  = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
   const DEF_PIQ = { baseUrl: "https://tocs.propertyiq.com.au", clientId: "", clientSecret: "" };
 
@@ -6566,7 +6655,22 @@ function StorageTab({ adminToken }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ sharepoint: payload }),
       });
-      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
+      if (r.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 3500);
+        // Refresh public config so the "Save to SharePoint" button in the
+        // Orders tab appears immediately after enabling SP, without requiring
+        // a full page reload. Guard against a 500 returning a JSON body that
+        // would otherwise clobber `pubConfig.sharepointEnabled` with undefined.
+        try {
+          const rr = await fetch("/api/config/public");
+          if (rr.ok) {
+            const pc = await rr.json();
+            setPubConfig?.(pc);
+          } else {
+            console.warn("pubConfig refresh failed:", rr.status);
+          }
+        } catch (e) { console.warn("pubConfig refresh error:", e?.message); }
+      }
       else { const d = await r.json(); setErr(d.error || "Save failed."); }
     } catch { setErr("Unable to connect to server."); }
   };

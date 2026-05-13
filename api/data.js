@@ -7,7 +7,9 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed." });
 
   const data = await readData();
-  const token = extractToken(req) || req.query?.token;
+  // Bearer header only — the long-lived admin token must not appear in query
+  // strings (Vercel access logs, browser history, Referer headers).
+  const token = extractToken(req);
   const isAdmin = !!(await validToken(token));
 
   return res.status(200).json({

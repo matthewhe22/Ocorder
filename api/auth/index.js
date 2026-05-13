@@ -6,7 +6,7 @@
 //   "remove-admin"       — remove an admin by id (cannot remove last)
 //   "change-credentials" — update own username/password
 import { readConfig, writeConfig, createSession, validToken, verifyToken, extractToken,
-         invalidateAllSessions, cors, kvGet, kvSet, kvDel, KV_AVAILABLE } from "../_lib/store.js";
+         invalidateAllSessions, cors, kvGet, kvSet, kvDel, clientIp, KV_AVAILABLE } from "../_lib/store.js";
 import { hashPassword, verifyPassword, needsRehash } from "../_lib/password.js";
 import { createHash, timingSafeEqual } from "crypto";
 
@@ -44,9 +44,11 @@ export default async function handler(req, res) {
 
   // ── POST action=login ──────────────────────────────────────────────────────
   if (action === "login") {
-    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
-      || req.socket?.remoteAddress
-      || "unknown";
+    // Use the shared, XFF-spoofing-resistant clientIp helper. The previous
+    // inline `xff.split(",")[0]` took the *client-supplied* leftmost entry on
+    // Vercel and let an attacker defeat the 15-min brute-force lockout by
+    // rotating the header per request.
+    const ip = clientIp(req);
     const rateLimitKey = `tocs:login:attempts:${ip}`;
 
     if (KV_AVAILABLE) {

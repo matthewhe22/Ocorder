@@ -2,6 +2,71 @@
 
 ---
 
+## 2026-05-13 — Hotfix round: login XFF spoofing, /certificate open-redirect, x-vercel-forwarded-for direction
+
+Findings from a third agent review pass over the previous three rounds.
+
+### High (real defects)
+- **Login rate-limiter still used leftmost-XFF** (`api/auth/index.js`). The tier-3 round updated `clientIp()` in `_lib/store.js` but missed this older inline call site. An attacker could defeat the 10-attempts/15-min lockout by rotating `X-Forwarded-For` per request. Now uses the shared `clientIp()` helper.
+- **`GET /api/orders/:id/certificate` JSON path skipped `isAllowedRedirectHost`** (`api/orders/[id]/[action].js`). The symmetric `/authority` endpoint validated the SharePoint host before exposing the URL; this one didn't. A corrupted `certificateUrl` would have become a phishing primitive when the admin client opened it in a new tab. Now mirrors `/authority`: 502 if the host isn't on the allow-list.
+- **`x-vercel-forwarded-for` direction was wrong** (`api/_lib/store.js`). I used `.pop()` (rightmost) for both XFF and `x-vercel-forwarded-for`, but per Vercel's docs the *leftmost* entry of `x-vercel-forwarded-for` is the originating client (Vercel's own hops, if any, are appended to the right). `.pop()` rate-limited the wrong IP. Now uses `[0]` for `x-vercel-forwarded-for`; `.pop()` remains correct for the XFF fallback.
+
+### Medium
+- **`sanitiseSegment` now strips soft hyphen (U+00AD) and the Unicode Tags plane** (`api/_lib/sharepoint.js`). Soft hyphen is the classic invisible-in-rendered-text spoof; Tags are invisible by design. NFKC normalisation still runs first.
+- **`parseContentDispositionFilename` strips path separators + leading dots** from the parsed filename (`OCOrder/src/App.jsx`) before assigning to `a.download`. Browsers also sanitise this, but mirroring the server-side policy keeps the chain consistent.
+- **Legacy `filename=` regex anchored** to `(?:^|;)\s*filename=` so a malformed `filename*=` token can't be mis-parsed as `filename=`.
+- **`pubConfig` refresh now checks `rr.ok`** (`OCOrder/src/App.jsx`). A 500 from `/api/config/public` no longer clobbers `sharepointEnabled` with `undefined`; logs a `console.warn` on failure so ops can diagnose.
+
+### Low
+- **`aria-hidden="true"` on the new Save-to-SharePoint spinner glyph** — paired with the existing `aria-busy` on the button so screen readers announce "busy" without also reading the decorative glyph.
+
+---
+
+## 2026-05-13 — Cosmetic / leftover polish round
+
+Cleared the remaining items from the review backlog.
+
+- **TTL mismatch documented** between `writeAuthority` (90 d) and `writeCertificate` (365 d) — by design (KV is a hot cache, SharePoint is canonical for both), but the asymmetry was undocumented and surprising.
+- **`URL.createObjectURL` revocation tightened** — the previous `setTimeout(..., 1000)` fired regardless of component lifecycle and held the blob in memory unnecessarily. Now revokes on the next macrotask (after the browser has scheduled the synthetic-click download), inside a `try/finally`.
+- **RFC 5987 `filename*=` parser** added to `streamResponseAsDownload` — SharePoint and some Graph endpoints emit this form for non-ASCII filenames; the previous parser fell back to a generic `certificate-<id>.pdf` for those.
+- **401 toast pattern propagated** to `updateOrderStatus` (and therefore `markPaid` / `markPending` via the shared handler), the order delete flow, and the amend handler. Pattern now matches `downloadCertificate` / `openAuthorityDoc` / `saveOrderToSharePoint` (added in earlier rounds).
+- **SP-disabled log line** in the Stripe webhook so ops can grep Vercel logs for "SP archival skipped for `<orderId>`" without having to cross-reference the order's audit log to see why a folder is missing.
+- **Rate-limit keyed on token-hash as well as IP** for `save-to-sharepoint` — defence in depth. A token leaked across many IPs is now bounded (token-hash bucket), and an admin IP behind a NAT shared with another admin is no longer eaten by the other admin (IP buckets are separate). Either limit tripping returns 429 with the longer `Retry-After` of the two.
+
+---
+
+## 2026-05-13 — Polish tier: tenant lockdown, button accessibility, toast wording, content-type sniffing
+
+Polish-tier follow-ups from the same review pass; no behaviour-breaking changes.
+
+- **`SHAREPOINT_ALLOWED_HOSTS` env var** now narrows the redirect allow-list to the operator's actual tenant (e.g. `tocsau.sharepoint.com,tocsau-my.sharepoint.com`). Falls back to the broad SharePoint Online / Microsoft namespace when unset (current behaviour). Suffix match, so `*.tocsau.sharepoint.com` is covered. (`api/orders/[id]/[action].js`)
+- **`X-Doc-Source` header** explicitly tells the client whether `/certificate` and `/authority` responses are a SharePoint redirect (`sharepoint`) or a binary stream (`blob`). Frontend prefers this header over Content-Type sniffing; the legacy Content-Type fallback is kept for graceful upgrade. Fixes the edge case where `text/json` or a missing charset would have routed the response to the wrong handler.
+- **`alreadyPresent` toast now lists what's there** — instead of *"All documents are already in SharePoint — nothing to do."* it reads *"SharePoint already has order summary, authority doc, payment receipt for this order — no re-upload needed."* using the URLs the server returns in the idempotent path.
+- **All Save-to-SharePoint buttons disable while any save is in flight** — previously only the active row's button disabled; clicking a different row's button during an in-flight save was silently swallowed. Buttons now show as visibly disabled (50% opacity) on other rows with a tooltip explaining why.
+- **`aria-label` + `aria-busy`** on all the new admin buttons (Download Certificate, Authority Doc, Invoice link, Save to SharePoint). Screen readers now announce them correctly and the spinner state is exposed via `aria-busy`.
+- **Verified audit (no fix needed)**: `OCOrder/server.js:1086` and `api/orders/index.js:395` both construct `lotAuthorityFile` from the server-generated order ID plus a whitelisted/scrubbed extension. No user-controlled string flows into the filename.
+
+---
+
+## 2026-05-13 — Tier-3 follow-ups: token leak on /authority + /data, XFF spoofing, popup-blocker, bidi sanitisation
+
+Seven issues from the second review pass over PR #37:
+
+### Security
+- **`?token=` query fallback removed from `GET /api/orders/:id/authority` and `GET /api/data`** — same Referer/log leak vector that PR #37 closed for `/certificate` was still open on these two endpoints. `/authority` is the worst case because it used to issue a 302 to SharePoint, carrying the admin token to `*.sharepoint.com` via `Referer`. The endpoint now mirrors `/certificate`: returns 200 `{url}` JSON for the SharePoint case (frontend opens it via a synthesised `<a target="_blank">` click) and streams the binary for the Redis KV fallback. Bearer header only.
+- **`clientIp()` hardened against `x-forwarded-for` rotation** (`api/_lib/store.js`). The previous implementation returned `xff.split(",")[0]` — the *leftmost* entry, which on Vercel is the client-supplied value. A leaked admin token could rotate the header per request and bypass `save-to-sharepoint`'s 10/60s rate limit (and the `/track` rate limit). New selection order: `x-vercel-forwarded-for` → rightmost entry of `x-forwarded-for` → `req.socket?.remoteAddress`.
+- **Unicode bidi / zero-width sanitisation in `sanitiseSegment`** — RTL override (U+202E) and ZW joiners are now stripped; segments are NFKC-normalised first. Not a traversal vector (Graph's path resolver was already safe per the security reviewer's analysis) but a phishing/UI-spoof primitive in admin audit-log surfaces and toasts.
+
+### Correctness
+- **Webhook SP IIFE bails when status flipped away from `Paid`** during the upload window — an admin cancelling the order between the lock release and the IIFE running no longer ends up with PDFs uploaded to a cancelled order. `readData` failure (Redis blip) now distinguishes "not found / not Paid" (skip) from "read failed" (fall back to the stale snapshot, better than dropping the upload).
+- **`pushAuditOnce` helper** suppresses duplicate "SP upload failed" audit entries on webhook retries — a persistently misconfigured SharePoint deployment that previously produced ~288 duplicate rows per day now produces one rolling failure entry per 24 h. Only failure entries are deduped; successes still always append.
+
+### UX
+- **`window.open` replaced with a synthesised `<a target="_blank">.click()`** for the Download Certificate (and now Open Authority Doc) JSON-redirect path. Safari and Firefox routinely block `window.open` when the user-gesture context has been consumed by the preceding `await fetch`; the bytes branch worked because `<a>.click()` is gesture-exempt. Both endpoints now use the same helpers (`openUrlInNewTab`, `streamResponseAsDownload`).
+- **`pubConfig` refreshed after SharePoint settings save** — enabling SP in Storage settings no longer requires a full page reload before the "↑ Save to SharePoint" button appears in the Orders tab.
+
+---
+
 ## 2026-05-13 — PR #35/#36 tier-2 follow-ups: token leakage, open redirect, locking, rate limit, polish
 
 Six issues from the same review pass as PR #36, plus three polish items:

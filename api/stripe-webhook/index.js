@@ -9,7 +9,7 @@
 import Stripe from "stripe";
 import { readData, writeData, readConfig, readAuthority, cors, withOrderLock, tryClaimStripeEvent } from "../_lib/store.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../_lib/email.js";
-import { isSharePointEnabled, uploadOrderDocs } from "../_lib/sharepoint.js";
+import { isSharePointEnabled, uploadOrderDocs, pushAuditOnce } from "../_lib/sharepoint.js";
 import { generateOrderPdf, generateReceiptPdf } from "../_lib/pdf.js";
 
 // Disable Vercel's default body parser so we can read the raw body for
@@ -180,14 +180,39 @@ export default async function handler(req, res) {
   const spEnabled = isSharePointEnabled(spConfig);
   const authDoc = await readAuthority(orderId).catch(() => null);
   let spPromise = Promise.resolve();
+  if (!spEnabled) {
+    // One-line marker so ops can grep Vercel logs to see exactly which
+    // webhook deliveries ran without SP archival — useful for diagnosing
+    // "why is this order's folder missing on SharePoint?" without having to
+    // cross-reference the order's audit log.
+    console.log(`Stripe webhook: SP archival skipped for ${orderId} — SharePoint not configured.`);
+  }
   if (spEnabled) {
     spPromise = (async () => {
       try {
         // Re-read the order for the PDF snapshot. The status-flip lock was
         // released before this IIFE started; if an admin amended the order in
         // between, the snapshot inside `confirmedOrder` is stale and the
-        // generated PDF would not match what's stored in Redis.
-        const snapshot = await readData().then(d => d.orders.find(o => o.id === orderId)).catch(() => null) || confirmedOrder;
+        // generated PDF would not match what's stored in Redis. Distinguish
+        // "Redis read failed" (fall back to stale snapshot — better than
+        // dropping the upload) from "order deleted or no longer Paid" (bail).
+        let snapshot;
+        try {
+          const fresh = await readData();
+          const found = fresh.orders.find(o => o.id === orderId);
+          if (!found) {
+            console.log(`Webhook SP IIFE: order ${orderId} no longer exists — skipping SP upload.`);
+            return;
+          }
+          if (found.status !== "Paid") {
+            console.log(`Webhook SP IIFE: order ${orderId} status flipped to "${found.status}" — skipping SP upload.`);
+            return;
+          }
+          snapshot = found;
+        } catch (e) {
+          console.error(`Webhook SP IIFE: Redis read failed (${e.message}) — proceeding with stale snapshot.`);
+          snapshot = confirmedOrder;
+        }
         const { authUrl, summaryUrl, receiptUrl, errors } = await uploadOrderDocs(
           snapshot,
           spConfig,
@@ -202,12 +227,15 @@ export default async function handler(req, res) {
           if (!oi) return;
           oi.auditLog = oi.auditLog || [];
           const ts = () => new Date().toISOString();
+          // Successes always append. Failures use pushAuditOnce so a webhook
+          // retry storm against a persistently-broken SharePoint doesn't
+          // flood the audit log with duplicate "SP upload failed" rows.
           if (authUrl)            { oi.lotAuthorityUrl = authUrl; oi.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: authUrl }); }
-          else if (authDoc?.data) { oi.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: errors.auth?.message?.slice(0, 60) || "See Vercel logs" }); }
+          else if (authDoc?.data) { pushAuditOnce(oi.auditLog, "Authority doc SP upload failed", errors.auth?.message?.slice(0, 60) || "See Vercel logs"); }
           if (summaryUrl) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-          else            { oi.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: errors.summary?.message?.slice(0, 60) || "See Vercel logs" }); }
+          else            { pushAuditOnce(oi.auditLog, "Order summary SP upload failed", errors.summary?.message?.slice(0, 60) || "See Vercel logs"); }
           if (receiptUrl) { oi.receiptUrl = receiptUrl; oi.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
-          else            { oi.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: errors.receipt?.message?.slice(0, 60) || "See Vercel logs" }); }
+          else            { pushAuditOnce(oi.auditLog, "Payment receipt SP upload failed", errors.receipt?.message?.slice(0, 60) || "See Vercel logs"); }
           await writeData(fresh);
         }).catch(e => console.error("Webhook SP persist failed:", e.message));
         console.log(`Webhook SP uploads done for ${orderId}: auth=${!!authUrl} summary=${!!summaryUrl} receipt=${!!receiptUrl}`);

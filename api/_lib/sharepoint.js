@@ -142,6 +142,23 @@ export function isSharePointEnabled(spConfig) {
   return SHAREPOINT_ENABLED || !!(spConfig?.tenantId && spConfig?.clientId && spConfig?.clientSecret && spConfig?.siteId);
 }
 
+// Append `{ ts, action, note }` to `auditLog`, but only if no entry with the
+// same `action` exists within the last `withinMs` (default 24h). Returns true
+// when an entry was actually pushed. Used to keep webhook retries from
+// flooding the audit log with hundreds of duplicate "SP upload failed" rows
+// while SharePoint creds are misconfigured.
+export function pushAuditOnce(auditLog, action, note, withinMs = 24 * 60 * 60 * 1000) {
+  const cutoff = Date.now() - withinMs;
+  const hasRecent = (auditLog || []).some(e => {
+    if (e?.action !== action) return false;
+    const t = e.ts ? Date.parse(e.ts) : 0;
+    return Number.isFinite(t) && t >= cutoff;
+  });
+  if (hasRecent) return false;
+  auditLog.push({ ts: new Date().toISOString(), action, note });
+  return true;
+}
+
 // Sanitise a single SharePoint path segment. Strips the OneDrive / Graph
 // reserved characters and any leading/trailing dots or whitespace (which
 // SharePoint also forbids). A segment that collapses to empty or to a string
@@ -150,8 +167,35 @@ export function isSharePointEnabled(spConfig) {
 // `planName` submitted at order creation, or an authority-doc filename) write
 // files outside the configured base folder — so any segment that ends up
 // empty after sanitisation falls back to the supplied default.
+// Unicode format / bidi / zero-width / invisible chars to strip. Targets:
+//   - RTL override (U+202E) and zero-width joiners — UI/audit-log spoofs
+//   - Soft hyphen (U+00AD) — classic invisible-in-rendered-text spoof
+//   - Unicode "Tags" plane (U+E0000–U+E007F) — invisible by design
+// Built as an explicit-escape RegExp so the source file stays ASCII-only.
+// Note: the Tags block is in a supplementary plane (above U+FFFF) so we use
+// the `u` flag and a surrogate-pair-aware range.
+const BIDI_FORMAT_CHARS_RE = new RegExp(
+  "[" +
+  "\\u00AD" +          // soft hyphen
+  "\\u200B-\\u200F" +  // zero-width space / non-joiner / joiner / LRM / RLM
+  "\\u202A-\\u202E" +  // LRE / RLE / PDF / LRO / RLO
+  "\\u2066-\\u2069" +  // LRI / RLI / FSI / PDI
+  "\\uFEFF" +          // zero-width no-break space
+  "\\u{E0000}-\\u{E007F}" + // Tags plane (invisible language tags + cancellable chars)
+  "]",
+  "gu",
+);
+
 function sanitiseSegment(raw, fallback) {
-  let s = String(raw ?? "").replace(/[\\/:*?"<>|\x00-\x1f]/g, "-");
+  let s = String(raw ?? "");
+  // NFKC normalise so visually-identical Unicode (fullwidth dots, ligatures)
+  // collapses to its ASCII form before dot-stripping runs.
+  try { s = s.normalize("NFKC"); } catch { /* ancient runtime — ignore */ }
+  // Reserved ASCII + C0 / C1 control chars.
+  s = s.replace(/[\\/:*?"<>|\x00-\x1f\x7f-\x9f]/g, "-");
+  // Unicode bidi / zero-width / format chars — not a traversal vector under
+  // Graph's path resolver, but a phishing/spoof primitive in audit surfaces.
+  s = s.replace(BIDI_FORMAT_CHARS_RE, "-");
   s = s.replace(/^[.\s]+|[.\s]+$/g, "").trim();
   if (!s) return fallback;
   return s;

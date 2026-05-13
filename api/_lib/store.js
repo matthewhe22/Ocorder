@@ -320,8 +320,14 @@ async function kvDel(key) {
 export { kvGet, kvSet, kvDel };
 
 // ── Authority document helpers ────────────────────────────────────────────────
+// TTL: 90 days. Authority docs are uploaded at order-creation time and are
+// only needed during processing — once the certificate is issued, SharePoint
+// becomes the long-term store and the Redis copy is redundant. Note this is
+// SHORTER than the certificate TTL below (365 d) — if an admin tries to
+// re-download a >90 d old order's authority via the KV fallback path, the
+// authority KV entry will already have expired; they must rely on the
+// SharePoint copy. By design — KV is a hot cache, SharePoint is canonical.
 export async function writeAuthority(orderId, doc) {
-  // Expire authority documents after 90 days to avoid unbounded Redis growth.
   // Pass doc directly — kvSet already calls JSON.stringify internally.
   await kvSet(`tocs:authority:${orderId}`, doc, 90 * 86400);
 }
@@ -333,8 +339,11 @@ export async function readAuthority(orderId) {
 // ── Issued-certificate helpers ────────────────────────────────────────────────
 // Stores a copy of the OC certificate / keys order attachment that was emailed
 // to the applicant. Acts as a guaranteed fallback for admin re-download when
-// the SharePoint upload fails or the SP link is unreachable. 365-day TTL —
-// SharePoint is the canonical long-term store; KV is the safety net.
+// the SharePoint upload fails or the SP link is unreachable. TTL: 365 days —
+// longer than authority docs (90 d) because issued certificates are more
+// likely to be referenced months later (re-send to a different recipient,
+// regulator request, etc.) and the storage cost is similar. SharePoint
+// remains the canonical long-term store; KV is the safety net.
 export async function writeCertificate(orderId, doc) {
   await kvSet(`tocs:certificate:${orderId}`, doc, 365 * 86400);
 }
@@ -560,10 +569,37 @@ export async function rateLimit(key, max, windowSeconds) {
   }
 }
 
+// Returns the originating client IP for rate-limiting purposes.
+//
+// Selection order:
+//   1. `x-vercel-forwarded-for` — set by Vercel's edge. Clients cannot forge
+//      this header at Vercel (the platform overwrites it on ingress).
+//      Vercel populates it such that the **leftmost** entry is the
+//      originating client (Vercel's own hops, if any, are appended right of
+//      that), so we take `[0]`.
+//   2. The **rightmost** entry of `x-forwarded-for`. Outside of Vercel
+//      `x-vercel-forwarded-for` is absent; XFF is the next-most-trustworthy
+//      signal but only when *something* trustworthy appended Vercel-side.
+//      A bare client-supplied XFF (no proxy hop) would still be spoofable
+//      here — local dev / non-Vercel deployments should rely on a proxy
+//      that appends its own IP rightmost.
+//   3. `req.socket?.remoteAddress` — direct-connection fallback.
+//
+// Naive `xff.split(",")[0]` (the previous implementation) returned the
+// *client-supplied* leftmost entry on Vercel and was trivially spoofable.
 export function clientIp(req) {
-  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
-    || req.socket?.remoteAddress
-    || "unknown";
+  const vercel = req.headers["x-vercel-forwarded-for"];
+  if (typeof vercel === "string" && vercel.trim()) {
+    // Leftmost = originating client per Vercel's documented format.
+    const first = vercel.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) {
+    const last = xff.split(",").pop()?.trim();
+    if (last) return last;
+  }
+  return req.socket?.remoteAddress || "unknown";
 }
 
 // ── Per-order mutation lock ───────────────────────────────────────────────────
