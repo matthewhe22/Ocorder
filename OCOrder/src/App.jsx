@@ -3504,6 +3504,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     a.remove();
   };
 
+  // Decide whether the doc endpoint returned a SharePoint redirect (JSON
+  // `{url}`) vs streamed bytes. We prefer the explicit `X-Doc-Source` header
+  // the server sets (sharepoint vs blob) over Content-Type sniffing, which
+  // breaks if the response is `text/json` or has a missing charset.
+  const isDocRedirectResponse = (r) => {
+    const source = r.headers.get("X-Doc-Source");
+    if (source === "sharepoint") return true;
+    if (source === "blob") return false;
+    // Fallback: sniff Content-Type for legacy servers without the header.
+    return /^application\/(?:json|.*\+json)\b/i.test(r.headers.get("Content-Type") || "");
+  };
+
   // Stream a binary fetch response to disk via a temporary <a download>.
   const streamResponseAsDownload = async (r, fallbackBase) => {
     const blob = await r.blob();
@@ -3534,8 +3546,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         showAdminToast("err", d.error || "Could not open authority document.");
         return;
       }
-      const ct = (r.headers.get("Content-Type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
+      if (isDocRedirectResponse(r)) {
         const d = await r.json().catch(() => ({}));
         if (d.url) { openUrlInNewTab(d.url); return; }
         showAdminToast("err", "Server did not return a download URL.");
@@ -3571,7 +3582,14 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         setData(p => ({ ...p, orders: p.orders.map(o => o.id !== d.order.id ? o : d.order) }));
       }
       if (d.alreadyPresent) {
-        showAdminToast("ok", "All documents are already in SharePoint — nothing to do.");
+        const present = [
+          d.summaryUrl && "order summary",
+          d.authUrl && "authority doc",
+          d.receiptUrl && "payment receipt",
+        ].filter(Boolean);
+        showAdminToast("ok", present.length
+          ? `SharePoint already has ${present.join(", ")} for this order — no re-upload needed.`
+          : "Nothing to upload — no authority doc on file and SharePoint is already up to date.");
         return;
       }
       const parts = [];
@@ -3605,8 +3623,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         showAdminToast("err", d.error || (r.status === 404 ? "No stored certificate. Re-send the certificate to enable re-download." : "Could not download certificate."));
         return;
       }
-      const ct = (r.headers.get("Content-Type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
+      if (isDocRedirectResponse(r)) {
         const d = await r.json().catch(() => ({}));
         if (d.url) { openUrlInNewTab(d.url); return; }
         showAdminToast("err", "Server did not return a download URL.");
@@ -4480,11 +4497,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 )}
                                 {(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl) && (
                                   o.lotAuthorityUrl ? (
-                                    <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                                    <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
                                     </a>
                                   ) : (
-                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)}>
+                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
                                     </button>
                                   )
@@ -4494,20 +4511,26 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 {(o.certificateUrl || o.certificateFile) && (
                                   <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
                                     title={o.certificateUrl ? "Open the certificate from SharePoint" : "Download the stored copy of the certificate"}
+                                    aria-label={`Download certificate for order ${o.id}`}
                                     onClick={() => downloadCertificate(o)}>
                                     <Ic n="doc" s={13}/> Download Certificate
                                   </button>
                                 )}
                                 {o.invoiceUrl && (
-                                  <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                                  <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open invoice for order ${o.id}`}>
                                     <Ic n="invoice" s={13}/> Invoice
                                   </a>
                                 )}
-                                {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial */}
+                                {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial.
+                                    Disable on ALL rows while any save is in flight so a second click doesn't silently no-op. */}
                                 {pubConfig?.sharepointEnabled && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
-                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer", borderColor: "var(--amber)", color: "var(--amber)" }}
-                                    disabled={savingToSp === o.id}
-                                    title="Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."
+                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: !!savingToSp ? "not-allowed" : "pointer", borderColor: "var(--amber)", color: "var(--amber)", opacity: !!savingToSp && savingToSp !== o.id ? 0.5 : 1 }}
+                                    disabled={!!savingToSp}
+                                    aria-busy={savingToSp === o.id}
+                                    aria-label={`Save order ${o.id} documents to SharePoint`}
+                                    title={savingToSp && savingToSp !== o.id
+                                      ? "Another SharePoint save is in progress — please wait."
+                                      : "Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."}
                                     onClick={() => saveOrderToSharePoint(o)}>
                                     {savingToSp === o.id
                                       ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>

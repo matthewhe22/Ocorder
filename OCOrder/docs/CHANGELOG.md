@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-05-13 — Polish tier: tenant lockdown, button accessibility, toast wording, content-type sniffing
+
+Polish-tier follow-ups from the same review pass; no behaviour-breaking changes.
+
+- **`SHAREPOINT_ALLOWED_HOSTS` env var** now narrows the redirect allow-list to the operator's actual tenant (e.g. `tocsau.sharepoint.com,tocsau-my.sharepoint.com`). Falls back to the broad SharePoint Online / Microsoft namespace when unset (current behaviour). Suffix match, so `*.tocsau.sharepoint.com` is covered. (`api/orders/[id]/[action].js`)
+- **`X-Doc-Source` header** explicitly tells the client whether `/certificate` and `/authority` responses are a SharePoint redirect (`sharepoint`) or a binary stream (`blob`). Frontend prefers this header over Content-Type sniffing; the legacy Content-Type fallback is kept for graceful upgrade. Fixes the edge case where `text/json` or a missing charset would have routed the response to the wrong handler.
+- **`alreadyPresent` toast now lists what's there** — instead of *"All documents are already in SharePoint — nothing to do."* it reads *"SharePoint already has order summary, authority doc, payment receipt for this order — no re-upload needed."* using the URLs the server returns in the idempotent path.
+- **All Save-to-SharePoint buttons disable while any save is in flight** — previously only the active row's button disabled; clicking a different row's button during an in-flight save was silently swallowed. Buttons now show as visibly disabled (50% opacity) on other rows with a tooltip explaining why.
+- **`aria-label` + `aria-busy`** on all the new admin buttons (Download Certificate, Authority Doc, Invoice link, Save to SharePoint). Screen readers now announce them correctly and the spinner state is exposed via `aria-busy`.
+- **Verified audit (no fix needed)**: `OCOrder/server.js:1086` and `api/orders/index.js:395` both construct `lotAuthorityFile` from the server-generated order ID plus a whitelisted/scrubbed extension. No user-controlled string flows into the filename.
+
+---
+
 ## 2026-05-13 — Tier-3 follow-ups: token leak on /authority + /data, XFF spoofing, popup-blocker, bidi sanitisation
 
 Seven issues from the second review pass over PR #37:

@@ -219,16 +219,28 @@ async function readMessageAndAttachments(req) {
 }
 
 // ── Redirect target allow-list ────────────────────────────────────────────────
-// Limits the hosts the authority/cert 302 redirects can point at so a corrupted
-// or forged URL on the order cannot turn the portal into an open redirector.
-// SharePoint Online + Microsoft Graph share-link domains are the only legitimate
-// targets here; anything else is treated as a misconfiguration.
-const ALLOWED_REDIRECT_HOSTS = /^(?:[a-z0-9-]+\.)*(?:sharepoint\.com|onmicrosoft\.com|microsoft\.com)$/i;
+// Limits the hosts the authority/cert endpoints will expose to admins so a
+// corrupted or forged URL on the order cannot turn the portal into an open
+// redirector / phishing chain.
+//
+// By default we allow the entire SharePoint Online + Microsoft tenant
+// namespace, which is correct out-of-the-box for any deployment. Operators
+// can lock this down further to their actual tenant by setting
+// `SHAREPOINT_ALLOWED_HOSTS` to a comma-separated list of host suffixes
+// (e.g. `tocsau.sharepoint.com,tocsau-my.sharepoint.com`). Suffix match —
+// each entry matches itself and any subdomain.
+const ALLOWED_REDIRECT_HOSTS_DEFAULT = ["sharepoint.com", "onmicrosoft.com", "microsoft.com"];
+const ALLOWED_REDIRECT_HOSTS = (() => {
+  const env = (process.env.SHAREPOINT_ALLOWED_HOSTS || "")
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  return env.length ? env : ALLOWED_REDIRECT_HOSTS_DEFAULT;
+})();
 function isAllowedRedirectHost(rawUrl) {
   try {
     const u = new URL(rawUrl);
     if (u.protocol !== "https:") return false;
-    return ALLOWED_REDIRECT_HOSTS.test(u.hostname);
+    const host = u.hostname.toLowerCase();
+    return ALLOWED_REDIRECT_HOSTS.some(suffix => host === suffix || host.endsWith("." + suffix));
   } catch { return false; }
 }
 
@@ -261,6 +273,7 @@ export default async function handler(req, res) {
         console.error(`Authority URL blocked — non-allowed host: ${order.lotAuthorityUrl}`);
         return res.status(502).json({ error: "Stored authority URL is not on an allowed host." });
       }
+      res.setHeader("X-Doc-Source", "sharepoint");
       return res.status(200).json({ url: order.lotAuthorityUrl });
     }
 
@@ -274,6 +287,7 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
+    res.setHeader("X-Doc-Source", "blob");
     const safeFilename = String(order.lotAuthorityFile || "authority").replace(/[^\w.\-]/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
@@ -404,7 +418,10 @@ export default async function handler(req, res) {
     const order = data.orders.find(o => o.id === id);
     if (!order) return res.status(404).json({ error: "Order not found." });
 
-    if (order.certificateUrl) return res.status(200).json({ url: order.certificateUrl });
+    if (order.certificateUrl) {
+      res.setHeader("X-Doc-Source", "sharepoint");
+      return res.status(200).json({ url: order.certificateUrl });
+    }
 
     if (!KV_AVAILABLE) return res.status(503).json({ error: "Document storage is not connected." });
     let stored = null;
@@ -415,6 +432,7 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/pdf");
+    res.setHeader("X-Doc-Source", "blob");
     const safeFilename = String(stored.filename || order.certificateFile || `certificate-${order.id}.pdf`).replace(/[^\w.\-]/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
