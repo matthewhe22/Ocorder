@@ -320,8 +320,14 @@ async function kvDel(key) {
 export { kvGet, kvSet, kvDel };
 
 // ── Authority document helpers ────────────────────────────────────────────────
+// TTL: 90 days. Authority docs are uploaded at order-creation time and are
+// only needed during processing — once the certificate is issued, SharePoint
+// becomes the long-term store and the Redis copy is redundant. Note this is
+// SHORTER than the certificate TTL below (365 d) — if an admin tries to
+// re-download a >90 d old order's authority via the KV fallback path, the
+// authority KV entry will already have expired; they must rely on the
+// SharePoint copy. By design — KV is a hot cache, SharePoint is canonical.
 export async function writeAuthority(orderId, doc) {
-  // Expire authority documents after 90 days to avoid unbounded Redis growth.
   // Pass doc directly — kvSet already calls JSON.stringify internally.
   await kvSet(`tocs:authority:${orderId}`, doc, 90 * 86400);
 }
@@ -333,8 +339,11 @@ export async function readAuthority(orderId) {
 // ── Issued-certificate helpers ────────────────────────────────────────────────
 // Stores a copy of the OC certificate / keys order attachment that was emailed
 // to the applicant. Acts as a guaranteed fallback for admin re-download when
-// the SharePoint upload fails or the SP link is unreachable. 365-day TTL —
-// SharePoint is the canonical long-term store; KV is the safety net.
+// the SharePoint upload fails or the SP link is unreachable. TTL: 365 days —
+// longer than authority docs (90 d) because issued certificates are more
+// likely to be referenced months later (re-send to a different recipient,
+// regulator request, etc.) and the storage cost is similar. SharePoint
+// remains the canonical long-term store; KV is the safety net.
 export async function writeCertificate(orderId, doc) {
   await kvSet(`tocs:certificate:${orderId}`, doc, 365 * 86400);
 }

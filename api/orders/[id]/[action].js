@@ -8,6 +8,7 @@
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
 import Stripe from "stripe";
+import { createHash } from "node:crypto";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
@@ -310,10 +311,19 @@ export default async function handler(req, res) {
 
     // PDF generation is CPU-bound and each call hits the Graph API; rate-limit
     // to stop a script (or a leaked token) from amplifying into a function /
-    // Graph-quota DoS.
-    const rl = await rateLimit(`sp-save:${clientIp(req)}`, 10, 60);
-    if (!rl.allowed) {
-      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+    // Graph-quota DoS. Key on BOTH client IP and a short hash of the token —
+    // (a) IP alone is fooled by an attacker rotating x-forwarded-for (the
+    // `clientIp` helper hardens this on Vercel but local proxies vary), and
+    // (b) token alone lets two admins on the same office NAT eat each other's
+    // budget. Either limit hitting 10/60s trips the 429.
+    const tokenHash = createHash("sha256").update(String(token)).digest("hex").slice(0, 12);
+    const [rlIp, rlTok] = await Promise.all([
+      rateLimit(`sp-save-ip:${clientIp(req)}`, 10, 60),
+      rateLimit(`sp-save-tok:${tokenHash}`, 10, 60),
+    ]);
+    if (!rlIp.allowed || !rlTok.allowed) {
+      const retry = Math.max(rlIp.retryAfter || 0, rlTok.retryAfter || 0, 60);
+      res.setHeader("Retry-After", String(retry));
       return res.status(429).json({ error: "Too many SharePoint saves — please wait a moment and try again." });
     }
 

@@ -3516,19 +3516,41 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     return /^application\/(?:json|.*\+json)\b/i.test(r.headers.get("Content-Type") || "");
   };
 
+  // Parse a Content-Disposition filename. Handles the modern RFC 5987 form
+  // (`filename*=UTF-8''…`) which SharePoint and some Graph endpoints emit
+  // for non-ASCII filenames, and falls back to the legacy `filename="…"`.
+  const parseContentDispositionFilename = (cd) => {
+    if (!cd) return null;
+    // Prefer filename*= when present — RFC 5987 says it overrides filename=.
+    const extMatch = /filename\*=(?:[\w-]+'')?([^;]+)/i.exec(cd);
+    if (extMatch?.[1]) {
+      try { return decodeURIComponent(extMatch[1].trim().replace(/^"|"$/g, "")); }
+      catch { /* fall through to legacy form */ }
+    }
+    const legacy = /filename="?([^";]+)"?/i.exec(cd);
+    return legacy?.[1] || null;
+  };
+
   // Stream a binary fetch response to disk via a temporary <a download>.
+  // The <a>.click() download is queued by the browser synchronously, so we
+  // can revoke the object URL on the next microtask via queueMicrotask —
+  // avoids the previous setTimeout(…, 1000) which fired regardless of
+  // component lifecycle, hanging onto the blob's memory while we wait.
   const streamResponseAsDownload = async (r, fallbackBase) => {
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
-    const cd = r.headers.get("Content-Disposition") || "";
-    const filenameMatch = /filename="?([^"]+)"?/i.exec(cd);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filenameMatch?.[1] || `${fallbackBase}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = parseContentDispositionFilename(r.headers.get("Content-Disposition")) || `${fallbackBase}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      // Revoke after a single macrotask so the browser has scheduled the
+      // download from the synthetic click before we drop the URL.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
   };
 
   // Open the authority document. Server returns either:
@@ -3647,9 +3669,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         body: JSON.stringify({ status }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
         // Revert optimistic update
         setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: prev }) }));
+        if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+        const d = await r.json().catch(() => ({}));
         showAdminToast("err", d.error || `Failed to update status to "${status}".`);
       }
     } catch {
@@ -4358,9 +4381,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                   }).then(ok => {
                                     if (!ok) return;
                                     fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
-                                      .then(r => r.json())
-                                      .then(d => {
-                                        if (d.ok) {
+                                      .then(async r => {
+                                        if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+                                        const d = await r.json().catch(() => ({}));
+                                        if (r.ok && d.ok) {
                                           setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
                                           showAdminToast("ok", `Order ${o.id} deleted.`);
                                         } else {
@@ -5523,7 +5547,8 @@ function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify(payload),
       });
-      const d = await r.json();
+      if (r.status === 401) { setErr("Session expired — please log in again."); setSaving(false); return; }
+      const d = await r.json().catch(() => ({}));
       if (!r.ok) { setErr(d.error || "Failed to amend order."); setSaving(false); return; }
       onAmended(d.order);
     } catch (e) {

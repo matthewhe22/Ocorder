@@ -180,6 +180,13 @@ export default async function handler(req, res) {
   const spEnabled = isSharePointEnabled(spConfig);
   const authDoc = await readAuthority(orderId).catch(() => null);
   let spPromise = Promise.resolve();
+  if (!spEnabled) {
+    // One-line marker so ops can grep Vercel logs to see exactly which
+    // webhook deliveries ran without SP archival — useful for diagnosing
+    // "why is this order's folder missing on SharePoint?" without having to
+    // cross-reference the order's audit log.
+    console.log(`Stripe webhook: SP archival skipped for ${orderId} — SharePoint not configured.`);
+  }
   if (spEnabled) {
     spPromise = (async () => {
       try {

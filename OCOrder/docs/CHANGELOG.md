@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-05-13 — Cosmetic / leftover polish round
+
+Cleared the remaining items from the review backlog.
+
+- **TTL mismatch documented** between `writeAuthority` (90 d) and `writeCertificate` (365 d) — by design (KV is a hot cache, SharePoint is canonical for both), but the asymmetry was undocumented and surprising.
+- **`URL.createObjectURL` revocation tightened** — the previous `setTimeout(..., 1000)` fired regardless of component lifecycle and held the blob in memory unnecessarily. Now revokes on the next macrotask (after the browser has scheduled the synthetic-click download), inside a `try/finally`.
+- **RFC 5987 `filename*=` parser** added to `streamResponseAsDownload` — SharePoint and some Graph endpoints emit this form for non-ASCII filenames; the previous parser fell back to a generic `certificate-<id>.pdf` for those.
+- **401 toast pattern propagated** to `updateOrderStatus` (and therefore `markPaid` / `markPending` via the shared handler), the order delete flow, and the amend handler. Pattern now matches `downloadCertificate` / `openAuthorityDoc` / `saveOrderToSharePoint` (added in earlier rounds).
+- **SP-disabled log line** in the Stripe webhook so ops can grep Vercel logs for "SP archival skipped for `<orderId>`" without having to cross-reference the order's audit log to see why a folder is missing.
+- **Rate-limit keyed on token-hash as well as IP** for `save-to-sharepoint` — defence in depth. A token leaked across many IPs is now bounded (token-hash bucket), and an admin IP behind a NAT shared with another admin is no longer eaten by the other admin (IP buckets are separate). Either limit tripping returns 429 with the longer `Retry-After` of the two.
+
+---
+
 ## 2026-05-13 — Polish tier: tenant lockdown, button accessibility, toast wording, content-type sniffing
 
 Polish-tier follow-ups from the same review pass; no behaviour-breaking changes.
