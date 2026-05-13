@@ -3640,6 +3640,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // was never created — historically Stripe webhook orders before May 13, or
   // any order where the SP upload failed at creation/confirmation time.
   const [savingToSp, setSavingToSp] = useState(null); // order.id currently saving
+  // order.id currently being deleted — used to disable the delete button on
+  // rapid double-click so we don't fire two DELETE requests for the same order.
+  const [deletingOrderId, setDeletingOrderId] = useState(null);
   const saveOrderToSharePoint = async (order) => {
     if (savingToSp) return;
     setSavingToSp(order.id);
@@ -4425,9 +4428,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                             )}
                             {o.status === "Cancelled" && (
                               <button className="tbl-act-btn danger"
-                                title="Permanently delete this cancelled order"
+                                title={deletingOrderId === o.id ? "Deleting…" : "Permanently delete this cancelled order"}
+                                disabled={deletingOrderId === o.id}
                                 onClick={e => {
                                   e.stopPropagation();
+                                  if (deletingOrderId === o.id) return;
                                   appConfirm({
                                     title: `Permanently delete order ${o.id}?`,
                                     message: "This cannot be undone.",
@@ -4435,6 +4440,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                     danger: true,
                                   }).then(ok => {
                                     if (!ok) return;
+                                    setDeletingOrderId(o.id);
                                     fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
                                       .then(async r => {
                                         if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
@@ -4446,9 +4452,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                           showAdminToast("err", d.error || "Delete failed.");
                                         }
                                       })
-                                      .catch(() => showAdminToast("err", "Delete failed."));
+                                      .catch(() => showAdminToast("err", "Delete failed."))
+                                      .finally(() => setDeletingOrderId(null));
                                   });
-                                }}>Delete</button>
+                                }}>{deletingOrderId === o.id ? "Deleting…" : "Delete"}</button>
                             )}
                             {/* More ▾ overflow menu */}
                             {(hasAmendInMore || hasMarkPending || hasCancel || hasNotify || hasAuthDoc) && (

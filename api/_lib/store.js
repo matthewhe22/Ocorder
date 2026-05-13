@@ -41,11 +41,15 @@ let _client = null;
 async function getClient() {
   if (!KV_AVAILABLE) return null;
   if (!_client) {
-    // Support both redis:// and rediss:// (TLS) URLs — e.g. Upstash uses rediss://
+    // Support both redis:// and rediss:// (TLS) URLs — e.g. Upstash uses rediss://.
+    // Verify the server's TLS cert by default; Upstash and Vercel KV have
+    // valid certs. Operators on private Redis with self-signed certs can opt
+    // out via REDIS_ALLOW_INSECURE_TLS=1.
     const useTLS = REDIS_URL.startsWith("rediss://");
+    const allowInsecure = process.env.REDIS_ALLOW_INSECURE_TLS === "1";
     _client = createClient({
       url: REDIS_URL,
-      socket: useTLS ? { tls: true, rejectUnauthorized: false } : undefined,
+      socket: useTLS ? { tls: true, rejectUnauthorized: !allowInsecure } : undefined,
     });
     _client.on("error", (err) => console.error("Redis error:", err.message));
   }

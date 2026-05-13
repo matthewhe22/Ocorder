@@ -6,7 +6,7 @@
 //   "remove-admin"       — remove an admin by id (cannot remove last)
 //   "change-credentials" — update own username/password
 import { readConfig, writeConfig, createSession, validToken, verifyToken, extractToken,
-         invalidateAllSessions, cors, kvGet, kvSet, kvDel, clientIp, KV_AVAILABLE } from "../_lib/store.js";
+         invalidateAllSessions, cors, kvGet, kvSet, kvDel, clientIp, rateLimit, KV_AVAILABLE } from "../_lib/store.js";
 import { hashPassword, verifyPassword, needsRehash } from "../_lib/password.js";
 import { createHash, timingSafeEqual } from "crypto";
 
@@ -77,6 +77,18 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const { action } = body;
+
+  // Rate-limit admin-mutation actions per IP. A stolen 8h bearer combined
+  // with unlimited add/remove/reset attempts would let an attacker churn
+  // through the admin pool; cap to 20/min/IP. (currentPass + auth-audit are
+  // the primary protections; this is defence in depth.)
+  if (action === "add-admin" || action === "remove-admin" || action === "reset-admin-password") {
+    const mutRl = await rateLimit(`admin-mut:${clientIp(req)}`, 20, 60);
+    if (!mutRl.allowed) {
+      res.setHeader("Retry-After", String(mutRl.retryAfter || 60));
+      return res.status(429).json({ error: "Too many admin actions. Please wait a moment and try again." });
+    }
+  }
 
   // ── POST action=login ──────────────────────────────────────────────────────
   if (action === "login") {
