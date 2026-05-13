@@ -7,8 +7,10 @@
 // so we disable the built-in body parser and read the stream manually.
 
 import Stripe from "stripe";
-import { readData, writeData, readConfig, cors, withOrderLock, tryClaimStripeEvent } from "../_lib/store.js";
+import { readData, writeData, readConfig, readAuthority, cors, withOrderLock, tryClaimStripeEvent } from "../_lib/store.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../_lib/email.js";
+import { isSharePointEnabled, uploadOrderDocs } from "../_lib/sharepoint.js";
+import { generateOrderPdf, generateReceiptPdf } from "../_lib/pdf.js";
 
 // Disable Vercel's default body parser so we can read the raw body for
 // Stripe signature verification.
@@ -155,6 +157,45 @@ export default async function handler(req, res) {
   }
   const confirmedOrder = lockResult.order;
 
+  // ── START SP uploads in parallel with emails ───────────────────────────────
+  // Previously this block was missing from the webhook path — when Stripe's
+  // server-to-server webhook fired before the customer's browser hit the
+  // success page, stripe-confirm would short-circuit on status="Paid" and SP
+  // uploads were silently skipped. Without this block, orders TOCS-MOJI6FCL-YLC
+  // and TOCS-MOI215N8-GR4 ended up with no SharePoint folder at all.
+  const spConfig = cfg?.sharepoint || {};
+  const spEnabled = isSharePointEnabled(spConfig);
+  const authDoc = await readAuthority(orderId).catch(() => null);
+  let spPromise = Promise.resolve();
+  if (spEnabled) {
+    spPromise = (async () => {
+      try {
+        const { authUrl, summaryUrl, receiptUrl, errors } = await uploadOrderDocs(
+          confirmedOrder,
+          spConfig,
+          { generateOrderPdf, generateReceiptPdf },
+          { authDoc, includeReceipt: true, stripeSessionId: session.id },
+        );
+        const fresh = await readData();
+        const oi = fresh.orders.find(o => o.id === orderId);
+        if (oi) {
+          oi.auditLog = oi.auditLog || [];
+          const ts = () => new Date().toISOString();
+          if (authUrl)            { oi.lotAuthorityUrl = authUrl; oi.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: authUrl }); }
+          else if (authDoc?.data) { oi.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: errors.auth?.message?.slice(0, 200) || "See Vercel logs" }); }
+          if (summaryUrl) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+          else            { oi.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: errors.summary?.message?.slice(0, 200) || "See Vercel logs" }); }
+          if (receiptUrl) { oi.receiptUrl = receiptUrl; oi.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
+          else            { oi.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: errors.receipt?.message?.slice(0, 200) || "See Vercel logs" }); }
+          await writeData(fresh).catch(e => console.error("Webhook SP persist failed:", e.message));
+        }
+        console.log(`Webhook SP uploads done for ${orderId}: auth=${!!authUrl} summary=${!!summaryUrl} receipt=${!!receiptUrl}`);
+      } catch (e) {
+        console.error("Webhook SP upload block failed:", e.message);
+      }
+    })();
+  }
+
   // Send admin + customer emails (mirrors stripe-confirm handler)
   const smtp = cfg.smtp || {};
   const toEmail = cfg.orderEmail || "Orders@tocs.co";
@@ -201,5 +242,10 @@ export default async function handler(req, res) {
     });
   }
 
-  return res.status(200).json({ received: true });
+  // Respond to Stripe before awaiting SP — SP uploads take several seconds and
+  // Stripe retries on slow responses. Vercel will let the function keep running
+  // for a short window after res.end() so the IIFE has a chance to finish.
+  res.status(200).json({ received: true });
+  await spPromise;
+  return;
 }

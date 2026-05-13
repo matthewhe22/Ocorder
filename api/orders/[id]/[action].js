@@ -9,7 +9,7 @@
 
 import Stripe from "stripe";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
-import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 import { detectPiqPayment } from "../../_lib/piq.js";
@@ -254,6 +254,63 @@ export default async function handler(req, res) {
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
     return res.send(buf);
+  }
+
+  // ── POST /api/orders/:id/save-to-sharepoint  (admin — retroactive SP save) ─
+  // Admin remediation for orders whose SP folder was never created (e.g. Stripe
+  // webhook path before the May 13 fix, or any historical SP upload failure).
+  // Generates the order summary (and payment receipt for Stripe orders) and
+  // uploads alongside the authority doc, then persists the URLs back onto the
+  // order. Safe to call repeatedly — existing files are overwritten in place.
+  if (action === "save-to-sharepoint" && req.method === "POST") {
+    const token = extractToken(req);
+    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const data = await readData();
+    const idx = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+
+    const cfg = await readConfig();
+    const spConfig = cfg?.sharepoint || {};
+    if (!isSharePointEnabled(spConfig)) return res.status(400).json({ error: "SharePoint is not configured." });
+
+    const authDoc = await readAuthority(id).catch(() => null);
+    const includeReceipt = order.payment === "stripe" && order.status === "Paid" && !!order.stripeSessionId;
+
+    let result;
+    try {
+      result = await uploadOrderDocs(order, spConfig, { generateOrderPdf, generateReceiptPdf }, {
+        authDoc,
+        includeReceipt,
+        stripeSessionId: order.stripeSessionId,
+      });
+    } catch (e) {
+      console.error(`save-to-sharepoint failed for ${id}:`, e.message);
+      return res.status(500).json({ error: "SharePoint upload failed: " + (e.message || "unknown error") });
+    }
+    const { authUrl, summaryUrl, receiptUrl, errors } = result;
+
+    const fresh = await readData();
+    const fi = fresh.orders.findIndex(o => o.id === id);
+    if (fi === -1) return res.status(404).json({ error: "Order vanished mid-upload." });
+    const fo = fresh.orders[fi];
+    fo.auditLog = fo.auditLog || [];
+    const ts = () => new Date().toISOString();
+    if (authUrl)            { fo.lotAuthorityUrl = authUrl; fo.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: `Manual: ${authUrl}` }); }
+    else if (authDoc?.data) { fo.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: "Manual: " + (errors.auth?.message?.slice(0, 180) || "See Vercel logs") }); }
+    if (summaryUrl) { fo.summaryUrl = summaryUrl; fo.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: `Manual: ${summaryUrl}` }); }
+    else            { fo.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: "Manual: " + (errors.summary?.message?.slice(0, 180) || "See Vercel logs") }); }
+    if (includeReceipt) {
+      if (receiptUrl) { fo.receiptUrl = receiptUrl; fo.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: `Manual: ${receiptUrl}` }); }
+      else            { fo.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: "Manual: " + (errors.receipt?.message?.slice(0, 180) || "See Vercel logs") }); }
+    }
+    await writeData(fresh);
+    return res.status(200).json({
+      ok: true,
+      authUrl, summaryUrl, receiptUrl,
+      order: fo,
+    });
   }
 
   // ── GET /api/orders/:id/certificate  (admin — re-download issued cert) ────

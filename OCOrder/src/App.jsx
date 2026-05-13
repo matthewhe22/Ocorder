@@ -3507,6 +3507,39 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
 
+  // Retroactively upload the order summary (and payment receipt + authority
+  // doc, when available) to SharePoint. Used to repair orders whose SP folder
+  // was never created — historically Stripe webhook orders before May 13, or
+  // any order where the SP upload failed at creation/confirmation time.
+  const [savingToSp, setSavingToSp] = useState(null); // order.id currently saving
+  const saveOrderToSharePoint = async (order) => {
+    if (savingToSp) return;
+    setSavingToSp(order.id);
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(order.id)}/save-to-sharepoint`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + adminToken },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        showAdminToast("err", d.error || "Save to SharePoint failed.");
+        return;
+      }
+      if (d.order) {
+        setData(p => ({ ...p, orders: p.orders.map(o => o.id !== d.order.id ? o : d.order) }));
+      }
+      const parts = [];
+      if (d.summaryUrl) parts.push("order summary");
+      if (d.authUrl) parts.push("authority doc");
+      if (d.receiptUrl) parts.push("payment receipt");
+      showAdminToast("ok", parts.length ? `Saved to SharePoint: ${parts.join(", ")}.` : "SharePoint save completed but nothing was uploaded — check the audit log.");
+    } catch {
+      showAdminToast("err", "Network error saving to SharePoint.");
+    } finally {
+      setSavingToSp(null);
+    }
+  };
+
   // Re-download the OC certificate that was previously emailed to the
   // applicant. The server redirects to the SharePoint copy when available and
   // falls back to the Redis / uploads copy otherwise. Orders issued before
@@ -4385,8 +4418,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                               </table>
                             </div>
                           )}
-                          {/* Documents section — order summary, authority doc, certificate, invoice */}
-                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.certificateFile || o.status === "Issued" || o.invoiceUrl) && (
+                          {/* Documents section — order summary, authority doc, certificate, invoice.
+                              Also rendered whenever Save-to-SharePoint applies (Paid / Issued orders
+                              missing an SP summary or, for Stripe, missing the receipt) so admin can
+                              repair pre-May-13 webhook orders. */}
+                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.certificateFile || o.invoiceUrl
+                            || (["Paid", "Issued", "Processing"].includes(o.status) && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)))) && (
                             <div style={{ marginBottom: "1rem" }}>
                               <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Documents</div>
                               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -4417,6 +4454,18 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                   <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
                                     <Ic n="invoice" s={13}/> Invoice
                                   </a>
+                                )}
+                                {/* Retroactive SharePoint repair — surface only when SP folder is missing/partial */}
+                                {(!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
+                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer", borderColor: "var(--amber)", color: "var(--amber)" }}
+                                    disabled={savingToSp === o.id}
+                                    title="Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."
+                                    onClick={() => saveOrderToSharePoint(o)}>
+                                    {savingToSp === o.id
+                                      ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>
+                                      : <>↑ Save to SharePoint</>
+                                    }
+                                  </button>
                                 )}
                               </div>
                             </div>

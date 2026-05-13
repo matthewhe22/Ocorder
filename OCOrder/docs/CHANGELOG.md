@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-05-13 — Stripe webhook now uploads to SharePoint; admin Save-to-SharePoint button
+
+### Bug
+Several Stripe-paid orders (`TOCS-MOJI6FCL-YLC`, `TOCS-MOI215N8-GR4`, `TOCS-MOC7WG47-2ZZ`, ...) ended up with **no SharePoint folder at all** — not even the `order-summary.pdf` that's supposed to be created when payment is confirmed. Audit logs split into two distinct failure modes:
+
+- **Mode A (`Payment confirmed via Stripe webhook`)** — `api/stripe-webhook/index.js` marked the order Paid and sent emails but never called `uploadToSharePoint`. When Stripe's server-to-server webhook beat the customer's browser to `stripe-confirm`, the SP upload block in `stripe-confirm` short-circuited on `status === "Paid"` and nothing was ever uploaded.
+- **Mode B (`Order summary SP upload failed` / `Payment receipt SP upload failed`)** — `stripe-confirm` did run but the Graph API calls failed (timeout / token / network). The order moved on, the failures were audited, but there was no in-portal way to retry.
+
+### Fix
+- **`api/_lib/sharepoint.js`** — Added `isSharePointEnabled(spConfig)`, `orderSharePointSubFolder(order)`, and an `uploadOrderDocs(order, spConfig, pdf, opts)` helper that uploads `order-summary.pdf` + (optional) `authority-*` + (optional) `payment-receipt.pdf` to the canonical per-order subfolder and returns `{ authUrl, summaryUrl, receiptUrl, errors }`.
+- **`api/stripe-webhook/index.js`** — Now calls `uploadOrderDocs` (with receipt) in parallel with emails; persists the URLs back onto the order; writes the same audit-log entries as `stripe-confirm`. The webhook responds to Stripe immediately, then awaits the SP IIFE in the Vercel post-response window.
+- **`api/orders/[id]/[action].js`** — New `POST /api/orders/:id/save-to-sharepoint` admin endpoint regenerates the order summary (and receipt for paid Stripe orders), uploads alongside the authority doc, and writes URLs + audit entries. Idempotent — safe to retry.
+- **Frontend (`src/App.jsx`)** — A `↑ Save to SharePoint` button now appears in the Documents section of any Paid/Issued/Processing order missing a `summaryUrl` (or, for Stripe orders, missing `receiptUrl`). One click repairs the SP folder.
+
+### Recovering the affected orders
+Open each broken order in Admin → Orders, expand it, and click **↑ Save to SharePoint** in the Documents section. The button creates `<Building>/OC-Certificates/<orderId>/` on SharePoint and uploads `order-summary.pdf`, the authority doc (if stored in Redis KV), and `payment-receipt.pdf` (Stripe orders only). After that, re-send the certificate with the PDF attached to populate the certificate copy too.
+
+---
+
 ## 2026-05-13 — Send-Certificate: require attachment, persist a re-downloadable copy
 
 ### Bug
