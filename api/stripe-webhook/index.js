@@ -152,8 +152,21 @@ export default async function handler(req, res) {
   if (lockResult.missing) {
     return res.status(200).json({ received: true, ignored: true });
   }
+  // Opportunistic-SP path: when the order is already Paid (either because the
+  // browser-side stripe-confirm beat us, or this webhook is a Stripe retry),
+  // we normally just acknowledge and exit. But if the SP folder was never
+  // populated (earlier run failed mid-flight), fall through and run only the
+  // SP block — NOT the email block, which already fired on the original
+  // transition. Skipping the email block here is what prevents duplicate
+  // "Payment Confirmed" emails to the customer.
+  const isFreshPayment = !lockResult.alreadyPaid;
   if (lockResult.alreadyPaid) {
-    return res.status(200).json({ received: true, alreadyPaid: true });
+    const ap = lockResult.order;
+    const needAnySp = !ap.summaryUrl || (ap.payment === "stripe" && ap.status === "Paid" && !ap.receiptUrl);
+    if (!needAnySp) {
+      return res.status(200).json({ received: true, alreadyPaid: true });
+    }
+    console.log(`Webhook: order ${orderId} already Paid but SP folder missing — running opportunistic SP upload.`);
   }
   const confirmedOrder = lockResult.order;
 
@@ -170,25 +183,33 @@ export default async function handler(req, res) {
   if (spEnabled) {
     spPromise = (async () => {
       try {
+        // Re-read the order for the PDF snapshot. The status-flip lock was
+        // released before this IIFE started; if an admin amended the order in
+        // between, the snapshot inside `confirmedOrder` is stale and the
+        // generated PDF would not match what's stored in Redis.
+        const snapshot = await readData().then(d => d.orders.find(o => o.id === orderId)).catch(() => null) || confirmedOrder;
         const { authUrl, summaryUrl, receiptUrl, errors } = await uploadOrderDocs(
-          confirmedOrder,
+          snapshot,
           spConfig,
           { generateOrderPdf, generateReceiptPdf },
           { authDoc, includeReceipt: true, stripeSessionId: session.id },
         );
-        const fresh = await readData();
-        const oi = fresh.orders.find(o => o.id === orderId);
-        if (oi) {
+        // Wrap the audit-log write in the order lock so concurrent updates
+        // (amend / status / piq / send-cert) can't clobber the URLs / entries.
+        await withOrderLock(orderId, async () => {
+          const fresh = await readData();
+          const oi = fresh.orders.find(o => o.id === orderId);
+          if (!oi) return;
           oi.auditLog = oi.auditLog || [];
           const ts = () => new Date().toISOString();
           if (authUrl)            { oi.lotAuthorityUrl = authUrl; oi.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: authUrl }); }
-          else if (authDoc?.data) { oi.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: errors.auth?.message?.slice(0, 200) || "See Vercel logs" }); }
+          else if (authDoc?.data) { oi.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: errors.auth?.message?.slice(0, 60) || "See Vercel logs" }); }
           if (summaryUrl) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-          else            { oi.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: errors.summary?.message?.slice(0, 200) || "See Vercel logs" }); }
+          else            { oi.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: errors.summary?.message?.slice(0, 60) || "See Vercel logs" }); }
           if (receiptUrl) { oi.receiptUrl = receiptUrl; oi.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
-          else            { oi.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: errors.receipt?.message?.slice(0, 200) || "See Vercel logs" }); }
-          await writeData(fresh).catch(e => console.error("Webhook SP persist failed:", e.message));
-        }
+          else            { oi.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: errors.receipt?.message?.slice(0, 60) || "See Vercel logs" }); }
+          await writeData(fresh);
+        }).catch(e => console.error("Webhook SP persist failed:", e.message));
         console.log(`Webhook SP uploads done for ${orderId}: auth=${!!authUrl} summary=${!!summaryUrl} receipt=${!!receiptUrl}`);
       } catch (e) {
         console.error("Webhook SP upload block failed:", e.message);
@@ -196,11 +217,13 @@ export default async function handler(req, res) {
     })();
   }
 
-  // Send admin + customer emails (mirrors stripe-confirm handler)
+  // Send admin + customer emails (mirrors stripe-confirm handler).
+  // Skipped on the opportunistic-SP retry path so customers don't get
+  // duplicate "Payment Confirmed" emails from a webhook retry.
   const smtp = cfg.smtp || {};
   const toEmail = cfg.orderEmail || "Orders@tocs.co";
 
-  if (smtp.host && smtp.user && smtp.pass) {
+  if (isFreshPayment && smtp.host && smtp.user && smtp.pass) {
     const transporter = createTransporter(smtp);
     const from = `"TOCS Order Portal" <${toEmail}>`;
 

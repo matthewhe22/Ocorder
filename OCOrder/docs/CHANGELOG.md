@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-05-13 — PR #35/#36 tier-2 follow-ups: token leakage, open redirect, locking, rate limit, polish
+
+Six issues from the same review pass as PR #36, plus three polish items:
+
+### Security
+- **`?token=` query-string fallback removed from `GET /api/orders/:id/certificate`** — the long-lived admin token would otherwise leak via Vercel access logs, browser history, and the `Referer` header when the response opens a SharePoint URL. The frontend already supplies the token via the `Authorization` header. Mirrored in `OCOrder/server.js`.
+- **Host allow-list on the `/authority` 302 redirect** — `res.redirect(302, order.lotAuthorityUrl)` is now gated by `isAllowedRedirectHost()`, which checks the target is HTTPS and on `*.sharepoint.com`, `*.onmicrosoft.com`, or `*.microsoft.com`. A corrupted or forged `lotAuthorityUrl` value can no longer turn the portal into an open redirector / phishing chain.
+- **`save-to-sharepoint` is now rate-limited** — `rateLimit('sp-save:'+ip, 10, 60)` blocks a leaked token from amplifying PDF generation + Graph API uploads into a function-quota / Graph-rate DoS. 429 with `Retry-After` header. Frontend surfaces a distinct "Too many SharePoint saves" toast.
+
+### Correctness
+- **`withOrderLock` around the post-upload audit writes** in both the Stripe webhook SP IIFE and `save-to-sharepoint`. A concurrent `amend` / `status` / `check-piq-payment` / `send-cert` no longer clobbers the URLs or audit entries the SP IIFE just produced.
+- **Fresh-snapshot read inside the webhook SP IIFE before generating the order summary PDF** — the status-flip lock was released before the IIFE started; if an admin amended the order in between, the generated PDF would have been a stale snapshot. The IIFE now re-reads inside the IIFE so the PDF matches Redis.
+- **`save-to-sharepoint` 503 on lock contention** — wraps the read-modify-write in `withOrderLock` and returns 503 ("Order is busy — please try again") on conflict instead of overwriting.
+
+### UX / polish
+- **Save-to-SharePoint button gated on `sharepointEnabled`** — exposed via the existing public-config endpoint (`/api/config/public`, boolean only). In local dev / demo / deployments without SP creds the button no longer renders, so clicks don't 400 with "SharePoint is not configured".
+- **Download Certificate button hidden for legacy `Issued` orders without a stored copy** — previously the button showed and the click 404'd. Admin now sees no button until the certificate is (re-)sent with the PDF attached.
+- **Webhook opportunistic SP upload on retries** — if `checkout.session.completed` arrives for an order that's already Paid but whose SP folder was never populated (an earlier run died mid-flight), the SP block now runs from the retry instead of just acknowledging. The email block is gated on `isFreshPayment` so customers don't receive duplicate confirmation emails.
+- **Distinct 401 / 429 toasts in `saveOrderToSharePoint`** — matches the pattern in `downloadCertificate`.
+- **Graph error notes truncated to 60 chars** in SP audit-log entries to avoid leaking internal SP folder paths via error response bodies.
+
+---
+
 ## 2026-05-13 — PR #35 follow-ups: webhook lifetime, SP path traversal, download fix, idempotency
 
 Four issues uncovered by a code-review pass over the merged PR #35:
