@@ -142,15 +142,30 @@ export function isSharePointEnabled(spConfig) {
   return SHAREPOINT_ENABLED || !!(spConfig?.tenantId && spConfig?.clientId && spConfig?.clientSecret && spConfig?.siteId);
 }
 
+// Sanitise a single SharePoint path segment. Strips the OneDrive / Graph
+// reserved characters and any leading/trailing dots or whitespace (which
+// SharePoint also forbids). A segment that collapses to empty or to a string
+// of dots ("..", "...") would resolve as a parent-directory reference under
+// Graph's `root:/{path}:/content` API and let user-controlled fields (e.g.
+// `planName` submitted at order creation, or an authority-doc filename) write
+// files outside the configured base folder — so any segment that ends up
+// empty after sanitisation falls back to the supplied default.
+function sanitiseSegment(raw, fallback) {
+  let s = String(raw ?? "").replace(/[\\/:*?"<>|\x00-\x1f]/g, "-");
+  s = s.replace(/^[.\s]+|[.\s]+$/g, "").trim();
+  if (!s) return fallback;
+  return s;
+}
+
 /**
  * Compute the per-order SharePoint subfolder path:
  *   {sanitised building name}/{OC-Certificates | Keys-Fobs}/{orderId}
  */
 export function orderSharePointSubFolder(order) {
   const categoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
-  const buildingName = (order.items?.[0]?.planName || "Unknown Building")
-    .replace(/[\\/:*?"<>|]/g, "-").trim();
-  return `${buildingName}/${categoryFolder}/${order.id}`;
+  const buildingName = sanitiseSegment(order.items?.[0]?.planName, "Unknown Building");
+  const orderId = sanitiseSegment(order.id, "unknown-order");
+  return `${buildingName}/${categoryFolder}/${orderId}`;
 }
 
 /**
@@ -164,6 +179,7 @@ export function orderSharePointSubFolder(order) {
  * @param {object} pdf            — { generateOrderPdf, generateReceiptPdf } from _lib/pdf.js
  * @param {object} [opts]
  * @param {object} [opts.authDoc] — { data: base64, filename, contentType } (optional)
+ * @param {boolean}[opts.includeSummary] — generate + upload order-summary.pdf (default true)
  * @param {boolean}[opts.includeReceipt] — also upload payment-receipt.pdf
  * @param {string} [opts.stripeSessionId] — Stripe session for receipt header
  * @returns {Promise<{ authUrl: string|null, summaryUrl: string|null, receiptUrl: string|null, errors: object }>}
@@ -171,17 +187,23 @@ export function orderSharePointSubFolder(order) {
 export async function uploadOrderDocs(order, spConfig, pdf, opts = {}) {
   const subFolder = orderSharePointSubFolder(order);
   const errors = {};
+  const includeSummary = opts.includeSummary !== false;
 
-  const summaryPromise = (async () => {
-    try {
-      const buf = await pdf.generateOrderPdf(order);
-      return await uploadToSharePoint("order-summary.pdf", "application/pdf", buf.toString("base64"), spConfig, subFolder);
-    } catch (e) { errors.summary = e; return null; }
-  })();
+  const summaryPromise = includeSummary
+    ? (async () => {
+        try {
+          const buf = await pdf.generateOrderPdf(order);
+          return await uploadToSharePoint("order-summary.pdf", "application/pdf", buf.toString("base64"), spConfig, subFolder);
+        } catch (e) { errors.summary = e; return null; }
+      })()
+    : Promise.resolve(null);
 
+  // Filename is user-supplied at order-creation time and persists in Redis;
+  // sanitise as a path segment to block `../` traversal before concatenating.
+  const authFilename = `authority-${sanitiseSegment(opts.authDoc?.filename, "document")}`;
   const authPromise = opts.authDoc?.data
     ? uploadToSharePoint(
-        `authority-${opts.authDoc.filename || "document"}`,
+        authFilename,
         opts.authDoc.contentType || "application/octet-stream",
         opts.authDoc.data,
         spConfig,

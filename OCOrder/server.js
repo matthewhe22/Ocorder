@@ -1457,10 +1457,9 @@ async function handler(req, res) {
     const d = readData();
     const order = d.orders.find(o => o.id === orderId);
     if (!order) return json(res, 404, { error: "Order not found." });
-    if (order.certificateUrl) {
-      res.writeHead(302, { Location: order.certificateUrl });
-      return res.end();
-    }
+    // Return JSON {url} for the SharePoint case so the admin client can open
+    // the cross-origin URL in a new tab — a 302 here would be opaque to fetch.
+    if (order.certificateUrl) return json(res, 200, { url: order.certificateUrl });
     if (!order.certificateFile) return json(res, 404, { error: "No stored certificate for this order." });
     const safeFilename = path.basename(order.certificateFile).replace(/[^\w.\-]/g, "_");
     const filePath = path.resolve(UPLOADS_DIR, safeFilename);

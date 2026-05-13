@@ -2,6 +2,17 @@
 
 ---
 
+## 2026-05-13 — PR #35 follow-ups: webhook lifetime, SP path traversal, download fix, idempotency
+
+Four issues uncovered by a code-review pass over the merged PR #35:
+
+1. **Stripe webhook dropped SP uploads after responding 200** — the previous fix moved SP work into a fire-and-forget IIFE and `await spPromise`'d after `res.status(200).json(...)`. Vercel Node serverless does not extend the function past `res.end()` (no `waitUntil` shim was used), so the SP block could be cancelled mid-flight. Combined with `tryClaimStripeEvent` already burning the Stripe event ID, this re-introduced the exact silent-failure mode PR #35 was meant to fix. `api/stripe-webhook/index.js` now awaits `spPromise` *before* sending the 200.
+2. **SharePoint path traversal via user-controlled fields** — `orderSharePointSubFolder` only stripped `[\\/:*?"<>|]`. A customer submitting an order with `items[0].planName = ".."` produced a subfolder like `../OC-Certificates/…`, and `uploadOrderDocs` similarly concatenated the raw client-supplied `authDoc.filename` (e.g. `../../pwned.pdf`) into the upload path. Both paths funnel into Graph's `root:/{path}:/content`, which resolves `..` segments. Added a `sanitiseSegment` helper that strips control chars, leading/trailing dots and whitespace, and rejects dot-only segments to a safe fallback. Applied to `planName`, `order.id`, and authority filename.
+3. **`downloadCertificate` silently failed on the common SharePoint-redirect path** — server returned `302 → certificateUrl`, the frontend `fetch(..., { redirect: "follow" })` followed cross-origin without CORS headers, response was opaque, and the admin got a generic "Could not download certificate" toast on the happy path. Server now returns `200 { url }` JSON for the SharePoint case and binary only for the KV/local fallback; frontend opens the URL in a new tab and only streams a blob when the response is binary. Distinct toast for 401/session-expired.
+4. **`save-to-sharepoint` was not actually idempotent** — every click appended 1–3 audit-log rows even when URLs were already populated and unconditionally re-uploaded. The handler now gates each doc kind on the current order state (`needSummary = !order.summaryUrl`, etc.) and short-circuits with `{ ok: true, alreadyPresent: true }` when nothing is missing. A new "All documents are already in SharePoint — nothing to do." toast surfaces this in the UI.
+
+---
+
 ## 2026-05-13 — Stripe webhook now uploads to SharePoint; admin Save-to-SharePoint button
 
 ### Bug

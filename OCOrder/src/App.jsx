@@ -3528,6 +3528,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       if (d.order) {
         setData(p => ({ ...p, orders: p.orders.map(o => o.id !== d.order.id ? o : d.order) }));
       }
+      if (d.alreadyPresent) {
+        showAdminToast("ok", "All documents are already in SharePoint — nothing to do.");
+        return;
+      }
       const parts = [];
       if (d.summaryUrl) parts.push("order summary");
       if (d.authUrl) parts.push("authority doc");
@@ -3541,19 +3545,32 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   };
 
   // Re-download the OC certificate that was previously emailed to the
-  // applicant. The server redirects to the SharePoint copy when available and
-  // falls back to the Redis / uploads copy otherwise. Orders issued before
-  // this feature shipped (no certificateUrl, no certificateFile) will return
-  // a 404 — admin must re-send the certificate to populate storage.
+  // applicant. The server returns either:
+  //   - 200 JSON { url }  → SharePoint copy; we open it in a new tab so the
+  //     browser handles the cross-origin auth dance natively.
+  //   - 200 binary        → stream the bytes (KV/local fallback) and trigger
+  //     a download via a temporary <a> + URL.createObjectURL.
+  // Orders issued before this feature shipped (no certificateUrl, no
+  // certificateFile) return 404 — admin must re-send the certificate.
   const downloadCertificate = async (order) => {
     try {
       const r = await fetch(`/api/orders/${encodeURIComponent(order.id)}/certificate`, {
         headers: { "Authorization": "Bearer " + adminToken },
-        redirect: "follow",
       });
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
         showAdminToast("err", d.error || (r.status === 404 ? "No stored certificate. Re-send the certificate to enable re-download." : "Could not download certificate."));
+        return;
+      }
+      const ct = (r.headers.get("Content-Type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const d = await r.json().catch(() => ({}));
+        if (d.url) {
+          window.open(d.url, "_blank", "noopener,noreferrer");
+        } else {
+          showAdminToast("err", "Server did not return a download URL.");
+        }
         return;
       }
       const blob = await r.blob();
