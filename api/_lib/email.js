@@ -281,12 +281,18 @@ export function buildPiqPaymentEmailHtml(order, paymentDate, paymentRef, payment
  * connectionTimeout: 8000ms, socketTimeout: 10000ms are required.
  */
 export function createTransporter(smtp) {
+  // Verify the SMTP server's TLS cert by default — SMTP2GO has valid certs,
+  // and credentials + email bodies (including PII, payment refs) should not
+  // travel through a TLS channel that ignores cert validity. Operators on
+  // self-hosted SMTP with self-signed certs can opt out via
+  // SMTP_ALLOW_INSECURE_TLS=1.
+  const allowInsecure = process.env.SMTP_ALLOW_INSECURE_TLS === "1";
   return nodemailer.createTransport({
     host: smtp.host,
     port: Number(smtp.port) || 2525,  // SMTP2GO default port — match existing pattern in orders/index.js
     secure: Number(smtp.port) === 465,
     auth: { user: smtp.user, pass: smtp.pass },
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: !allowInsecure },
     connectionTimeout: 8000,   // 8 s to establish TCP connection
     socketTimeout:     10000,  // 10 s idle socket cut-off
     // NOTE: NO greetingTimeout — SMTP2GO's greeting can take >5 s and silent-fails with it

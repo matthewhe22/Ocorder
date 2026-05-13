@@ -5,6 +5,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+// Shared with the Vercel handlers so the local dev server can't drift from
+// production on what counts as a valid order status.
+import { VALID_STATUSES } from "../api/_lib/constants.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST        = path.join(__dirname, "dist");
@@ -141,7 +144,7 @@ const DEMO_DEFAULT_CONFIG = {
 };
 
 // ── Valid order statuses ───────────────────────────────────────────────────────
-const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Awaiting Stripe Payment","Paid"];
+// VALID_STATUSES imported from ../api/_lib/constants.js at the top of the file.
 
 // ── In-memory sessions  Map<token, { user, exp }> ─────────────────────────────
 const SESSIONS = new Map();
@@ -526,12 +529,15 @@ function buildAmendedCustomerEmailHtml(order, oldTotal, newTotal, note, cfg) {
 }
 
 // ── Shared SMTP transporter factory ──────────────────────────────────────────
+// Verify the SMTP server's TLS cert by default. Operators on self-hosted SMTP
+// with self-signed certs can opt out via SMTP_ALLOW_INSECURE_TLS=1.
 function createSmtpTransporter(smtp) {
+  const allowInsecure = process.env.SMTP_ALLOW_INSECURE_TLS === "1";
   return nodemailer.createTransport({
     host: smtp.host, port: Number(smtp.port) || 587,
     secure: Number(smtp.port) === 465,
     auth: { user: smtp.user, pass: smtp.pass },
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: !allowInsecure },
   });
 }
 

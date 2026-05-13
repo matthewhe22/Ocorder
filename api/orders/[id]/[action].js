@@ -10,10 +10,11 @@
 import Stripe from "stripe";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
-import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment } from "../../_lib/sharepoint.js";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment, pushAuditOnce } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 import { detectPiqPayment } from "../../_lib/piq.js";
+import { VALID_STATUSES, AMENDABLE_STATUSES } from "../../_lib/constants.js";
 
 // ── HTML escape helper ────────────────────────────────────────────────────────
 function esc(str) {
@@ -444,7 +445,6 @@ export default async function handler(req, res) {
     const { status, note } = req.body || {};
     if (!status) return res.status(400).json({ error: "status is required." });
     // Must match production server.js status enum exactly
-    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid","Awaiting Stripe Payment"];
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status: "${status}".` });
 
     try {
@@ -479,7 +479,7 @@ export default async function handler(req, res) {
     const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const AMENDABLE_STATUSES = ["Invoice to be issued", "Pending Payment", "Awaiting Stripe Payment", "On Hold", "Awaiting Documents"];
+    // AMENDABLE_STATUSES imported from _lib/constants.js for cross-handler consistency.
     const { items, selectedShipping, note } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items must be a non-empty array." });
     if (items.length > 50) return res.status(400).json({ error: "Too many items (max 50)." });
@@ -659,9 +659,9 @@ export default async function handler(req, res) {
         oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regenerated", note: `${filename} → ${newSummaryUrl}` });
         data.orders[idx].summaryUrl = newSummaryUrl;
       } else if (spEnabled && pdfBase64) {
-        oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regeneration failed", note: spErr?.message?.substring(0, 120) || "See Vercel logs" });
+        pushAuditOnce(oi.auditLog, "Order summary regeneration failed", spErr?.message?.substring(0, 60) || "See Vercel logs");
       } else if (spEnabled && pdfErr) {
-        oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regeneration failed", note: `PDF gen: ${pdfErr.message?.substring(0, 120)}` });
+        pushAuditOnce(oi.auditLog, "Order summary regeneration failed", `PDF gen: ${pdfErr.message?.substring(0, 60)}`);
       }
       if (emailsAttempted) {
         if (emailFailures.length === 0) {
@@ -832,12 +832,15 @@ export default async function handler(req, res) {
         freshOrder.certificateContentType = firstContentType;
         if (certUrlNew) freshOrder.certificateUrl = certUrlNew;
         freshOrder.status = "Issued";
-        const newAudit = [];
-        if (kvSaved) newAudit.push({ ts: new Date().toISOString(), action: "Certificate saved to Redis", note: firstFilename });
-        if (certUrlNew) newAudit.push({ ts: new Date().toISOString(), action: "Certificate saved to SharePoint", note: certUrlNew });
-        else if (SHAREPOINT_ENABLED || cfg?.sharepoint?.siteId) newAudit.push({ ts: new Date().toISOString(), action: "Certificate SP upload failed", note: "See Vercel logs" });
-        newAudit.push({ ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` });
-        freshOrder.auditLog = [...(freshOrder.auditLog || []), ...newAudit];
+        // Successes always append; the SP failure (if it occurred) goes
+        // through pushAuditOnce so admin retries don't flood the audit log.
+        freshOrder.auditLog = freshOrder.auditLog || [];
+        if (kvSaved) freshOrder.auditLog.push({ ts: new Date().toISOString(), action: "Certificate saved to Redis", note: firstFilename });
+        if (certUrlNew) freshOrder.auditLog.push({ ts: new Date().toISOString(), action: "Certificate saved to SharePoint", note: certUrlNew });
+        else if (SHAREPOINT_ENABLED || cfg?.sharepoint?.siteId) {
+          pushAuditOnce(freshOrder.auditLog, "Certificate SP upload failed", "See Vercel logs");
+        }
+        freshOrder.auditLog.push({ ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` });
         await writeData(freshDataCert);
       }).catch(e => console.error("send-certificate persist failed:", e.message));
       return res.status(200).json({ ok: true });
@@ -852,6 +855,14 @@ export default async function handler(req, res) {
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { message, attachments: invoiceAttachments } = await readMessageAndAttachments(req);
+    // Mirror the 4.5 MB cap on send-certificate. Without this, an admin (or
+    // a stolen-token attacker) could OOM the function / DoS SMTP2GO with a
+    // single oversized upload.
+    const INVOICE_ATTACH_LIMIT = 4.5 * 1024 * 1024;
+    const invoiceTotalSize = invoiceAttachments.reduce((sum, a) => sum + a.buffer.length, 0);
+    if (invoiceTotalSize > INVOICE_ATTACH_LIMIT) {
+      return res.status(413).json({ error: "Attachments too large — total must be under 4.5 MB." });
+    }
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -1087,12 +1098,14 @@ export default async function handler(req, res) {
           const oi = freshData.orders.find(o => o.id === id);
           if (oi) {
             oi.auditLog = oi.auditLog || [];
+            // Successes always append; failures use pushAuditOnce so a Stripe
+            // retry against a broken SP doesn't flood the audit log.
             if (authUrl)            { oi.lotAuthorityUrl = authUrl;  oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: authUrl }); }
-            else if (authDoc?.data) { oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note: "See Vercel logs" }); }
-            if (summaryUrl)         { oi.summaryUrl = summaryUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-            else                    { oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note: "See Vercel logs" }); }
-            if (receiptUrl)         { oi.receiptUrl = receiptUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
-            else                    { oi.auditLog.push({ ts: new Date().toISOString(), action: "Payment receipt SP upload failed", note: "See Vercel logs" }); }
+            else if (authDoc?.data) { pushAuditOnce(oi.auditLog, "Authority doc SP upload failed", "See Vercel logs"); }
+            if (summaryUrl) { oi.summaryUrl = summaryUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+            else            { pushAuditOnce(oi.auditLog, "Order summary SP upload failed", "See Vercel logs"); }
+            if (receiptUrl) { oi.receiptUrl = receiptUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
+            else            { pushAuditOnce(oi.auditLog, "Payment receipt SP upload failed", "See Vercel logs"); }
           }
           await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for stripe order ${id}: auth=${!!authUrl} summary=${!!summaryUrl} receipt=${!!receiptUrl}`);

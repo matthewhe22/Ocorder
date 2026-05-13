@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-05-13 — High-tier hotfix: rate limits, TLS hardening, PIQ idempotency, status enum dedup
+
+Eleven High-tier findings from the end-to-end review pass, all landed in a single PR.
+
+### Security
+- **`send-invoice` 4.5 MB attachment cap** mirrors `send-certificate`. Without this an admin (or stolen-token attacker) could OOM the function or burn SMTP quota with a single oversized upload. (`api/orders/[id]/[action].js`)
+- **Host-header injection closed** on the Stripe success/cancel URLs. `req.headers.host` is fallback-only; the canonical origin comes from `PUBLIC_ORIGIN` env var (or `cfg.publicOrigin`). A tampered `Host:` no longer routes paying customers to `attacker.com/complete?…` after Stripe. (`api/orders/index.js`)
+- **TLS verification enabled by default** for both SMTP (`api/_lib/email.js`, `OCOrder/server.js`) and Redis (`api/_lib/store.js`). `rejectUnauthorized: false` removed; operators on private SMTP / Redis with self-signed certs can opt in with `SMTP_ALLOW_INSECURE_TLS=1` or `REDIS_ALLOW_INSECURE_TLS=1`.
+- **Order-POST DoS bounded** — unauthenticated `POST /api/orders` is now rate-limited (5 orders/min/IP) and the body is capped at 12 MB. Stops a single IP from inflating `tocs:data`, burning SMTP quota, filling SP folders, or starving the function pool.
+- **Admin-mutation rate limit** — `add-admin` / `remove-admin` / `reset-admin-password` capped at 20 req/min/IP. Defence in depth alongside `currentPass` + `tocs:auth-audit` (added in PR #39).
+
+### Correctness
+- **PIQ poll cron always persists `piqLastPolled`** — previously discarded on "no payment found" runs, so the admin UI was stuck on a stale poll timestamp for any order without a payment. Cron now re-reads fresh and merges only PIQ-related fields + the audit entries this run actually appended (`_auditStartLen` snapshot), so the always-write doesn't clobber concurrent send-invoice / status changes.
+- **PIQ payment email idempotency** — new `piqPaymentEmailSent` flag set after the admin notification email succeeds, checked at the top of the email path. A failed `writeData` after the email goes will let the next cron re-detect and re-send (small known duplicate risk) but the common case no longer double-emails.
+- **`pushAuditOnce` coverage extended** to all SP-failure paths: `stripe-confirm`, `amend`, `send-certificate`, plus the order-creation IIFE. A persistently broken SharePoint can no longer flood the audit log with hundreds of duplicate "SP upload failed" rows per day.
+- **Webhook opportunistic-SP per-doc gating** — mirrors `save-to-sharepoint`: skip any doc whose URL is already populated. Without this, a Stripe webhook retry would re-upload `order-summary.pdf` even when an earlier run had already saved it, appending a duplicate "Order summary saved" audit row.
+
+### Quality / cleanup
+- **Status enum centralised** in new `api/_lib/constants.js` and imported by both the Vercel handlers and the local dev server. Previously redefined in 4 places; drift between dev and prod is no longer possible.
+- **Delete double-click guard** — order-delete button now disables on the in-flight row and shows "Deleting…". A `deletingOrderId` scalar mirrors the existing `savingToSp` pattern.
+
+---
+
 ## 2026-05-13 — Critical hotfix: order pricing, stripe-cancel, SP filename, admin takeover, order lock coverage
 
 Five Critical findings from an end-to-end review pass over main.

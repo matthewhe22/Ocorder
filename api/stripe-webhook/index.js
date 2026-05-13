@@ -213,11 +213,28 @@ export default async function handler(req, res) {
           console.error(`Webhook SP IIFE: Redis read failed (${e.message}) — proceeding with stale snapshot.`);
           snapshot = confirmedOrder;
         }
+        // Per-doc gating: skip anything already in SharePoint. Mirrors
+        // save-to-sharepoint. Without this, an opportunistic retry would
+        // re-upload `order-summary.pdf` even when it was already saved on
+        // an earlier run (Graph PUT overwrites silently) and append a
+        // duplicate "Order summary saved" audit row.
+        const needSummary = !snapshot.summaryUrl;
+        const needAuth    = !!authDoc?.data && !snapshot.lotAuthorityUrl;
+        const needReceipt = !snapshot.receiptUrl;
+        if (!needSummary && !needAuth && !needReceipt) {
+          console.log(`Webhook SP IIFE: order ${orderId} already has all SP docs — skipping.`);
+          return;
+        }
         const { authUrl, summaryUrl, receiptUrl, errors } = await uploadOrderDocs(
           snapshot,
           spConfig,
           { generateOrderPdf, generateReceiptPdf },
-          { authDoc, includeReceipt: true, stripeSessionId: session.id },
+          {
+            authDoc: needAuth ? authDoc : null,
+            includeSummary: needSummary,
+            includeReceipt: needReceipt,
+            stripeSessionId: session.id,
+          },
         );
         // Wrap the audit-log write in the order lock so concurrent updates
         // (amend / status / piq / send-cert) can't clobber the URLs / entries.
@@ -229,13 +246,21 @@ export default async function handler(req, res) {
           const ts = () => new Date().toISOString();
           // Successes always append. Failures use pushAuditOnce so a webhook
           // retry storm against a persistently-broken SharePoint doesn't
-          // flood the audit log with duplicate "SP upload failed" rows.
-          if (authUrl)            { oi.lotAuthorityUrl = authUrl; oi.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: authUrl }); }
-          else if (authDoc?.data) { pushAuditOnce(oi.auditLog, "Authority doc SP upload failed", errors.auth?.message?.slice(0, 60) || "See Vercel logs"); }
-          if (summaryUrl) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-          else            { pushAuditOnce(oi.auditLog, "Order summary SP upload failed", errors.summary?.message?.slice(0, 60) || "See Vercel logs"); }
-          if (receiptUrl) { oi.receiptUrl = receiptUrl; oi.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
-          else            { pushAuditOnce(oi.auditLog, "Payment receipt SP upload failed", errors.receipt?.message?.slice(0, 60) || "See Vercel logs"); }
+          // flood the audit log. Only audit the doc kinds we actually tried —
+          // per-doc gating above skipped any already present, so we don't
+          // want to spuriously log "failed" for those.
+          if (needAuth) {
+            if (authUrl) { oi.lotAuthorityUrl = authUrl; oi.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: authUrl }); }
+            else         { pushAuditOnce(oi.auditLog, "Authority doc SP upload failed", errors.auth?.message?.slice(0, 60) || "See Vercel logs"); }
+          }
+          if (needSummary) {
+            if (summaryUrl) { oi.summaryUrl = summaryUrl; oi.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+            else            { pushAuditOnce(oi.auditLog, "Order summary SP upload failed", errors.summary?.message?.slice(0, 60) || "See Vercel logs"); }
+          }
+          if (needReceipt) {
+            if (receiptUrl) { oi.receiptUrl = receiptUrl; oi.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
+            else            { pushAuditOnce(oi.auditLog, "Payment receipt SP upload failed", errors.receipt?.message?.slice(0, 60) || "See Vercel logs"); }
+          }
           await writeData(fresh);
         }).catch(e => console.error("Webhook SP persist failed:", e.message));
         console.log(`Webhook SP uploads done for ${orderId}: auth=${!!authUrl} summary=${!!summaryUrl} receipt=${!!receiptUrl}`);

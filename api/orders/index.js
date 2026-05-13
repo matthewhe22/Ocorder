@@ -1,8 +1,8 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
-import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, KV_AVAILABLE } from "../_lib/store.js";
+import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, KV_AVAILABLE } from "../_lib/store.js";
 import { randomBytes } from "crypto";
-import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment } from "../_lib/sharepoint.js";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment, pushAuditOnce } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
 import { detectPiqPayment } from "../_lib/piq.js";
@@ -43,25 +43,32 @@ async function applyPiqPayment(order, result, cfg, data) {
       action: "Payment confirmed via PropertyIQ",
       note:   `Date: ${dateStr} | Ref: ${result.paymentReference || "—"} | Amount: $${(result.totalPaid || 0).toFixed(2)}`,
     }];
-    // Send payment notification email to admin (non-fatal)
-    try {
-      const smtp = cfg.smtp || {};
-      if (smtp.host && smtp.user && smtp.pass) {
-        const toEmail     = cfg.orderEmail || "Orders@tocs.co";
-        const transporter = createTransporter(smtp);
-        const lotNumber   = order.items?.[0]?.lotNumber || "";
-        const planName    = order.items?.[0]?.planName  || "";
-        await transporter.sendMail({
-          from:    `"TOCS Order Portal" <${toEmail}>`,
-          to:      toEmail,
-          subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
-          html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
-        });
-        console.log(`PIQ payment notification sent for order ${order.id}`);
+    // Send payment notification email to admin (non-fatal). Idempotency:
+    // mark `piqPaymentEmailSent` on first dispatch so a cron retry over a
+    // re-detected payment doesn't re-email the admin. If writeData fails
+    // after the email goes, the next cron will re-email — a known small
+    // duplicate risk in exchange for not double-sending the common case.
+    if (!order.piqPaymentEmailSent) {
+      try {
+        const smtp = cfg.smtp || {};
+        if (smtp.host && smtp.user && smtp.pass) {
+          const toEmail     = cfg.orderEmail || "Orders@tocs.co";
+          const transporter = createTransporter(smtp);
+          const lotNumber   = order.items?.[0]?.lotNumber || "";
+          const planName    = order.items?.[0]?.planName  || "";
+          await transporter.sendMail({
+            from:    `"TOCS Order Portal" <${toEmail}>`,
+            to:      toEmail,
+            subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
+            html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
+          });
+          order.piqPaymentEmailSent = now;
+          console.log(`PIQ payment notification sent for order ${order.id}`);
+        }
+      } catch (emailErr) {
+        console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
+        order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
       }
-    } catch (emailErr) {
-      console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
-      order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
     }
   }
 }
@@ -126,6 +133,9 @@ export default async function handler(req, res) {
         o.payment === "invoice" &&
         !["Paid", "Cancelled"].includes(o.status)
       );
+      // Snapshot the audit-log length per candidate so the post-loop merge
+      // can copy only the entries this cron run actually appended.
+      for (const c of candidates) c._auditStartLen = (c.auditLog || []).length;
 
       // Normalise lot-number strings for matching (strips common prefixes like "Lot ", "Unit ", etc.)
       const normLotStr = s => String(s || "").trim().toLowerCase()
@@ -173,14 +183,38 @@ export default async function handler(req, res) {
         }
       }
 
-      // Write back if: a payment was confirmed OR new lot IDs were auto-linked.
-      // We still avoid writing on pure "no payment found" runs to prevent a race
-      // with send-invoice: the cron could read a stale snapshot and then overwrite
-      // a concurrent status update made by send-invoice.
-      if (confirmed > 0 || linked > 0) {
-        await writeData(data).catch(err => {
-          console.error("poll-piq: writeData failed:", err.message);
-        });
+      // Always persist what the cron actually did. The admin UI surfaces
+      // `piqLastPolled` per order and was previously stuck on a stale value
+      // for any order that returned no payment found. To avoid clobbering a
+      // concurrent send-invoice / status change (the original reason this
+      // block was gated), we re-read fresh and copy ONLY the PIQ-related
+      // fields + any newly-appended audit entries from each updated order.
+      try {
+        const fresh = await readData();
+        const PIQ_FIELDS = ["piqLastPolled", "piqLevyFound", "piqLevyTotalDue",
+          "piqLevyTotalNett", "piqLotId", "piqPaymentDate",
+          "piqPaymentReference", "piqPaymentEmailSent"];
+        for (const updated of candidates) {
+          const fi = fresh.orders.findIndex(o => o.id === updated.id);
+          if (fi === -1) continue;
+          const target = fresh.orders[fi];
+          for (const f of PIQ_FIELDS) {
+            if (updated[f] !== undefined) target[f] = updated[f];
+          }
+          // Only adopt the "Paid" status; never regress something the admin
+          // moved (e.g. to Cancelled) between our initial read and now.
+          if (updated.status === "Paid" && target.status !== "Issued" && target.status !== "Cancelled") {
+            target.status = "Paid";
+          }
+          // Append audit entries the cron added during this run by diffing
+          // against the snapshot length captured at the start of the loop.
+          const startLen = updated._auditStartLen ?? 0;
+          const delta = (updated.auditLog || []).slice(startLen);
+          if (delta.length) target.auditLog = [...(target.auditLog || []), ...delta];
+        }
+        await writeData(fresh);
+      } catch (err) {
+        console.error("poll-piq: writeData failed:", err.message);
       }
 
       // Record this run so the admin UI can show "last auto-poll" status.
@@ -274,7 +308,28 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
+  // Rate-limit unauthenticated order POSTs. Without this, a single IP can
+  // loop and (a) inflate tocs:data (every read/write is O(N)), (b) burn
+  // SMTP quota, (c) fill SP with junk folders, (d) starve the function pool.
+  // 5 orders/minute per IP is well above legitimate use (a normal customer
+  // places 1-3 orders in a session) while blunting scripted abuse.
+  const orderRl = await rateLimit(`orders-post:${clientIp(req)}`, 5, 60);
+  if (!orderRl.allowed) {
+    res.setHeader("Retry-After", String(orderRl.retryAfter || 60));
+    return res.status(429).json({ error: "Too many orders from this IP. Please wait a moment and try again." });
+  }
+
   const body = req.body || {};
+  // Cap the request body size to keep a malicious client from streaming a
+  // huge JSON blob through req.json(). 10 MB is generous (covers a max-sized
+  // authority PDF after base64 inflation) but bounded.
+  const ORDER_BODY_MAX = 12 * 1024 * 1024;
+  try {
+    if (JSON.stringify(body).length > ORDER_BODY_MAX) {
+      return res.status(413).json({ error: "Order payload too large." });
+    }
+  } catch { /* not stringifiable — fall through to other validators */ }
+
   const order = body.order || body;
   if (!Array.isArray(order?.items) || order.items.length === 0) return res.status(400).json({ error: "Invalid order: 'items' must be a non-empty array." });
   if (!order?.payment) return res.status(400).json({ error: "Invalid order: 'payment' method is required (bank, payid, stripe)." });
@@ -481,9 +536,20 @@ export default async function handler(req, res) {
     if (order.payment === "stripe") {
       try {
         const stripe = new Stripe(stripeKey);
-        const proto = req.headers["x-forwarded-proto"] || "https";
-        const host  = req.headers["host"] || "occorder.vercel.app";
-        const baseUrl = `${proto}://${host}`;
+        // Prefer the env-configured canonical origin so a tampered `Host`
+        // header can't redirect paying customers to attacker.com after Stripe
+        // checkout (phishing / credential-collection vector). Fall back to
+        // the request's `Host` only when no env is set — appropriate for
+        // local dev / preview deployments.
+        const envOrigin = (process.env.PUBLIC_ORIGIN || cfg.publicOrigin || "").trim().replace(/\/$/, "");
+        let baseUrl;
+        if (envOrigin && /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(envOrigin)) {
+          baseUrl = envOrigin;
+        } else {
+          const proto = req.headers["x-forwarded-proto"] || "https";
+          const host  = req.headers["host"] || "occorder.vercel.app";
+          baseUrl = `${proto}://${host}`;
+        }
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
           line_items: [{
@@ -574,8 +640,14 @@ export default async function handler(req, res) {
           if (freshOi) {
             if (spUrl) { freshOi.lotAuthorityUrl = spUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
             if (summaryUrl) { freshOi.summaryUrl = summaryUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-            if (!spUrl && body.lotAuthority?.data) { const note = authErr?.message ? authErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note }); }
-            if (!summaryUrl) { const note = pdfErr?.message ? pdfErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note }); }
+            // Failures use pushAuditOnce so a persistently broken SP can't
+            // flood the audit log with hundreds of duplicate rows over time.
+            if (!spUrl && body.lotAuthority?.data) {
+              pushAuditOnce(freshOi.auditLog, "Authority doc SP upload failed", authErr?.message?.substring(0, 60) || "See Vercel logs");
+            }
+            if (!summaryUrl) {
+              pushAuditOnce(freshOi.auditLog, "Order summary SP upload failed", pdfErr?.message?.substring(0, 60) || "See Vercel logs");
+            }
           }
           await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for order ${order.id}: auth=${!!spUrl} pdf=${!!summaryUrl}`);
