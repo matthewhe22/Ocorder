@@ -567,44 +567,112 @@ export default async function handler(req, res) {
     }];
     await writeData(data);
 
-    // Regenerate the order summary PDF and upload to SharePoint so the stored
-    // copy reflects the amendment.  The new file is date-stamped so multiple
-    // amendments on different days each get their own file; same-day amendments
-    // overwrite (the latest snapshot is what matters).  Failures are logged to
-    // the audit log but do not roll back the amendment itself.
-    const cfgForSp = await readConfig();
-    const spConfig = cfgForSp?.sharepoint || {};
+    // After saving the amendment we (a) regenerate the order summary PDF,
+    // (b) upload it to SharePoint with a date-stamped filename, and (c) email
+    // both the admin and the customer to confirm the new totals.  PDF gen runs
+    // first because both the SP upload and the email attachment need it;
+    // SP upload + emails then run in parallel to fit within Vercel's 10s
+    // timeout.  All of these are best-effort — failures are appended to the
+    // audit log but never roll back the amendment.
+    const cfgPost = await readConfig();
+    const spConfig = cfgPost?.sharepoint || {};
     const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
-    if (spEnabled) {
-      const updatedOrder = data.orders[idx];
-      const categoryFolder = updatedOrder.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
-      const buildingName = (updatedOrder.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
-      const spSubFolder = `${buildingName}/${categoryFolder}/${updatedOrder.id}`;
-      const dateStr = amendTs.slice(0, 10); // YYYY-MM-DD
-      const filename = `order-summary-amended-${dateStr}.pdf`;
-      let newSummaryUrl = null;
-      let spErr = null;
-      try {
-        const pdfBuffer = await generateOrderPdf(updatedOrder);
-        newSummaryUrl = await uploadToSharePoint(filename, "application/pdf", pdfBuffer.toString("base64"), spConfig, spSubFolder);
-      } catch (e) {
-        spErr = e;
-        console.error(`Amend: order summary regeneration failed for ${id}:`, e.message);
+    const updatedOrder = data.orders[idx];
+    const categoryFolder = updatedOrder.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+    const buildingName = (updatedOrder.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+    const spSubFolder = `${buildingName}/${categoryFolder}/${updatedOrder.id}`;
+    const dateStr = amendTs.slice(0, 10); // YYYY-MM-DD
+    const filename = `order-summary-amended-${dateStr}.pdf`;
+
+    let pdfBase64 = null;
+    let pdfErr = null;
+    try {
+      pdfBase64 = (await generateOrderPdf(updatedOrder)).toString("base64");
+    } catch (e) {
+      pdfErr = e;
+      console.error(`Amend: PDF generation failed for ${id}:`, e.message);
+    }
+
+    // SP upload (background)
+    let spPromise = Promise.resolve(null);
+    let spErr = null;
+    if (pdfBase64 && spEnabled) {
+      spPromise = uploadToSharePoint(filename, "application/pdf", pdfBase64, spConfig, spSubFolder)
+        .catch(e => { spErr = e; console.error(`Amend: SP upload failed for ${id}:`, e.message); return null; });
+    }
+
+    // Confirmation emails (admin + customer)
+    const smtp    = cfgPost?.smtp || {};
+    const toEmail = cfgPost?.orderEmail || "Orders@tocs.co";
+    const customerEmail = updatedOrder.contactInfo?.email || null;
+    const emailFailures = [];
+    let emailsAttempted = false;
+    if (smtp.host && smtp.user && smtp.pass) {
+      emailsAttempted = true;
+      const transporter = createTransporter(smtp);
+      const fromHeader = `"TOCS Order Portal" <${toEmail}>`;
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[updatedOrder.orderCategory] || "Order";
+      const adminSubject = `Order Amended — ${orderType} #${updatedOrder.id} — $${(updatedOrder.total || 0).toFixed(2)}`;
+      const customerSubject = `Your TOCS Order ${updatedOrder.id} has been updated`;
+      const attachments = pdfBase64 ? [{ filename, content: pdfBase64, encoding: "base64", contentType: "application/pdf" }] : [];
+
+      const jobs = [{
+        label: "Admin amendment notification",
+        promise: transporter.sendMail({
+          from: fromHeader, to: toEmail,
+          subject: adminSubject,
+          html: buildOrderEmailHtml(updatedOrder, cfgPost, { isAmendment: true }),
+          attachments,
+        }),
+      }];
+      if (customerEmail) {
+        jobs.push({
+          label: "Customer amendment confirmation",
+          promise: transporter.sendMail({
+            from: fromHeader, to: customerEmail,
+            subject: customerSubject,
+            html: buildCustomerEmailHtml(updatedOrder, cfgPost, { isAmendment: true }),
+            attachments,
+          }),
+        });
       }
-      // Fresh-read so we don't clobber any concurrent writes (e.g. PIQ poll)
-      const fresh = await readData().catch(() => null);
-      const oi = fresh?.orders.find(o => o.id === id);
-      if (oi) {
-        if (newSummaryUrl) {
-          oi.summaryUrl = newSummaryUrl;
-          oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regenerated", note: `${filename} → ${newSummaryUrl}` });
-          data.orders[idx].summaryUrl = newSummaryUrl;
-        } else {
-          const note = spErr?.message ? spErr.message.substring(0, 120) : "See Vercel logs";
-          oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regeneration failed", note });
+      const results = await Promise.allSettled(jobs.map(j => j.promise));
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          const msg = r.reason?.message || "unknown";
+          console.error(`Amend ${jobs[i].label} failed for ${id}:`, msg);
+          emailFailures.push(`${jobs[i].label}: ${msg.substring(0, 120)}`);
         }
-        await writeData(fresh).catch(e => console.error("Amend SP audit persist failed:", e.message));
+      });
+    }
+
+    const newSummaryUrl = await spPromise;
+
+    // Single fresh-read + write to commit summaryUrl change and all audit
+    // entries for this post-amend phase.  Fresh-read avoids clobbering
+    // concurrent writes (e.g. the hourly PIQ poll) that ran while we were
+    // generating the PDF / sending email.
+    const fresh = await readData().catch(() => null);
+    const oi = fresh?.orders.find(o => o.id === id);
+    if (oi) {
+      if (newSummaryUrl) {
+        oi.summaryUrl = newSummaryUrl;
+        oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regenerated", note: `${filename} → ${newSummaryUrl}` });
+        data.orders[idx].summaryUrl = newSummaryUrl;
+      } else if (spEnabled && pdfBase64) {
+        oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regeneration failed", note: spErr?.message?.substring(0, 120) || "See Vercel logs" });
+      } else if (spEnabled && pdfErr) {
+        oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regeneration failed", note: `PDF gen: ${pdfErr.message?.substring(0, 120)}` });
       }
+      if (emailsAttempted) {
+        if (emailFailures.length === 0) {
+          const recipients = `Admin: ${toEmail}${customerEmail ? `, Customer: ${customerEmail}` : ""}`;
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment confirmation emails sent", note: recipients });
+        } else {
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment confirmation emails partially failed", note: emailFailures.join("; ").substring(0, 200) });
+        }
+      }
+      await writeData(fresh).catch(e => console.error("Amend post-write failed:", e.message));
     }
     // Notify the applicant by email that their order has been amended.
     // Best-effort: failure is recorded in the audit log but does not fail the request,
