@@ -186,7 +186,7 @@ const BIDI_FORMAT_CHARS_RE = new RegExp(
   "gu",
 );
 
-function sanitiseSegment(raw, fallback) {
+export function sanitiseSegment(raw, fallback) {
   let s = String(raw ?? "");
   // NFKC normalise so visually-identical Unicode (fullwidth dots, ligatures)
   // collapses to its ASCII form before dot-stripping runs.
