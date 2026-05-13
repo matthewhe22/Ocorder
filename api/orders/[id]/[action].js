@@ -49,58 +49,9 @@ function buildNotifyEmailHtml(order, message, cfg) {
 </body></html>`;
 }
 
-// ── Order-amended customer email (used by /amend) ────────────────────────────
-function buildAmendedEmailHtml(order, oldTotal, newTotal, note, cfg) {
-  const tpl = cfg.emailTemplate || {};
-  const contact = order.contactInfo || {};
-  const items = order.items || [];
-  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
-  const itemRows = items.map(it => `
-    <tr>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(it.productName) || "—"}</td>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:center;">${Number(it.qty) || 1}</td>
-      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:right;">$${(Number(it.price) || 0).toFixed(2)}</td>
-    </tr>`).join("");
-  const totalChanged = Math.round(newTotal * 100) !== Math.round(oldTotal * 100);
-  const totalsBlock = totalChanged
-    ? `<tr><td style="padding:6px 0;color:#666;width:38%;">Previous Total</td><td style="padding:6px 0;text-decoration:line-through;color:#999;">$${oldTotal.toFixed(2)} AUD</td></tr>
-       <tr><td style="padding:6px 0;color:#666;">New Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${newTotal.toFixed(2)} AUD</td></tr>`
-    : `<tr><td style="padding:6px 0;color:#666;width:38%;">Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${newTotal.toFixed(2)} AUD</td></tr>`;
-  const noteBlock = note ? `<p style="margin:16px 0 0;padding:12px 16px;background:#f0f7f3;border-left:4px solid #2e6b42;border-radius:4px;font-size:0.88rem;"><strong>Note from TOCS:</strong> ${esc(note).replace(/\n/g, "<br>")}</p>` : "";
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
-<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
-  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-    <div style="background:#1c3326;padding:24px 32px;">
-      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Portal</h1>
-      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Updated</p>
-    </div>
-    <div style="padding:32px;">
-      <p style="margin-top:0;">Dear ${esc(contact.name) || "Applicant"},</p>
-      <p>Your order <strong style="font-family:monospace;">${esc(order.id)}</strong> has been amended by our team. The order reference number stays the same; the updated details are shown below.</p>
-      ${noteBlock}
-      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Updated Order</h3>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-        ${totalsBlock}
-        <tr><td style="padding:6px 0;color:#666;">Status</td><td style="padding:6px 0;">${esc(order.status)}</td></tr>
-      </table>
-      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Items</h3>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-        <tr style="background:#f5f7f5;">
-          <th style="padding:8px 12px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#666;">Product</th>
-          <th style="padding:8px 12px;text-align:center;font-size:0.78rem;text-transform:uppercase;color:#666;">Qty</th>
-          <th style="padding:8px 12px;text-align:right;font-size:0.78rem;text-transform:uppercase;color:#666;">Price</th>
-        </tr>
-        ${itemRows}
-        ${order.selectedShipping?.name ? `<tr><td colspan="2" style="padding:8px 12px;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;">$${(Number(order.selectedShipping.price) || 0).toFixed(2)}</td></tr>` : ""}
-        <tr style="background:#f5f7f5;"><td colspan="2" style="padding:8px 12px;font-weight:700;">Total</td><td style="padding:8px 12px;text-align:right;font-weight:700;">$${newTotal.toFixed(2)} AUD</td></tr>
-      </table>
-      <p style="font-size:0.85rem;color:#555;">If an invoice was previously issued, an updated invoice reflecting the new total will be sent separately. Please use the same order reference for any payment.</p>
-      <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
-      <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
-    </div>
-  </div>
-</body></html>`;
-}
+// Note: buildAmendedEmailHtml was removed alongside the redundant amend-
+// notification block — the post-amend confirmation flow now uses
+// buildOrderEmailHtml / buildCustomerEmailHtml with `{ isAmendment: true }`.
 
 // ── Email builder ─────────────────────────────────────────────────────────────
 function buildCertEmailHtml(order, message, cfg) {
@@ -674,38 +625,6 @@ export default async function handler(req, res) {
       }
       await writeData(fresh).catch(e => console.error("Amend post-write failed:", e.message));
     }
-    // Notify the applicant by email that their order has been amended.
-    // Best-effort: failure is recorded in the audit log but does not fail the request,
-    // since the amendment itself has already been persisted.
-    const cfgForEmail = cfgForSp;
-    const smtp = cfgForEmail.smtp || {};
-    const recipientEmail = data.orders[idx].contactInfo?.email;
-    if (recipientEmail && smtp.host && smtp.user && smtp.pass) {
-      try {
-        const transporter = createTransporter(smtp);
-        const fromEmail = cfgForEmail.orderEmail || "Orders@tocs.co";
-        await transporter.sendMail({
-          from: `"Top Owners Corporation Solution" <${fromEmail}>`,
-          to: recipientEmail,
-          subject: `Update to your TOCS order ${id}`,
-          html: buildAmendedEmailHtml(data.orders[idx], oldTotal, newTotal, noteText, cfgForEmail),
-        });
-        const fresh = await readData().catch(() => null);
-        const oi = fresh?.orders.find(o => o.id === id);
-        if (oi) {
-          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment notification sent", note: `Sent to: ${recipientEmail}` });
-          await writeData(fresh).catch(e => console.error("Amend email audit persist failed:", e.message));
-        }
-      } catch (e) {
-        console.error(`Amend customer email failed for ${id}:`, e.message);
-        const fresh = await readData().catch(() => null);
-        const oi = fresh?.orders.find(o => o.id === id);
-        if (oi) {
-          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment notification failed", note: e.message?.substring(0, 200) || "" });
-          await writeData(fresh).catch(err => console.error("Amend email failure audit persist failed:", err.message));
-        }
-      }
-    }
     return res.status(200).json({ ok: true, order: data.orders[idx] });
   }
 
@@ -1261,15 +1180,28 @@ export default async function handler(req, res) {
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
     const order = data.orders[idx];
 
-    // Allow admin to reset the locked payment date so a corrected date can be recorded.
+    // 1. Admin-supplied piqLotId (manual link from the UI) takes top priority
+    //    so admins can fix orders that PIQ sync couldn't auto-resolve.
+    const manualPiqLotId = req.body?.piqLotId ? Number(req.body.piqLotId) : null;
+    if (manualPiqLotId && Number.isFinite(manualPiqLotId)) {
+      order.piqLotId = manualPiqLotId;
+      order.auditLog = [...(order.auditLog || []), {
+        ts:     new Date().toISOString(),
+        action: "PIQ lot linked",
+        note:   `piqLotId ${manualPiqLotId} manually set by admin`,
+      }];
+    }
+
+    // 2. Allow admin to reset the locked payment date so a corrected date can
+    //    be recorded.
     if (req.body?.resetPaymentDate === true && order.status === "Paid") {
       order.piqPaymentDate = null;
       order.auditLog = [...(order.auditLog || []), { ts: new Date().toISOString(), action: "PIQ payment date reset", note: "Reset by admin to allow re-confirmation" }];
     }
 
-    // Auto-link piqLotId from plan lots for orders placed before the plan was
-    // synced from PIQ (piqLotId was missing at order-creation time).
-    // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
+    // 3. Auto-link piqLotId from plan lots for orders placed before the plan
+    //    was synced from PIQ (piqLotId was missing at order-creation time).
+    //    Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
     if (!order.piqLotId) {
       const normStr = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
       const lotNumber = order.items?.[0]?.lotNumber || "";
@@ -1280,7 +1212,6 @@ export default async function handler(req, res) {
       const matches   = l =>
         (lotNumber && normStr(l.number) === normStr(lotNumber)) ||
         (lotId     && l.id === lotId);
-      // Prefer a lot that already has piqLotId to avoid matching the un-linked duplicate
       const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
       if (lot?.piqLotId) {
         order.piqLotId = lot.piqLotId;
@@ -1294,7 +1225,7 @@ export default async function handler(req, res) {
     }
 
     if (!order.piqLotId) {
-      return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first." });
+      return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first, or enter the PIQ Lot ID manually." });
     }
 
     const cfg = await readConfig();
