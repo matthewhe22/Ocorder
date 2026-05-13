@@ -2,6 +2,48 @@
 
 ---
 
+## 2026-05-13 — Stripe webhook now uploads to SharePoint; admin Save-to-SharePoint button
+
+### Bug
+Several Stripe-paid orders (`TOCS-MOJI6FCL-YLC`, `TOCS-MOI215N8-GR4`, `TOCS-MOC7WG47-2ZZ`, ...) ended up with **no SharePoint folder at all** — not even the `order-summary.pdf` that's supposed to be created when payment is confirmed. Audit logs split into two distinct failure modes:
+
+- **Mode A (`Payment confirmed via Stripe webhook`)** — `api/stripe-webhook/index.js` marked the order Paid and sent emails but never called `uploadToSharePoint`. When Stripe's server-to-server webhook beat the customer's browser to `stripe-confirm`, the SP upload block in `stripe-confirm` short-circuited on `status === "Paid"` and nothing was ever uploaded.
+- **Mode B (`Order summary SP upload failed` / `Payment receipt SP upload failed`)** — `stripe-confirm` did run but the Graph API calls failed (timeout / token / network). The order moved on, the failures were audited, but there was no in-portal way to retry.
+
+### Fix
+- **`api/_lib/sharepoint.js`** — Added `isSharePointEnabled(spConfig)`, `orderSharePointSubFolder(order)`, and an `uploadOrderDocs(order, spConfig, pdf, opts)` helper that uploads `order-summary.pdf` + (optional) `authority-*` + (optional) `payment-receipt.pdf` to the canonical per-order subfolder and returns `{ authUrl, summaryUrl, receiptUrl, errors }`.
+- **`api/stripe-webhook/index.js`** — Now calls `uploadOrderDocs` (with receipt) in parallel with emails; persists the URLs back onto the order; writes the same audit-log entries as `stripe-confirm`. The webhook responds to Stripe immediately, then awaits the SP IIFE in the Vercel post-response window.
+- **`api/orders/[id]/[action].js`** — New `POST /api/orders/:id/save-to-sharepoint` admin endpoint regenerates the order summary (and receipt for paid Stripe orders), uploads alongside the authority doc, and writes URLs + audit entries. Idempotent — safe to retry.
+- **Frontend (`src/App.jsx`)** — A `↑ Save to SharePoint` button now appears in the Documents section of any Paid/Issued/Processing order missing a `summaryUrl` (or, for Stripe orders, missing `receiptUrl`). One click repairs the SP folder.
+
+### Recovering the affected orders
+Open each broken order in Admin → Orders, expand it, and click **↑ Save to SharePoint** in the Documents section. The button creates `<Building>/OC-Certificates/<orderId>/` on SharePoint and uploads `order-summary.pdf`, the authority doc (if stored in Redis KV), and `payment-receipt.pdf` (Stripe orders only). After that, re-send the certificate with the PDF attached to populate the certificate copy too.
+
+---
+
+## 2026-05-13 — Send-Certificate: require attachment, persist a re-downloadable copy
+
+### Bug
+Two recent OC certificate orders (`TOCS-MOJI6FCL-YLC` and `TOCS-MOI215N8-GR4`) were marked **Issued** in the portal but the applicants received no attachment, and no SharePoint folder was created under the building. Root cause: `SendCertificateModal` labelled the file picker as **"(optional)"** and neither the frontend nor `send-certificate` rejected an empty submission. With zero attachments:
+- the email was delivered with only the cover note (no PDF),
+- the SharePoint upload block was gated by `if (attachments.length > 0)` and skipped, so no `…/<Building>/OC-Certificates/<orderId>/` folder was created,
+- the order was still moved to **Issued**, masking the failure.
+
+### Fix
+- **Frontend (`src/App.jsx`)** — `SendCertificateModal` now requires at least one file before the Send button is enabled; the attachments label is marked required and copy updated from *"optional"* to *"required"*.
+- **Vercel handler (`api/orders/[id]/[action].js`)** — `send-certificate` returns 400 when no attachment is supplied. After a successful send, the first attachment is also persisted to Redis KV (`tocs:certificate:<orderId>`, 365 d TTL) and the order is annotated with `certificateFile` + `certificateContentType` so the file can be re-served when the SharePoint link is missing.
+- **Local server (`OCOrder/server.js`)** — Same attachment-required guard; sent certificate is copied into `uploads/<orderId>-certificate.<ext>` for re-download in dev.
+- **`api/_lib/store.js`** — New `writeCertificate` / `readCertificate` helpers mirror the authority-doc pattern.
+
+### Feature — Admin re-download
+- **`GET /api/orders/:id/certificate`** (Vercel + local) — admin-only endpoint that redirects to the SharePoint view URL when present, otherwise streams the stored copy from Redis KV / `uploads/`.
+- **Frontend** — every issued OC Certificate order now shows a **Download Certificate** button in the Documents section. Clicking it fetches the bytes (or follows the SP redirect) and triggers a browser download.
+
+### Operational note
+The two affected orders pre-date this change and have no stored copy on either store. The fix prevents recurrence and gives admins a one-click re-download for all future issued certificates; for the two existing orders the admin must re-send the certificate (with the PDF attached) to populate the new storage and the SharePoint folder.
+
+---
+
 ## 2026-05-06 — Send-Certificate / Send-Invoice: multipart upload (fix for Vercel 4.5 MB body limit)
 
 ### Bug

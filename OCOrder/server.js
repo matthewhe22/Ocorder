@@ -1447,6 +1447,45 @@ async function handler(req, res) {
     return;
   }
 
+  // ── GET /api/orders/:id/certificate  (admin — re-download issued cert) ────
+  const certificateMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/certificate$/);
+  if (certificateMatch && method === "GET") {
+    const orderId = certificateMatch[1];
+    const queryToken = new URL("http://x" + req.url).searchParams.get("token");
+    const token = authHeader(req) || queryToken;
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const d = readData();
+    const order = d.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found." });
+    if (order.certificateUrl) {
+      res.writeHead(302, { Location: order.certificateUrl });
+      return res.end();
+    }
+    if (!order.certificateFile) return json(res, 404, { error: "No stored certificate for this order." });
+    const safeFilename = path.basename(order.certificateFile).replace(/[^\w.\-]/g, "_");
+    const filePath = path.resolve(UPLOADS_DIR, safeFilename);
+    if (!filePath.startsWith(UPLOADS_DIR + path.sep) && filePath !== UPLOADS_DIR) {
+      return json(res, 403, { error: "Forbidden." });
+    }
+    fs.readFile(filePath, (err, fileData) => {
+      if (err) return json(res, 404, { error: "Certificate file missing on server." });
+      const ext = path.extname(safeFilename).toLowerCase();
+      const mimeMap = { ".pdf":"application/pdf", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png" };
+      try {
+        res.writeHead(200, {
+          "Content-Type": order.certificateContentType || mimeMap[ext] || "application/octet-stream",
+          "Content-Disposition": `attachment; filename="${safeFilename}"`,
+          "Content-Length": fileData.length,
+        });
+        res.end(fileData);
+      } catch (headerErr) {
+        console.error("  ❌  Certificate download header error:", headerErr.message);
+        if (!res.headersSent) json(res, 500, { error: "Could not send file." });
+      }
+    });
+    return;
+  }
+
   // ── POST /api/orders/:id/send-certificate  &  send-invoice  (admin) ─────────
   const sendCertMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/send-certificate$/);
   const sendInvMatch  = urlPath.match(/^\/api\/orders\/([^/]+)\/send-invoice$/);
@@ -1478,6 +1517,9 @@ async function handler(req, res) {
     const ATTACH_LIMIT = 10 * 1024 * 1024;
     const totalAttachSize = attachments.reduce((sum, a) => sum + a.buffer.length, 0);
     if (totalAttachSize > ATTACH_LIMIT) return json(res, 413, { error: `Attachments too large — total must be under 10 MB.` });
+    // Refuse to send a "certificate" email with no attachment — the recipient
+    // would receive an empty notification and no copy would be filed away.
+    if (isCert && attachments.length === 0) return json(res, 400, { error: "Attach at least one certificate file before sending." });
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
@@ -1509,6 +1551,22 @@ async function handler(req, res) {
         }));
       }
       await transporter.sendMail(mailOpts);
+      // Persist a local copy of the certificate for admin re-download. The
+      // file is saved beside lot-authority docs in the uploads/ folder and the
+      // filename + content-type are stored on the order so the new download
+      // endpoint can serve it back.
+      if (isCert && attachments.length > 0) {
+        try {
+          const first = attachments[0];
+          const rawExt = (path.extname(first.filename || "") || ".pdf").toLowerCase();
+          const safeExt = /^\.(pdf|jpg|jpeg|png)$/.test(rawExt) ? rawExt : ".pdf";
+          const certFilename = order.id + "-certificate" + safeExt;
+          fs.writeFileSync(path.join(UPLOADS_DIR, certFilename), first.buffer);
+          d.orders[idx].certificateFile = certFilename;
+          d.orders[idx].certificateContentType = first.contentType || "application/pdf";
+          d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate saved locally", note: certFilename }];
+        } catch (e) { console.error("  ❌  Failed to save certificate copy:", e.message); }
+      }
       d.orders[idx].status = isCert ? "Issued" : "Pending Payment";
       d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: isCert ? "Certificate issued" : "Invoice sent", note: `To: ${recipientEmail}` }];
       writeData(d);
@@ -1935,6 +1993,7 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/amend$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/certificate$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/notify$/, ["POST"]],

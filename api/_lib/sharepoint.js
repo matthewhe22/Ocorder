@@ -133,3 +133,71 @@ export async function uploadToSharePoint(filename, contentType, base64Data, spCo
     return null;
   }
 }
+
+/**
+ * Resolve whether SharePoint is reachable for a given Redis-backed config.
+ * Used by callers that need to decide whether to skip SP upload entirely.
+ */
+export function isSharePointEnabled(spConfig) {
+  return SHAREPOINT_ENABLED || !!(spConfig?.tenantId && spConfig?.clientId && spConfig?.clientSecret && spConfig?.siteId);
+}
+
+/**
+ * Compute the per-order SharePoint subfolder path:
+ *   {sanitised building name}/{OC-Certificates | Keys-Fobs}/{orderId}
+ */
+export function orderSharePointSubFolder(order) {
+  const categoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+  const buildingName = (order.items?.[0]?.planName || "Unknown Building")
+    .replace(/[\\/:*?"<>|]/g, "-").trim();
+  return `${buildingName}/${categoryFolder}/${order.id}`;
+}
+
+/**
+ * Upload an order's documents (authority doc, generated order-summary PDF, and
+ * optionally a payment-receipt PDF) to SharePoint and return the per-document
+ * results. Pure — does not touch Redis/audit log; the caller is responsible
+ * for persisting URLs and writing audit entries.
+ *
+ * @param {object} order
+ * @param {object} spConfig
+ * @param {object} pdf            — { generateOrderPdf, generateReceiptPdf } from _lib/pdf.js
+ * @param {object} [opts]
+ * @param {object} [opts.authDoc] — { data: base64, filename, contentType } (optional)
+ * @param {boolean}[opts.includeReceipt] — also upload payment-receipt.pdf
+ * @param {string} [opts.stripeSessionId] — Stripe session for receipt header
+ * @returns {Promise<{ authUrl: string|null, summaryUrl: string|null, receiptUrl: string|null, errors: object }>}
+ */
+export async function uploadOrderDocs(order, spConfig, pdf, opts = {}) {
+  const subFolder = orderSharePointSubFolder(order);
+  const errors = {};
+
+  const summaryPromise = (async () => {
+    try {
+      const buf = await pdf.generateOrderPdf(order);
+      return await uploadToSharePoint("order-summary.pdf", "application/pdf", buf.toString("base64"), spConfig, subFolder);
+    } catch (e) { errors.summary = e; return null; }
+  })();
+
+  const authPromise = opts.authDoc?.data
+    ? uploadToSharePoint(
+        `authority-${opts.authDoc.filename || "document"}`,
+        opts.authDoc.contentType || "application/octet-stream",
+        opts.authDoc.data,
+        spConfig,
+        subFolder
+      ).catch(e => { errors.auth = e; return null; })
+    : Promise.resolve(null);
+
+  const receiptPromise = opts.includeReceipt
+    ? (async () => {
+        try {
+          const buf = await pdf.generateReceiptPdf(order, opts.stripeSessionId);
+          return await uploadToSharePoint("payment-receipt.pdf", "application/pdf", buf.toString("base64"), spConfig, subFolder);
+        } catch (e) { errors.receipt = e; return null; }
+      })()
+    : Promise.resolve(null);
+
+  const [summaryUrl, authUrl, receiptUrl] = await Promise.all([summaryPromise, authPromise, receiptPromise]);
+  return { authUrl, summaryUrl, receiptUrl, errors };
+}
