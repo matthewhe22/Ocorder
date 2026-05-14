@@ -90,7 +90,7 @@ function buildCertEmailHtml(order, message, cfg) {
 // Used by send-certificate / send-invoice so a 3.9 MB PDF doesn't get base64-
 // inflated past Vercel's 4.5 MB request body limit.
 function parseMultipart(buffer, contentType) {
-  const m = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType || "");
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || "");
   if (!m) return { fields: {}, files: {} };
   const boundary = Buffer.from("--" + (m[1] || m[2]).trim());
   const fields = {};
