@@ -22,6 +22,7 @@ test-config.json
 test-uploads/
 test-results/
 playwright-report/
+coverage/
 
 # Local backups created by maintenance scripts
 *.bak.*
