@@ -28,8 +28,11 @@ ordering process, each with its own order-form workflow.
   download / open the form, scenario-specific guidance, and a required upload of
   the completed form / submission screenshot.
 - **Second order file** — the completed form / screenshot is validated
-  (PDF/JPG/PNG, magic bytes, 10 MB) and emailed to the orders inbox alongside the
-  authority document; `server.js` also persists it to `uploads/`.
+  (PDF/JPG/PNG, magic bytes, 10 MB), emailed to the orders inbox alongside the
+  authority document, uploaded to the order's SharePoint folder, and saved to
+  Redis as a fallback (`server.js` persists it to `uploads/`). It is
+  downloadable from the admin order detail via a new
+  `GET /api/orders/:id/key-order-form` route.
 - **New order status** `Approved – Sent to Locksmith` added to the shared
   `VALID_STATUSES` enum, the admin status filter, status badges, and an admin
   "Mark Sent to Locksmith" action for keys orders.

@@ -1568,6 +1568,41 @@ async function handler(req, res) {
     return;
   }
 
+  // ── GET /api/orders/:id/key-order-form  (admin — download key order form) ──
+  const keyFormMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/key-order-form$/);
+  if (keyFormMatch && method === "GET") {
+    const orderId = keyFormMatch[1];
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const d = readData();
+    const order = d.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found." });
+    if (order.keyOrderFormUrl) return json(res, 200, { url: order.keyOrderFormUrl });
+    if (!order.keyOrderFormFile) return json(res, 404, { error: "No key order form for this order." });
+    const safeFilename = path.basename(order.keyOrderFormFile).replace(/[^\w.\-]/g, "_");
+    const filePath = path.resolve(UPLOADS_DIR, safeFilename);
+    if (!filePath.startsWith(UPLOADS_DIR + path.sep) && filePath !== UPLOADS_DIR) {
+      return json(res, 403, { error: "Forbidden." });
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) return json(res, 404, { error: "File not found on server." });
+      try {
+        const ext = path.extname(safeFilename).toLowerCase();
+        const mimeMap = { ".pdf":"application/pdf", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png" };
+        res.writeHead(200, {
+          "Content-Type": mimeMap[ext] || "application/octet-stream",
+          "Content-Disposition": `attachment; filename="${safeFilename}"`,
+          "Content-Length": data.length,
+        });
+        res.end(data);
+      } catch (headerErr) {
+        console.error("  ❌  Key order form download header error:", headerErr.message);
+        if (!res.headersSent) json(res, 500, { error: "Could not send file." });
+      }
+    });
+    return;
+  }
+
   // ── GET /api/orders/:id/certificate  (admin — re-download issued cert) ────
   const certificateMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/certificate$/);
   if (certificateMatch && method === "GET") {
@@ -2172,6 +2207,7 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/amend$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/key-order-form$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/certificate$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],

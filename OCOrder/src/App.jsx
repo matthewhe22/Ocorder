@@ -3767,6 +3767,29 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     }
   };
 
+  const openKeyOrderForm = async (orderId) => {
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/key-order-form`, {
+        headers: { "Authorization": "Bearer " + adminToken },
+      });
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showAdminToast("err", d.error || "Could not open key order form.");
+        return;
+      }
+      if (isDocRedirectResponse(r)) {
+        const d = await r.json().catch(() => ({}));
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
+        return;
+      }
+      streamResponseAsDownload(r, `key-order-form-${orderId}`);
+    } catch {
+      showAdminToast("err", "Network error opening key order form.");
+    }
+  };
+
   // Retroactively upload the order summary (and payment receipt + authority
   // doc, when available) to SharePoint. Used to repair orders whose SP folder
   // was never created — historically Stripe webhook orders before May 13, or
@@ -4710,7 +4733,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                               Also rendered whenever Save-to-SharePoint applies (Paid / Issued orders
                               missing an SP summary or, for Stripe, missing the receipt) so admin can
                               repair pre-May-13 webhook orders. */}
-                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.certificateFile || o.invoiceUrl
+                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.keyOrderFormFile || o.keyOrderFormUrl || o.certificateUrl || o.certificateFile || o.invoiceUrl
                             || (pubConfig?.sharepointEnabled && ["Paid", "Issued", "Processing"].includes(o.status) && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)))) && (
                             <div style={{ marginBottom: "1rem" }}>
                               <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Documents</div>
@@ -4728,6 +4751,17 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                   ) : (
                                     <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
+                                    </button>
+                                  )
+                                )}
+                                {(o.keyOrderFormFile || o.keyOrderFormUrl) && (
+                                  o.keyOrderFormUrl ? (
+                                    <a href={o.keyOrderFormUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open key order form for order ${o.id}`}>
+                                      <Ic n="doc" s={13}/> Key Order Form
+                                    </a>
+                                  ) : (
+                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openKeyOrderForm(o.id)} aria-label={`Open key order form for order ${o.id}`}>
+                                      <Ic n="doc" s={13}/> Key Order Form
                                     </button>
                                   )
                                 )}

@@ -9,7 +9,7 @@
 
 import Stripe from "stripe";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
+import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, readKeyForm, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment, pushAuditOnce } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
@@ -274,6 +274,44 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
     res.setHeader("X-Doc-Source", "blob");
     const safeFilename = String(order.lotAuthorityFile || "authority").replace(/[^\w.\-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
+    res.setHeader("Content-Length", buf.length);
+    return res.send(buf);
+  }
+
+  // ── GET /api/orders/:id/key-order-form ────────────────────────────────────
+  // Completed apartment/mailbox-key order form or submission screenshot.
+  // Mirrors /authority: SharePoint URL → 200 { url }; otherwise stream from KV.
+  if (action === "key-order-form" && req.method === "GET") {
+    const token = extractToken(req);
+    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const data = await readData();
+    const order = data.orders.find(o => o.id === id);
+    if (!order) return res.status(404).json({ error: "Order not found." });
+    if (!order.keyOrderFormFile && !order.keyOrderFormUrl) return res.status(404).json({ error: "No key order form for this order." });
+
+    if (order.keyOrderFormUrl) {
+      if (!isAllowedRedirectHost(order.keyOrderFormUrl)) {
+        console.error(`Key order form URL blocked — non-allowed host: ${order.keyOrderFormUrl}`);
+        return res.status(502).json({ error: "Stored key order form URL is not on an allowed host." });
+      }
+      res.setHeader("X-Doc-Source", "sharepoint");
+      return res.status(200).json({ url: order.keyOrderFormUrl });
+    }
+
+    // Fallback: serve from Redis KV
+    if (!KV_AVAILABLE) return res.status(503).json({ error: "Document storage is not connected. Add REDIS_URL to Vercel environment variables." });
+    let stored = null;
+    try { stored = await readKeyForm(id); } catch (e) {
+      return res.status(503).json({ error: "Document storage unavailable: " + e.message });
+    }
+    if (!stored?.data) return res.status(404).json({ error: "Document not found in storage." });
+
+    const buf = Buffer.from(stored.data, "base64");
+    res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
+    res.setHeader("X-Doc-Source", "blob");
+    const safeFilename = String(order.keyOrderFormFile || "key-order-form").replace(/[^\w.\-]/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
     return res.send(buf);

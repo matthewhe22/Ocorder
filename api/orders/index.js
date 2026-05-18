@@ -1,6 +1,6 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
-import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, KV_AVAILABLE } from "../_lib/store.js";
+import { readData, writeData, readConfig, cors, writeAuthority, writeKeyForm, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, KV_AVAILABLE } from "../_lib/store.js";
 import { randomBytes } from "crypto";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment, pushAuditOnce } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
@@ -522,11 +522,19 @@ export default async function handler(req, res) {
       const ext = ALLOWED_EXTS.has(candidate) ? candidate : "bin";
       order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
     }
+    if (body.keyForm?.data) {
+      const rawName = String(body.keyForm.filename || "document");
+      const m = /\.([A-Za-z0-9]+)$/.exec(rawName);
+      const candidate = (m?.[1] || "").toLowerCase();
+      const ALLOWED_EXTS = new Set(["pdf", "jpg", "jpeg", "png"]);
+      const ext = ALLOWED_EXTS.has(candidate) ? candidate : "bin";
+      order.keyOrderFormFile = `${order.id}-key-order-form.${ext}`;
+    }
 
     order.date = new Date().toISOString();
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
     if (body.keyForm?.data) {
-      order.auditLog.push({ ts: new Date().toISOString(), action: "Key order form uploaded", note: "Emailed to the orders inbox for review" });
+      order.auditLog.push({ ts: new Date().toISOString(), action: "Key order form uploaded", note: order.keyOrderFormFile || "" });
     }
 
     // ── STRIPE PRE-VALIDATION (before Redis save — prevents ghost orders) ────────
@@ -637,10 +645,11 @@ export default async function handler(req, res) {
           // the upload path — `../foo.pdf` would otherwise resolve out of the
           // order folder under Graph's `root:/{path}:` API.
           const spFilename = `authority-${sanitiseSegment(body.lotAuthority?.filename, "doc")}`;
+          const keyFormSpName = `key-order-form-${sanitiseSegment(body.keyForm?.filename, "doc")}`;
           // Capture upload errors so audit log entries contain the actual reason
-          let authErr = null, pdfErr = null;
-          // Run both uploads in parallel — each takes ~8–9 s independently
-          const [authResult, pdfResult] = await Promise.allSettled([
+          let authErr = null, pdfErr = null, keyErr = null;
+          // Run all uploads in parallel — each takes ~8–9 s independently
+          const [authResult, pdfResult, keyResult] = await Promise.allSettled([
             body.lotAuthority?.data
               ? uploadToSharePoint(spFilename, body.lotAuthority.contentType, body.lotAuthority.data, spConfig, spSubFolder)
                   .catch(e => { authErr = e; console.error("SP authority upload:", e.message); return null; })
@@ -653,15 +662,21 @@ export default async function handler(req, res) {
                   .catch(e => { pdfErr = e; console.error("SP PDF upload:", e.message); return null; });
               } catch (e) { pdfErr = e; console.error("SP PDF gen/upload:", e.message); return null; }
             })(),
+            body.keyForm?.data
+              ? uploadToSharePoint(keyFormSpName, body.keyForm.contentType, body.keyForm.data, spConfig, spSubFolder)
+                  .catch(e => { keyErr = e; console.error("SP key order form upload:", e.message); return null; })
+              : Promise.resolve(null),
           ]);
           const spUrl     = authResult.status === "fulfilled" ? authResult.value : null;
           const summaryUrl = pdfResult.status  === "fulfilled" ? pdfResult.value  : null;
+          const keyFormUrl = keyResult.status  === "fulfilled" ? keyResult.value  : null;
           // Fresh read before writing SP results to avoid stale-data overwrites
           const freshData = await readData().catch(() => data);
           const freshOi = freshData.orders.find(o => o.id === order.id);
           if (freshOi) {
             if (spUrl) { freshOi.lotAuthorityUrl = spUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
             if (summaryUrl) { freshOi.summaryUrl = summaryUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+            if (keyFormUrl) { freshOi.keyOrderFormUrl = keyFormUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Key order form saved to SharePoint", note: keyFormUrl }); }
             // Failures use pushAuditOnce so a persistently broken SP can't
             // flood the audit log with hundreds of duplicate rows over time.
             if (!spUrl && body.lotAuthority?.data) {
@@ -669,6 +684,9 @@ export default async function handler(req, res) {
             }
             if (!summaryUrl) {
               pushAuditOnce(freshOi.auditLog, "Order summary SP upload failed", pdfErr?.message?.substring(0, 60) || "See Vercel logs");
+            }
+            if (!keyFormUrl && body.keyForm?.data) {
+              pushAuditOnce(freshOi.auditLog, "Key order form SP upload failed", keyErr?.message?.substring(0, 60) || "See Vercel logs");
             }
           }
           await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
@@ -693,6 +711,23 @@ export default async function handler(req, res) {
         console.log(`Authority doc saved to Redis for order ${order.id}`);
       } catch (e) {
         console.error("Authority KV save failed:", e.message);
+      }
+    }
+
+    // ── Save key order form to Redis (fast guaranteed fallback) ───────────────
+    if (body.keyForm?.data && KV_AVAILABLE) {
+      try {
+        await writeKeyForm(order.id, {
+          data: body.keyForm.data,
+          filename: body.keyForm.filename,
+          contentType: body.keyForm.contentType,
+        });
+        const oi = data.orders.find(o => o.id === order.id);
+        if (oi) oi.auditLog.push({ ts: new Date().toISOString(), action: "Key order form saved to Redis", note: "" });
+        await writeData(data);
+        console.log(`Key order form saved to Redis for order ${order.id}`);
+      } catch (e) {
+        console.error("Key order form KV save failed:", e.message);
       }
     }
 

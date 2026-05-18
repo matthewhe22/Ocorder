@@ -400,6 +400,17 @@ export async function readAuthority(orderId) {
   return await kvGet(`tocs:authority:${orderId}`);
 }
 
+// ── Key order form helpers ────────────────────────────────────────────────────
+// Completed apartment/mailbox-key order form or submission screenshot. Same
+// 90-day TTL and hot-cache-vs-SharePoint rationale as authority docs above.
+export async function writeKeyForm(orderId, doc) {
+  await kvSet(`tocs:keyform:${orderId}`, doc, 90 * 86400);
+}
+
+export async function readKeyForm(orderId) {
+  return await kvGet(`tocs:keyform:${orderId}`);
+}
+
 // ── Issued-certificate helpers ────────────────────────────────────────────────
 // Stores a copy of the OC certificate / keys order attachment that was emailed
 // to the applicant. Acts as a guaranteed fallback for admin re-download when
