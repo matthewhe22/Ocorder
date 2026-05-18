@@ -50,6 +50,20 @@ ordering process, each with its own order-form workflow.
   uploads the key order form too, and the admin button surfaces for keys orders
   whose key form is not yet in SharePoint.
 
+### Second-round gap fixes
+- **Local shipping parity** — `server.js` now seeds `shippingOptions` on its
+  demo plans and resolves keys shipping by option `id` (matching the frontend
+  and the Vercel handler) instead of the stale `type`-based `keysShipping`
+  lookup, which had blocked keys orders from completing in local dev.
+- Only **one apartment/mailbox-key form product per order** — adding a second is
+  blocked in the product list (each needs its own form and the portal collects
+  one).
+- The Vercel `[action]` handler returns **405 + Allow** for a known action
+  called with the wrong HTTP method, instead of a misleading 404.
+- When Redis is not configured, order creation records a **"Key order form
+  delivered by email"** audit entry, and the download endpoint returns an
+  actionable message pointing to the order email / SharePoint.
+
 ---
 
 ## 2026-05-13 — Send Certificate failing on mobile Safari with attached file

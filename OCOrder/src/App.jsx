@@ -36,6 +36,11 @@ const INITIAL_DATA = {
         { id: "K4", name: "Apartment Key / Mailbox Key (Order Form)", description: "Apartment or mailbox key cut to order — complete the downloadable order form during checkout. Price confirmed on invoice.", price: 0, turnaround: "5–7 business days", perOC: false, category: "keys", keyFulfilment: "form", formUrl: "/apartment-key-order-form.pdf" },
         { id: "K5", name: "Apartment Key / Mailbox Key (Online Form)", description: "Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price: 0, turnaround: "5–7 business days", perOC: false, category: "keys", keyFulfilment: "link", formUrl: "https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
+      keysShipping: { deliveryCost: 15, expressCost: 25 },
+      shippingOptions: [
+        { id: "ship-std", name: "Standard Post", cost: 15 },
+        { id: "ship-exp", name: "Express Post",  cost: 25 },
+      ],
       active: true,
     },
   ],
@@ -2064,15 +2069,25 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                                   <span style={{ minWidth: "24px", textAlign: "center", fontWeight: 600, fontSize: "0.9rem" }}>{qty}</span>
                                   <button style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", width: "28px", height: "28px", cursor: "pointer", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
                                     onClick={() => setCart(p => p.map(i => i.productId === product.id ? { ...i, qty: i.qty + 1, price: product.price * (i.qty + 1) } : i))}>+</button>
-                                </>) : (
+                                </>) : (() => {
+                                  // Only one apartment/mailbox-key form product per order — each
+                                  // needs its own completed form and the portal collects one.
+                                  const blockedSecondKeyForm = !!product.keyFulfilment && !!keyFulfilmentItem && keyFulfilmentItem.id !== product.id;
+                                  return (
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-                                    <button className="add-btn" onClick={() => {
+                                    <button className="add-btn" disabled={blockedSecondKeyForm}
+                                      style={blockedSecondKeyForm ? { opacity: 0.4, cursor: "not-allowed" } : {}}
+                                      onClick={() => {
+                                      if (blockedSecondKeyForm) return;
                                       const key = `${product.id}-null-keys`;
                                       setCart(p => [...p, { key, productId: product.id, productName: product.name, planId: plan.id, planName: plan.name, lotId: null, lotNumber, ocId: null, ocName: null, price: product.price, turnaround: product.turnaround || "", qty: 1, managerAdminCharge: product.managerAdminCharge || 0 }]);
                                     }}><Ic n="plus" s={13}/> Add</button>
-                                    <div style={{ fontSize: "0.62rem", color: "var(--muted)", textAlign: "center" }}>Qty adjustable after adding</div>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--muted)", textAlign: "center" }}>
+                                      {blockedSecondKeyForm ? "Order another apartment-key product separately" : "Qty adjustable after adding"}
+                                    </div>
                                   </div>
-                                )}
+                                  );
+                                })()}
                               </div>
                             ) : (
                               allAdded

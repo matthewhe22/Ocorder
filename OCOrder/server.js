@@ -64,6 +64,10 @@ const DEFAULT_DATA = {
         { id:"K5", name:"Apartment Key / Mailbox Key (Online Form)", description:"Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"link", formUrl:"https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       keysShipping: { deliveryCost: 15, expressCost: 25 },
+      shippingOptions: [
+        { id: "ship-std", name: "Standard Post", cost: 15 },
+        { id: "ship-exp", name: "Express Post",  cost: 25 },
+      ],
       active: true,
     },
   ],
@@ -115,6 +119,10 @@ const DEMO_SEED_DATA = {
         { id:"K5", name:"Apartment Key / Mailbox Key (Online Form)", description:"Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"link", formUrl:"https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       keysShipping: { deliveryCost: 12, expressCost: 25 },
+      shippingOptions: [
+        { id: "ship-std", name: "Standard Post", cost: 12 },
+        { id: "ship-exp", name: "Express Post",  cost: 25 },
+      ],
     },
     {
       id: "SP10002", name: "Parkside Gardens", address: "12 Garden Street, Melbourne VIC 3000", active: true,
@@ -132,6 +140,10 @@ const DEMO_SEED_DATA = {
         { id:"Q3", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:70, turnaround:"2 business days", perOC:false },
       ],
       keysShipping: { deliveryCost: 12, expressCost: 25 },
+      shippingOptions: [
+        { id: "ship-std", name: "Standard Post", cost: 12 },
+        { id: "ship-exp", name: "Express Post",  cost: 25 },
+      ],
     },
   ],
   orders: [
@@ -979,7 +991,7 @@ async function handler(req, res) {
     const orderCategoryNorm = typeof raw.orderCategory === "string" ? raw.orderCategory.toLowerCase() : "";
     if (!["oc", "keys"].includes(orderCategoryNorm)) return json(res, 400, { error: "orderCategory must be 'oc' or 'keys'." });
     if (orderCategoryNorm === "keys" && !body.lotAuthority?.data) return json(res, 400, { error: "An authority document is required for Keys/Fobs/Remotes orders." });
-    if (orderCategoryNorm === "keys" && !raw.selectedShipping?.type) return json(res, 400, { error: "A shipping method is required for Keys/Fobs/Remotes orders." });
+    if (orderCategoryNorm === "keys" && !raw.selectedShipping?.id) return json(res, 400, { error: "A shipping method is required for Keys/Fobs/Remotes orders." });
     // Validate payment method against config (prevents bypass of disabled methods)
     const VALID_PAYMENTS = ["bank", "payid", "card", "stripe", "invoice"];
     if (raw.payment && !VALID_PAYMENTS.includes(raw.payment)) return json(res, 400, { error: `Invalid payment method. Allowed: ${VALID_PAYMENTS.join(", ")}.` });
@@ -1040,7 +1052,6 @@ async function handler(req, res) {
       selectedShipping: (orderCategoryNorm === "keys" && raw.selectedShipping) ? {
         id:    stripCtrl(String(raw.selectedShipping.id   || "")),
         name:  stripCtrl(String(raw.selectedShipping.name || "")),
-        type:  stripCtrl(String(raw.selectedShipping.type || "")),
         price: 0, // set from catalog below
       } : undefined,
     };
@@ -1120,15 +1131,17 @@ async function handler(req, res) {
           item.managerAdminCharge = product.managerAdminCharge;
         }
       }
-      // H-3: validate and set shipping cost from plan catalog (not from client)
+      // H-3: set shipping cost from the plan's shippingOptions catalog by id.
+      // Keys orders are invoice-based (totals indicative); when the selected id
+      // is not in the catalog the client-supplied cost is trusted as a fallback,
+      // matching the Vercel order handler.
       if (order.orderCategory === "keys" && order.selectedShipping) {
-        const ks = plan.keysShipping || {};
-        const shippingType = order.selectedShipping.type;
-        if (shippingType.toLowerCase() === "express") {
-          order.selectedShipping.price = Math.max(0, Number(ks.expressCost) || 0);
+        const matched = (plan.shippingOptions || []).find(o => o.id === order.selectedShipping.id);
+        if (matched) {
+          order.selectedShipping.name  = stripCtrl(String(matched.name || order.selectedShipping.name));
+          order.selectedShipping.price = Math.max(0, Number(matched.cost ?? matched.price) || 0);
         } else {
-          // standard/pickup/delivery — use deliveryCost
-          order.selectedShipping.price = Math.max(0, Number(ks.deliveryCost) || 0);
+          order.selectedShipping.price = Math.max(0, Number(raw.selectedShipping.cost ?? raw.selectedShipping.price) || 0);
         }
       }
       // A completed order form / screenshot is mandatory for apartment & mailbox keys

@@ -745,6 +745,15 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error("Key order form KV save failed:", e.message);
       }
+    } else if (body.keyForm?.data && !KV_AVAILABLE) {
+      // No Redis — the SharePoint upload above is the only portal copy, and the
+      // form is always attached to the order email. Record this so an admin
+      // hitting a 404 on the download knows where to find it.
+      const oi = data.orders.find(o => o.id === order.id);
+      if (oi) {
+        oi.auditLog.push({ ts: new Date().toISOString(), action: "Key order form delivered by email", note: "Portal cache (Redis) not configured — see the order email attachment or SharePoint." });
+        await writeData(data).catch(e => console.error("Key form audit persist failed:", e.message));
+      }
     }
 
     // ── Send emails SYNCHRONOUSLY (before response — guaranteed delivery) ───────

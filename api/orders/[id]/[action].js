@@ -301,12 +301,12 @@ export default async function handler(req, res) {
     }
 
     // Fallback: serve from Redis KV
-    if (!KV_AVAILABLE) return res.status(503).json({ error: "Document storage is not connected. Add REDIS_URL to Vercel environment variables." });
+    if (!KV_AVAILABLE) return res.status(503).json({ error: "Portal storage (Redis) is not configured — the key order form was emailed to the orders inbox. Add REDIS_URL, or use Save to SharePoint." });
     let stored = null;
     try { stored = await readKeyForm(id); } catch (e) {
       return res.status(503).json({ error: "Document storage unavailable: " + e.message });
     }
-    if (!stored?.data) return res.status(404).json({ error: "Document not found in storage." });
+    if (!stored?.data) return res.status(404).json({ error: "Key order form not in portal storage — it was emailed to the orders inbox at order time." });
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
@@ -1506,6 +1506,28 @@ export default async function handler(req, res) {
       total: order.total,
       items: (order.items || []).map(({ productName, qty, price, ocName }) => ({ productName, qty, price, ocName })),
     });
+  }
+
+  // Known action but wrong HTTP method → 405 (not 404), with an Allow header.
+  const ACTION_METHODS = {
+    authority: ["GET"],
+    "key-order-form": ["GET"],
+    "save-to-sharepoint": ["POST"],
+    certificate: ["GET"],
+    status: ["PUT"],
+    amend: ["PUT"],
+    notify: ["POST"],
+    "send-certificate": ["POST"],
+    "send-invoice": ["POST"],
+    "stripe-confirm": ["POST"],
+    "stripe-cancel": ["POST"],
+    delete: ["DELETE"],
+    "check-piq-payment": ["POST"],
+    track: ["GET"],
+  };
+  if (ACTION_METHODS[action]) {
+    res.setHeader("Allow", ACTION_METHODS[action].join(", "));
+    return res.status(405).json({ error: `Method Not Allowed. Allowed: ${ACTION_METHODS[action].join(", ")}.` });
   }
 
   return res.status(404).json({ error: "Unknown action." });
