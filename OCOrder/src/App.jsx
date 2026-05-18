@@ -1342,6 +1342,9 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
   const keyFulfilmentItem = orderCategory === "keys"
     ? cart.map(it => (plan?.products || []).find(p => p.id === it.productId)).find(p => p && p.keyFulfilment)
     : null;
+  // Drop a stale completed-form upload whenever the key product is removed or
+  // swapped — otherwise an orphaned keyForm would still be sent on submit.
+  useEffect(() => { setKeyFormFile(null); }, [keyFulfilmentItem?.id]);
   const [recentOrder, setRecentOrder] = useState(() => {
     try {
       const s = localStorage.getItem("tocs_last_order");
@@ -3821,6 +3824,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
           d.summaryUrl && "order summary",
           d.authUrl && "authority doc",
           d.receiptUrl && "payment receipt",
+          d.keyFormUrl && "key order form",
         ].filter(Boolean);
         showAdminToast("ok", present.length
           ? `SharePoint already has ${present.join(", ")} for this order — no re-upload needed.`
@@ -3831,6 +3835,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       if (d.summaryUrl) parts.push("order summary");
       if (d.authUrl) parts.push("authority doc");
       if (d.receiptUrl) parts.push("payment receipt");
+      if (d.keyFormUrl) parts.push("key order form");
       showAdminToast("ok", parts.length ? `Saved to SharePoint: ${parts.join(", ")}.` : "SharePoint save completed but nothing was uploaded — check the audit log.");
     } catch {
       showAdminToast("err", "Network error saving to SharePoint.");
@@ -4782,7 +4787,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 )}
                                 {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial.
                                     Disable on ALL rows while any save is in flight so a second click doesn't silently no-op. */}
-                                {pubConfig?.sharepointEnabled && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
+                                {pubConfig?.sharepointEnabled && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl) || (o.keyOrderFormFile && !o.keyOrderFormUrl)) && (
                                   <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: !!savingToSp ? "not-allowed" : "pointer", borderColor: "var(--amber)", color: "var(--amber)", opacity: !!savingToSp && savingToSp !== o.id ? 0.5 : 1 }}
                                     disabled={!!savingToSp}
                                     aria-busy={savingToSp === o.id}

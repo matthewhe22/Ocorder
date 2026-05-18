@@ -359,19 +359,22 @@ export default async function handler(req, res) {
     if (!isSharePointEnabled(spConfig)) return res.status(400).json({ error: "SharePoint is not configured." });
 
     const authDocStored = await readAuthority(id).catch(() => null);
+    const keyFormStored = await readKeyForm(id).catch(() => null);
     const isStripePaid = order.payment === "stripe" && order.status === "Paid" && !!order.stripeSessionId;
 
     // Per-doc gating — skip anything already in SharePoint.
     const needSummary = !order.summaryUrl;
     const needAuth    = !!authDocStored?.data && !order.lotAuthorityUrl;
     const needReceipt = isStripePaid && !order.receiptUrl;
+    const needKeyForm = !!keyFormStored?.data && !order.keyOrderFormUrl;
 
-    if (!needSummary && !needAuth && !needReceipt) {
+    if (!needSummary && !needAuth && !needReceipt && !needKeyForm) {
       return res.status(200).json({
         ok: true, alreadyPresent: true,
         summaryUrl: order.summaryUrl || null,
         authUrl:    order.lotAuthorityUrl || null,
         receiptUrl: order.receiptUrl || null,
+        keyFormUrl: order.keyOrderFormUrl || null,
         order,
       });
     }
@@ -380,6 +383,7 @@ export default async function handler(req, res) {
     try {
       result = await uploadOrderDocs(order, spConfig, { generateOrderPdf, generateReceiptPdf }, {
         authDoc: needAuth ? authDocStored : null,
+        keyFormDoc: needKeyForm ? keyFormStored : null,
         includeSummary: needSummary,
         includeReceipt: needReceipt,
         stripeSessionId: order.stripeSessionId,
@@ -388,7 +392,7 @@ export default async function handler(req, res) {
       console.error(`save-to-sharepoint failed for ${id}:`, e.message);
       return res.status(500).json({ error: "SharePoint upload failed: " + (e.message || "unknown error") });
     }
-    const { authUrl, summaryUrl, receiptUrl, errors } = result;
+    const { authUrl, summaryUrl, receiptUrl, keyFormUrl, errors } = result;
 
     // Wrap the audit-log write in the order lock so a concurrent amend / status
     // / piq / send-cert can't clobber the URLs or entries we just produced.
@@ -413,6 +417,10 @@ export default async function handler(req, res) {
           if (receiptUrl) { fo.receiptUrl = receiptUrl; fo.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: `Manual: ${receiptUrl}` }); }
           else            { fo.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: "Manual: " + (errors.receipt?.message?.slice(0, 60) || "See Vercel logs") }); }
         }
+        if (needKeyForm) {
+          if (keyFormUrl) { fo.keyOrderFormUrl = keyFormUrl; fo.auditLog.push({ ts: ts(), action: "Key order form saved to SharePoint", note: `Manual: ${keyFormUrl}` }); }
+          else            { fo.auditLog.push({ ts: ts(), action: "Key order form SP upload failed", note: "Manual: " + (errors.keyForm?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
         await writeData(fresh);
         return { order: fo };
       });
@@ -425,7 +433,7 @@ export default async function handler(req, res) {
     const fo = finalOrder;
     return res.status(200).json({
       ok: true,
-      authUrl, summaryUrl, receiptUrl,
+      authUrl, summaryUrl, receiptUrl, keyFormUrl,
       order: fo,
     });
   }

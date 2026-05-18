@@ -1064,12 +1064,14 @@ async function handler(req, res) {
       // also detect duplicate (productId, ocId) combinations.
       const ocCountPerProduct = {}; // key: `${productId}:${ocId}` for perOC
       const seenItems = new Set(); // detect true duplicates
+      let requiresKeyForm = false; // set when an apartment/mailbox-key product is ordered
       for (const item of order.items) {
         if (!item.productId) return json(res, 400, { error: "Each order item must have a productId." });
         // GAP-10: lotNumber required on every item
         if (!item.lotNumber?.trim()) return json(res, 400, { error: "Each order item must include a lot number." });
         const product = plan.products.find(p => p.id === item.productId);
         if (!product) return json(res, 400, { error: `Unknown productId: ${item.productId}` });
+        if (product.keyFulfilment) requiresKeyForm = true;
         // M-7: cross-validate product category vs order category.
         // Use the stored product.category field; fall back to managerAdminCharge for legacy products without it.
         const productCategory = product.category || (product.managerAdminCharge !== undefined ? "keys" : "oc");
@@ -1128,6 +1130,10 @@ async function handler(req, res) {
           // standard/pickup/delivery — use deliveryCost
           order.selectedShipping.price = Math.max(0, Number(ks.deliveryCost) || 0);
         }
+      }
+      // A completed order form / screenshot is mandatory for apartment & mailbox keys
+      if (requiresKeyForm && !body.keyForm?.data) {
+        return json(res, 400, { error: "A completed key order form is required for apartment / mailbox key orders." });
       }
     }
     // H-4: shipping only applies to keys orders

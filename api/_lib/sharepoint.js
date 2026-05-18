@@ -269,6 +269,19 @@ export async function uploadOrderDocs(order, spConfig, pdf, opts = {}) {
       })()
     : Promise.resolve(null);
 
-  const [summaryUrl, authUrl, receiptUrl] = await Promise.all([summaryPromise, authPromise, receiptPromise]);
-  return { authUrl, summaryUrl, receiptUrl, errors };
+  // Completed apartment/mailbox-key order form — same path-segment sanitising
+  // as the authority doc.
+  const keyFormFilename = `key-order-form-${sanitiseSegment(opts.keyFormDoc?.filename, "document")}`;
+  const keyFormPromise = opts.keyFormDoc?.data
+    ? uploadToSharePoint(
+        keyFormFilename,
+        opts.keyFormDoc.contentType || "application/octet-stream",
+        opts.keyFormDoc.data,
+        spConfig,
+        subFolder
+      ).catch(e => { errors.keyForm = e; return null; })
+    : Promise.resolve(null);
+
+  const [summaryUrl, authUrl, receiptUrl, keyFormUrl] = await Promise.all([summaryPromise, authPromise, receiptPromise, keyFormPromise]);
+  return { authUrl, summaryUrl, receiptUrl, keyFormUrl, errors };
 }

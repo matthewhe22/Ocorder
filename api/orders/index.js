@@ -441,6 +441,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Invalid order: unknown planId." });
       }
       let recomputedItemsTotal = 0;
+      let requiresKeyForm = false; // set when an apartment/mailbox-key product is ordered
       for (const item of order.items) {
         if (!Number.isFinite(item.price) || item.price < 0) {
           return res.status(400).json({ error: "Invalid item: price must be a non-negative number." });
@@ -448,6 +449,8 @@ export default async function handler(req, res) {
         const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
         if (order.orderCategory === "keys") {
           // Keys: trust client price (zero at order time, set by admin on invoice)
+          const keysProduct = plan?.products?.find(p => p.id === item.productId);
+          if (keysProduct?.keyFulfilment) requiresKeyForm = true;
           recomputedItemsTotal += item.price * qty;
           continue;
         }
@@ -477,6 +480,10 @@ export default async function handler(req, res) {
       }
       // Trust the server-computed value going forward
       order.total = recomputedTotal;
+      // A completed order form / screenshot is mandatory for apartment & mailbox keys
+      if (requiresKeyForm && !body.keyForm?.data) {
+        return res.status(400).json({ error: "A completed key order form is required for apartment / mailbox key orders." });
+      }
     }
 
     // Derive SharePoint folder structure: {buildingName}/{categoryFolder}/{orderId}
@@ -507,6 +514,15 @@ export default async function handler(req, res) {
       const keyFormSize = Math.ceil((body.keyForm.data.length * 3) / 4);
       if (keyFormSize > 10 * 1024 * 1024) {
         return res.status(400).json({ error: "Key order form must be under 10 MB." });
+      }
+      // Validate the file's magic bytes match the declared type — a content-type
+      // string alone is trivially spoofable.
+      const head = Buffer.from(body.keyForm.data.slice(0, 32), "base64");
+      const isPDF  = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+      const isJPEG = head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF;
+      const isPNG  = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47;
+      if (!isPDF && !isJPEG && !isPNG) {
+        return res.status(400).json({ error: "Key order form content does not match a PDF, JPG, or PNG file." });
       }
     }
 

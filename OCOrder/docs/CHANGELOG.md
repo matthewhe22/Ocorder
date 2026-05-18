@@ -38,6 +38,18 @@ ordering process, each with its own order-form workflow.
   "Mark Sent to Locksmith" action for keys orders.
 - URLs in keys product descriptions now render as clickable links.
 
+### Review fixes (same-day)
+- The completed key form is now **required server-side** — both `server.js` and
+  `api/orders/index.js` reject an apartment/mailbox-key order placed without a
+  `keyForm` (previously enforced only in the browser).
+- `api/orders/index.js` now **magic-byte validates** the `keyForm` upload, not
+  just its declared content-type — matching `server.js`.
+- A stale completed-form upload is cleared when the key product is removed or
+  swapped, so an orphaned `keyForm` is no longer submitted.
+- The retroactive **"Save to SharePoint"** repair (`save-to-sharepoint`) now
+  uploads the key order form too, and the admin button surfaces for keys orders
+  whose key form is not yet in SharePoint.
+
 ---
 
 ## 2026-05-13 — Send Certificate failing on mobile Safari with attached file
