@@ -57,6 +57,11 @@ const DEFAULT_DATA = {
         { id:"P4", name:"Insurance Certificate of Currency",   description:"Current building insurance details and certificate",price: 75,                    turnaround:"2 business days",   perOC:false, category:"oc"   },
         { id:"P5", name:"Meeting Minutes — Last 2 Years",      description:"Minutes of AGM and general meetings",              price:110,                    turnaround:"5 business days",   perOC:false, category:"oc"   },
         { id:"P6", name:"Financial Statements",                description:"Latest audited financial statements",               price: 95,                    turnaround:"5 business days",   perOC:false, category:"oc"   },
+        { id:"K1", name:"Building Entry Key",                  description:"Standard building entry key — price confirmed on invoice", price:0, turnaround:"2–3 business days", perOC:false, category:"keys" },
+        { id:"K2", name:"Car Park Fob",                        description:"Car park access fob/swipe — price confirmed on invoice",   price:0, turnaround:"2–3 business days", perOC:false, category:"keys" },
+        { id:"K3", name:"Garage Remote",                       description:"Garage/gate remote control — price confirmed on invoice",  price:0, turnaround:"3–5 business days", perOC:false, category:"keys" },
+        { id:"K4", name:"Apartment Key / Mailbox Key (Order Form)",  description:"Apartment or mailbox key cut to order — complete the downloadable order form during checkout. Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"form", formUrl:"/apartment-key-order-form.pdf" },
+        { id:"K5", name:"Apartment Key / Mailbox Key (Online Form)", description:"Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"link", formUrl:"https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       keysShipping: { deliveryCost: 15, expressCost: 25 },
       active: true,
@@ -104,6 +109,10 @@ const DEMO_SEED_DATA = {
         { id:"P2", name:"OC Certificate — Urgent",   description:"Priority processing, 24–48 hour turnaround", price:385, secondaryPrice:280, turnaround:"1–2 business days", perOC:true, category:"oc"   },
         { id:"P3", name:"Register of Owners Search", description:"Current register of lot owners",           price:55,  turnaround:"3 business days", perOC:false, category:"oc"   },
         { id:"P4", name:"Insurance Certificate",     description:"Building insurance details and certificate", price:75, turnaround:"2 business days", perOC:false, category:"oc"   },
+        { id:"K1", name:"Building Entry Key",        description:"Standard building entry key — price confirmed on invoice", price:0, turnaround:"2–3 business days", perOC:false, category:"keys" },
+        { id:"K2", name:"Car Park Fob",              description:"Car park access fob/swipe — price confirmed on invoice",   price:0, turnaround:"2–3 business days", perOC:false, category:"keys" },
+        { id:"K4", name:"Apartment Key / Mailbox Key (Order Form)",  description:"Apartment or mailbox key cut to order — complete the downloadable order form during checkout. Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"form", formUrl:"/apartment-key-order-form.pdf" },
+        { id:"K5", name:"Apartment Key / Mailbox Key (Online Form)", description:"Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"link", formUrl:"https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       keysShipping: { deliveryCost: 12, expressCost: 25 },
     },
@@ -373,6 +382,8 @@ function buildOrderEmailHtml(order, tpl) {
 
       <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Lot Authority Document</h3>
       <p style="margin-top:8px;">${order.lotAuthorityFile ? `<strong>${esc(order.lotAuthorityFile)}</strong> has been uploaded and saved.` : "No lot authority document was provided."}</p>
+      ${order.keyOrderFormFile ? `<h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Key Order Form</h3>
+      <p style="margin-top:8px;"><strong>${esc(order.keyOrderFormFile)}</strong> has been uploaded — see the attachment to this email.</p>` : ""}
 
       <hr style="border:none;border-top:1px solid #e8edf0;margin:28px 0 20px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">This is an automated notification from the TOCS Order Portal. Please do not reply to this email.</p>
@@ -548,7 +559,7 @@ function createSmtpTransporter(smtp) {
 }
 
 // ── Send admin notification (with optional authority doc attachment) ────────────
-async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
+async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename, keyFormBuf, keyFormFilename) {
   const smtp = cfg.smtp || {};
   if (!smtp.host || !smtp.user || !smtp.pass) {
     console.log("  ⚠️   SMTP not configured — skipping email send. Configure SMTP in Admin → Settings.");
@@ -573,9 +584,10 @@ async function sendOrderEmail(order, cfg, authorityBuf, authorityFilename) {
       subject: adminSubject,
       html: buildOrderEmailHtml(order, tpl),
     };
-    if (authorityBuf && authorityFilename) {
-      mailOpts.attachments = [{ filename: authorityFilename, content: authorityBuf }];
-    }
+    const attachments = [];
+    if (authorityBuf && authorityFilename) attachments.push({ filename: authorityFilename, content: authorityBuf });
+    if (keyFormBuf && keyFormFilename) attachments.push({ filename: keyFormFilename, content: keyFormBuf });
+    if (attachments.length) mailOpts.attachments = attachments;
     await transporter.sendMail(mailOpts);
     console.log(`  ✉️   Admin notification sent → ${toEmail}`);
   } catch (err) {
@@ -614,9 +626,9 @@ function readBody(req, res) {
     let body = "";
     req.on("data", c => {
       body += c;
-      if (body.length > 15e6) {
+      if (body.length > 28e6) {
         if (res && !res.headersSent) {
-          const msg = JSON.stringify({ error: "Request body too large (max 15 MB)." });
+          const msg = JSON.stringify({ error: "Request body too large (max 28 MB)." });
           res.writeHead(413, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(msg) });
           res.end(msg);
         }
@@ -752,6 +764,7 @@ const MIME = {
   ".html":"text/html; charset=utf-8", ".js":"application/javascript; charset=utf-8",
   ".css":"text/css; charset=utf-8", ".svg":"image/svg+xml", ".png":"image/png",
   ".jpg":"image/jpeg", ".ico":"image/x-icon", ".json":"application/json",
+  ".pdf":"application/pdf",
   ".woff":"font/woff", ".woff2":"font/woff2",
 };
 function cacheHeader(ext) {
@@ -1163,7 +1176,43 @@ async function handler(req, res) {
       }
     }
 
+    // Completed key order form / submission screenshot (apartment & mailbox keys)
+    let keyFormBuf = null;
+    let keyFormFilename = null;
+    if (body.keyForm?.data) {
+      try {
+        const decoded = Buffer.from(body.keyForm.data, "base64");
+        if (decoded.length === 0) throw new Error("Empty or invalid base64 data");
+        if (decoded.length > AUTH_MAX_BYTES) {
+          return json(res, 400, { error: "Key order form must not exceed 10 MB." });
+        }
+        const ALLOWED_EXTS = [".pdf", ".jpg", ".jpeg", ".png"];
+        const rawExt = path.extname(body.keyForm.filename || "").toLowerCase();
+        if (!ALLOWED_EXTS.includes(rawExt)) {
+          return json(res, 400, { error: "Key order form must be a PDF, JPG, or PNG file." });
+        }
+        const isPDF  = decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46;
+        const isJPEG = decoded[0] === 0xFF && decoded[1] === 0xD8 && decoded[2] === 0xFF;
+        const isPNG  = decoded[0] === 0x89 && decoded[1] === 0x50 && decoded[2] === 0x4E && decoded[3] === 0x47;
+        const validMagic = (rawExt === ".pdf" && isPDF) || ([".jpg",".jpeg"].includes(rawExt) && isJPEG) || (rawExt === ".png" && isPNG);
+        if (!validMagic) {
+          return json(res, 400, { error: "Key order form content does not match the declared file type." });
+        }
+        keyFormBuf = decoded;
+        keyFormFilename = order.id + "-key-order-form" + rawExt;
+        fs.writeFileSync(path.join(UPLOADS_DIR, keyFormFilename), keyFormBuf);
+        order.keyOrderFormFile = keyFormFilename;
+        console.log(`  📎  Key order form saved: ${keyFormFilename}`);
+      } catch (e) {
+        if (res.headersSent) return;
+        console.error("  ❌  Failed to save key order form:", e.message);
+      }
+    }
+
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
+    if (order.keyOrderFormFile) {
+      order.auditLog.push({ ts: new Date().toISOString(), action: "Key order form uploaded", note: order.keyOrderFormFile });
+    }
     d.orders.unshift(order);
     writeData(d);
 
@@ -1173,7 +1222,7 @@ async function handler(req, res) {
     // order. Failures are recorded structurally on the order so admin UI can
     // surface them, and logged with the order id so ops can correlate.
     const emailResults = await Promise.allSettled([
-      sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
+      sendOrderEmail(order, cfg, authorityBuf, authorityFilename, keyFormBuf, keyFormFilename),
       sendCustomerEmail(order, cfg),
     ]);
     const emailLabels = ["Admin notification", "Customer confirmation"];

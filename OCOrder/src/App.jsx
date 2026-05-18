@@ -33,6 +33,8 @@ const INITIAL_DATA = {
         { id: "K1", name: "Building Entry Key", description: "Standard building entry key — price confirmed on invoice", price: 0, turnaround: "2–3 business days", perOC: false, category: "keys" },
         { id: "K2", name: "Car Park Fob", description: "Car park access fob/swipe — price confirmed on invoice", price: 0, turnaround: "2–3 business days", perOC: false, category: "keys" },
         { id: "K3", name: "Garage Remote", description: "Garage/gate remote control — price confirmed on invoice", price: 0, turnaround: "3–5 business days", perOC: false, category: "keys" },
+        { id: "K4", name: "Apartment Key / Mailbox Key (Order Form)", description: "Apartment or mailbox key cut to order — complete the downloadable order form during checkout. Price confirmed on invoice.", price: 0, turnaround: "5–7 business days", perOC: false, category: "keys", keyFulfilment: "form", formUrl: "/apartment-key-order-form.pdf" },
+        { id: "K5", name: "Apartment Key / Mailbox Key (Online Form)", description: "Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price: 0, turnaround: "5–7 business days", perOC: false, category: "keys", keyFulfilment: "link", formUrl: "https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       active: true,
     },
@@ -901,6 +903,7 @@ export default function App() {
   const [contact, setContact] = useState(DEFAULT_CONTACT);
   const [selectedShipping, setSelectedShipping] = useState(null);
   const [lotAuthFile, setLotAuthFile] = useState(null);
+  const [keyFormFile, setKeyFormFile] = useState(null);
   const [adminTab, setAdminTab] = useState("plans");
   const [adminToken, setAdminToken] = useState(() => {
     try { return sessionStorage.getItem("admin_token") || null; } catch { return null; }
@@ -1094,17 +1097,20 @@ export default function App() {
       // Include shippingAddress for keys orders with a paid delivery option
       shippingAddress: (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false) ? contact.shippingAddress : undefined,
     };
-    const o = { date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, orderCategory: orderCategory || "oc" };
+    const o = { date: new Date().toISOString(), contactInfo, items: cart, total, selectedShipping: selectedShipping || null, payment: orderPayment, lotAuthFileName: lotAuthFile ? lotAuthFile.name : null, keyFormFileName: keyFormFile ? keyFormFile.name : null, orderCategory: orderCategory || "oc" };
     try {
       let body = { order: o };
+      const fileToBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
       if (lotAuthFile) {
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(lotAuthFile);
-        });
-        body.lotAuthority = { filename: lotAuthFile.name, contentType: lotAuthFile.type || "application/octet-stream", data: base64 };
+        body.lotAuthority = { filename: lotAuthFile.name, contentType: lotAuthFile.type || "application/octet-stream", data: await fileToBase64(lotAuthFile) };
+      }
+      if (keyFormFile) {
+        body.keyForm = { filename: keyFormFile.name, contentType: keyFormFile.type || "application/octet-stream", data: await fileToBase64(keyFormFile) };
       }
       const r = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!r.ok) {
@@ -1137,7 +1143,7 @@ export default function App() {
     // returning to the portal starts fresh rather than restoring a paid cart.
     if (selPlan) clearCartFor(selPlan);
     cartHydratedRef.current = null;
-    setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false);
+    setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setKeyFormFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false);
   };
 
   const handleAuth = async (token, user) => {
@@ -1253,7 +1259,8 @@ export default function App() {
                 cart={cart} setCart={setCart} total={total} addProd={addProd} inCart={inCart}
                 order={order} payMethod={payMethod} setPayMethod={setPayMethod}
                 placeOrder={placeOrder} reset={reset} contact={contact} setContact={setContact}
-                lotAuthFile={lotAuthFile} setLotAuthFile={setLotAuthFile} STEPS={STEPS}
+                lotAuthFile={lotAuthFile} setLotAuthFile={setLotAuthFile}
+                keyFormFile={keyFormFile} setKeyFormFile={setKeyFormFile} STEPS={STEPS}
                 pubConfig={pubConfig}
                 orderCategory={orderCategory} setOrderCategory={setOrderCategory}
                 selectedShipping={selectedShipping} setSelectedShipping={setSelectedShipping}
@@ -1282,7 +1289,18 @@ export default function App() {
 }
 
 // ─── PORTAL ───────────────────────────────────────────────────────────────────
-function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
+// Render a product description, turning any http(s) URL into a clickable link.
+function renderDescription(text) {
+  const str = String(text || "");
+  const parts = str.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{ color: "var(--forest)", fontWeight: 600, wordBreak: "break-all" }}>{part}</a>
+      : <Fragment key={i}>{part}</Fragment>
+  );
+}
+
+function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, keyFormFile, setKeyFormFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [extLinkTarget, setExtLinkTarget] = useState(null); // product with externalUrl awaiting confirm
@@ -1308,6 +1326,22 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
       setLotAuthFile(file);
     }
   };
+  const [keyFormErr, setKeyFormErr] = useState("");
+  const handleKeyFormFile = (file) => {
+    if (!file) return;
+    if (file.size > AUTH_MAX_MB * 1024 * 1024) {
+      setKeyFormErr(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is ${AUTH_MAX_MB} MB.`);
+      setKeyFormFile(null);
+    } else {
+      setKeyFormErr("");
+      setKeyFormFile(file);
+    }
+  };
+  // The apartment/mailbox-key product in the cart, if any — drives the
+  // form-download / online-form instructions shown on the Review Order step.
+  const keyFulfilmentItem = orderCategory === "keys"
+    ? cart.map(it => (plan?.products || []).find(p => p.id === it.productId)).find(p => p && p.keyFulfilment)
+    : null;
   const [recentOrder, setRecentOrder] = useState(() => {
     try {
       const s = localStorage.getItem("tocs_last_order");
@@ -1542,6 +1576,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     "On Hold":                { background:"#ffedd5", color:"#9a3412" },
                     "Awaiting Documents":     { background:"#fef3c7", color:"#92400e" },
                     "Invoice to be issued":   { background:"#ede9fe", color:"#5b21b6" },
+                    "Approved – Sent to Locksmith": { background:"#cffafe", color:"#155e75" },
                   }[trackResult.status] || { background:"#f3f4f6", color:"#374151" })}>
                     {trackResult.status}
                   </span>
@@ -1998,7 +2033,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                               </div>
                             )}
                           </div>
-                          <div className="prod-desc">{product.description}</div>
+                          <div className="prod-desc">{orderCategory === "keys" ? renderDescription(product.description) : product.description}</div>
                           {product.turnaround && <div className="prod-turna">⏱ {product.turnaround}</div>}
                           <div className="prod-foot">
                             <div>
@@ -2228,6 +2263,75 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             </div>
           )}
 
+          {/* ── Apartment / Mailbox Key — order form instructions & upload ── */}
+          {cart.length > 0 && keyFulfilmentItem && (
+            <div className="panel" style={{ marginTop: "1rem", borderLeft: "3px solid var(--forest)" }}>
+              <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.6rem" }}>
+                {keyFulfilmentItem.keyFulfilment === "form" ? "Complete the key order form" : "Complete the online key order form"}
+              </div>
+              {keyFulfilmentItem.keyFulfilment === "form" ? (
+                <>
+                  <p style={{ fontSize: "0.85rem", lineHeight: 1.6, marginBottom: "0.75rem" }}>
+                    <strong>{keyFulfilmentItem.name}</strong> requires a completed order form. Download the form below and complete every field carefully to avoid delays, then upload the finished form for review and processing.
+                  </p>
+                  <a href={keyFulfilmentItem.formUrl} target="_blank" rel="noreferrer" download className="btn btn-blk" style={{ textDecoration: "none", display: "inline-flex", marginBottom: "0.9rem" }}>
+                    <Ic n="doc" s={14}/> Download Order Form
+                  </a>
+                  <div className="alert" style={{ background: "#f0f7f3", border: "1px solid #c0dbc9", borderRadius: "6px", padding: "8px 12px", marginBottom: "0.9rem", fontSize: "0.78rem", color: "var(--forest)" }}>
+                    <Ic n="info" s={13}/> Please rename the completed file as: <strong>{(lotNumber || "Lot#")} – Completed Order Form</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: "0.85rem", lineHeight: 1.6, marginBottom: "0.75rem" }}>
+                    <strong>{keyFulfilmentItem.name}</strong> is completed on the supplier's website. Open the order form below, fill it in using the details provided, then upload a screenshot confirming the form has been submitted.
+                  </p>
+                  <a href={keyFulfilmentItem.formUrl} target="_blank" rel="noreferrer" className="btn btn-blk" style={{ textDecoration: "none", display: "inline-flex", marginBottom: "0.9rem" }}>
+                    <Ic n="arrow" s={14}/> Open Order Form
+                  </a>
+                  <div className="alert" style={{ background: "#f0f7f3", border: "1px solid #c0dbc9", borderRadius: "6px", padding: "10px 14px", marginBottom: "0.9rem", fontSize: "0.8rem", color: "var(--forest)", lineHeight: 1.7 }}>
+                    <strong>When completing the form:</strong>
+                    <ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>
+                      <li>Under <strong>Form Requirements</strong>, select <strong>NO</strong></li>
+                      <li>Under <strong>Authorised Signatory</strong>, enter <strong>Ben Quirk</strong></li>
+                      <li>For <strong>Authorised Signatory Email</strong>, use <strong>order@tocs.co</strong></li>
+                      <li>Include the property address the key is being ordered for</li>
+                      <li>Complete all remaining required fields and submit the form</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+              <label className="f-label">
+                {keyFulfilmentItem.keyFulfilment === "form" ? "Upload completed order form" : "Upload submission screenshot"}
+                <span style={{ color: "var(--red)" }}> *</span>
+              </label>
+              <div style={{ position: "relative", marginTop: "6px" }}>
+                {keyFormFile ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)" }}>
+                    <Ic n="doc" s={16}/>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 500 }}>{keyFormFile.name}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{(keyFormFile.size / 1024).toFixed(1)} KB</div>
+                    </div>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }} onClick={() => setKeyFormFile(null)} title="Remove file"><Ic n="trash" s={15}/></button>
+                  </div>
+                ) : (
+                  <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "1.5rem", border: `2px dashed ${keyFormErr ? "var(--red)" : "var(--border)"}`, borderRadius: "4px", cursor: "pointer", textAlign: "center", transition: "border-color 0.15s" }} onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--sage)"; }} onDragLeave={e => { e.currentTarget.style.borderColor = keyFormErr ? "var(--red)" : "var(--border)"; }} onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = keyFormErr ? "var(--red)" : "var(--border)"; if (e.dataTransfer.files[0]) handleKeyFormFile(e.dataTransfer.files[0]); }}>
+                    <Ic n="upload" s={24}/>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--forest)" }}>Click to upload or drag & drop</span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>PDF, JPG, PNG — max {AUTH_MAX_MB} MB</span>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) handleKeyFormFile(e.target.files[0]); e.target.value = ""; }}/>
+                  </label>
+                )}
+              </div>
+              {keyFormErr && (
+                <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", color: "var(--red)", fontWeight: 500 }}>
+                  <Ic n="info" s={13}/> {keyFormErr}
+                </div>
+              )}
+            </div>
+          )}
+
           {cart.length > 0 && (
             <div style={{ display: "flex", gap: "10px", marginTop: "1px", flexWrap: "wrap" }}>
               <button className="btn btn-out" onClick={() => setStep(2)}><Ic n="arrowL" s={14}/> Edit</button>
@@ -2237,7 +2341,8 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                   disabled={
                     (orderCategory === "keys" && (plan?.shippingOptions || []).length === 0) ||
                     (orderCategory === "keys" && (plan?.shippingOptions || []).length > 0 && !selectedShipping) ||
-                    (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode))
+                    (orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode)) ||
+                    (!!keyFulfilmentItem && !keyFormFile)
                   }
                   onClick={() => {
                     // Pre-populate Full Name from owner name if not yet entered
@@ -2250,6 +2355,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 </button>
                 {orderCategory === "keys" && selectedShipping && selectedShipping.requiresAddress !== false && (!contact.shippingAddress.street || !contact.shippingAddress.suburb || !contact.shippingAddress.postcode) && (
                   <div style={{ fontSize: "0.75rem", color: "var(--muted)", textAlign: "center" }}>Please enter your delivery address above to continue.</div>
+                )}
+                {keyFulfilmentItem && !keyFormFile && (
+                  <div style={{ fontSize: "0.75rem", color: "var(--muted)", textAlign: "center" }}>
+                    Please {keyFulfilmentItem.keyFulfilment === "form" ? "upload the completed order form" : "upload the submission screenshot"} above to continue.
+                  </div>
                 )}
               </div>
             </div>
@@ -4352,6 +4462,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <option>On Hold</option>
               <option>Awaiting Documents</option>
               <option>Invoice to be issued</option>
+              <option>Approved – Sent to Locksmith</option>
               <option>Awaiting Stripe Payment</option>
             </select>
             {(orderFilter.text || orderFilter.status || orderFilter.category || orderFilter.plan || orderFilter.lot) && (
@@ -4421,6 +4532,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="On Hold"?"bg-warn":
                         o.status==="Awaiting Documents"?"bg-purple":
                         o.status==="Invoice to be issued"?"bg-teal":
+                        o.status==="Approved – Sent to Locksmith"?"bg-teal":
                         o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-gray"
                       }`}>{o.status}</span></td>
@@ -4429,6 +4541,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         {o.status !== "Issued" && (() => {
                           const hasAmendInMore = ["Invoice to be issued", "Pending Payment"].includes(o.status);
                           const hasMarkPending = o.status === "Invoice to be issued" && o.orderCategory === "keys";
+                          const hasMarkLocksmith = o.orderCategory === "keys" && o.status !== "Approved – Sent to Locksmith" && o.status !== "Cancelled";
                           const hasCancel = o.status !== "Cancelled";
                           const hasNotify = !!o.contactInfo?.email;
                           const hasAuthDoc = !!(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl);
@@ -4481,13 +4594,16 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 }}>{deletingOrderId === o.id ? "Deleting…" : "Delete"}</button>
                             )}
                             {/* More ▾ overflow menu */}
-                            {(hasAmendInMore || hasMarkPending || hasCancel || hasNotify || hasAuthDoc) && (
+                            {(hasAmendInMore || hasMarkPending || hasMarkLocksmith || hasCancel || hasNotify || hasAuthDoc) && (
                               <div style={{ position: "relative" }}>
                                 <button className="tbl-act-btn" onClick={e => { e.stopPropagation(); setMoreMenuOrder(moreMenuOrder === o.id ? null : o.id); }}>More ▾</button>
                                 {moreMenuOrder === o.id && (
                                   <div className="order-more-menu" onClick={e => e.stopPropagation()}>
                                     {hasMarkPending && (
                                       <button className="order-more-item" style={{ color:"var(--amber)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); markPending(o.id); }}>Mark Pending Payment</button>
+                                    )}
+                                    {hasMarkLocksmith && (
+                                      <button className="order-more-item" style={{ color:"var(--teal)" }} title="Order form verified — mark as approved and sent to the locksmith" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); updateOrderStatus(o.id, "Approved – Sent to Locksmith"); }}>Mark Sent to Locksmith</button>
                                     )}
                                     {hasAmendInMore && (
                                       <button className="order-more-item" style={{ color:"#854d0e" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>

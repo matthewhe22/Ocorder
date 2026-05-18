@@ -58,7 +58,7 @@
 
 ### Order status enum (enforced server-side)
 ```
-Pending Payment | Processing | Issued | Cancelled | On Hold | Awaiting Documents | Invoice to be issued
+Pending Payment | Processing | Issued | Cancelled | On Hold | Awaiting Documents | Invoice to be issued | Approved – Sent to Locksmith | Paid | Awaiting Stripe Payment
 ```
 
 ---

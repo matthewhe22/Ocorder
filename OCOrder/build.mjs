@@ -1,6 +1,6 @@
 // build.mjs — esbuild bundler for TOCS OC Portal
 import * as esbuild from "esbuild";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, cpSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -8,6 +8,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes("--watch");
 
 mkdirSync(resolve(__dirname, "dist"), { recursive: true });
+
+// Copy static assets (e.g. the bundled key order form PDF) from public/ → dist/
+const publicDir = resolve(__dirname, "public");
+if (existsSync(publicDir)) {
+  cpSync(publicDir, resolve(__dirname, "dist"), { recursive: true });
+}
 
 // Write static index.html
 writeFileSync(

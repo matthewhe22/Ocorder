@@ -322,9 +322,10 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   // Cap the request body size to keep a malicious client from streaming a
-  // huge JSON blob through req.json(). 10 MB is generous (covers a max-sized
-  // authority PDF after base64 inflation) but bounded.
-  const ORDER_BODY_MAX = 12 * 1024 * 1024;
+  // huge JSON blob through req.json(). Generous enough to cover a max-sized
+  // authority document plus a completed key order form (both base64-inflated)
+  // but bounded.
+  const ORDER_BODY_MAX = 28 * 1024 * 1024;
   try {
     if (JSON.stringify(body).length > ORDER_BODY_MAX) {
       return res.status(413).json({ error: "Order payload too large." });
@@ -497,6 +498,18 @@ export default async function handler(req, res) {
       }
     }
 
+    // Validate the completed key order form / submission screenshot (apartment & mailbox keys)
+    if (body.keyForm?.data) {
+      const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
+      if (!ALLOWED_TYPES.includes(body.keyForm.contentType)) {
+        return res.status(400).json({ error: "Key order form must be PDF, JPG, or PNG." });
+      }
+      const keyFormSize = Math.ceil((body.keyForm.data.length * 3) / 4);
+      if (keyFormSize > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: "Key order form must be under 10 MB." });
+      }
+    }
+
     // Set filename synchronously — sanitise client-supplied name to prevent path traversal
     // and HTTP header injection via Content-Disposition. Use a strict allow-list
     // matching the contentType validation above; anything else falls back to
@@ -512,6 +525,9 @@ export default async function handler(req, res) {
 
     order.date = new Date().toISOString();
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
+    if (body.keyForm?.data) {
+      order.auditLog.push({ ts: new Date().toISOString(), action: "Key order form uploaded", note: "Emailed to the orders inbox for review" });
+    }
 
     // ── STRIPE PRE-VALIDATION (before Redis save — prevents ghost orders) ────────
     // Validate Stripe configuration BEFORE saving to Redis so a failed validation
@@ -701,12 +717,20 @@ export default async function handler(req, res) {
           to: toEmail,
           subject: adminSubject,
           html: buildOrderEmailHtml(order, cfg),
-          attachments: body.lotAuthority?.data ? [{
-            filename: body.lotAuthority.filename,
-            content: body.lotAuthority.data,
-            encoding: "base64",
-            contentType: body.lotAuthority.contentType || "application/octet-stream",
-          }] : [],
+          attachments: [
+            ...(body.lotAuthority?.data ? [{
+              filename: body.lotAuthority.filename,
+              content: body.lotAuthority.data,
+              encoding: "base64",
+              contentType: body.lotAuthority.contentType || "application/octet-stream",
+            }] : []),
+            ...(body.keyForm?.data ? [{
+              filename: body.keyForm.filename,
+              content: body.keyForm.data,
+              encoding: "base64",
+              contentType: body.keyForm.contentType || "application/octet-stream",
+            }] : []),
+          ],
         }).catch(e => console.error("Admin email failed:", e.message)),
       ];
       if (order.contactInfo?.email) {

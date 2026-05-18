@@ -89,6 +89,8 @@ export const DEFAULT_DATA = {
         { id:"K1", name:"Building Entry Key",               description:"Standard building entry key — price confirmed on invoice",   price:0, turnaround:"2–3 business days", perOC:false, category:"keys" },
         { id:"K2", name:"Car Park Fob",                     description:"Car park access fob/swipe — price confirmed on invoice",     price:0, turnaround:"2–3 business days", perOC:false, category:"keys" },
         { id:"K3", name:"Garage Remote",                    description:"Garage/gate remote control — price confirmed on invoice",    price:0, turnaround:"3–5 business days", perOC:false, category:"keys" },
+        { id:"K4", name:"Apartment Key / Mailbox Key (Order Form)",  description:"Apartment or mailbox key cut to order — complete the downloadable order form during checkout. Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"form", formUrl:"/apartment-key-order-form.pdf" },
+        { id:"K5", name:"Apartment Key / Mailbox Key (Online Form)", description:"Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"link", formUrl:"https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       shippingOptions: [
         { id: "ship-std", name: "Standard Post",  cost: 10 },
@@ -196,6 +198,8 @@ export const DEMO_DEFAULT_DATA = {
         { id:"P4", name:"Insurance Certificate of Currency", description:"Current building insurance details and certificate", price: 75,                    turnaround:"2 business days",   perOC:false },
         { id:"K1", name:"Building Entry Key",                description:"Standard building entry key",                       price:  0,                    turnaround:"2–3 business days", perOC:false, category:"keys" },
         { id:"K2", name:"Car Park Fob",                      description:"Car park access fob/swipe",                         price:  0,                    turnaround:"2–3 business days", perOC:false, category:"keys" },
+        { id:"K4", name:"Apartment Key / Mailbox Key (Order Form)",  description:"Apartment or mailbox key cut to order — complete the downloadable order form during checkout. Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"form", formUrl:"/apartment-key-order-form.pdf" },
+        { id:"K5", name:"Apartment Key / Mailbox Key (Online Form)", description:"Apartment or mailbox key cut to order — complete the supplier's online order form: https://www.accesshardware.com.au/locksmiths/key-order-form  Price confirmed on invoice.", price:0, turnaround:"5–7 business days", perOC:false, category:"keys", keyFulfilment:"link", formUrl:"https://www.accesshardware.com.au/locksmiths/key-order-form" },
       ],
       shippingOptions: [
         { id:"pickup",  name:"Pickup / Email", price:0,  requiresAddress:false },

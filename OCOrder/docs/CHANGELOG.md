@@ -2,6 +2,41 @@
 
 ---
 
+## 2026-05-18 — Apartment / Mailbox Key ordering — two new fulfilment scenarios
+
+Added two new Keys/Fobs/Remotes products that capture the apartment / mailbox key
+ordering process, each with its own order-form workflow.
+
+### Scenarios
+- **Apartment Key / Mailbox Key (Order Form)** — `K4`. After Review Order, the
+  applicant downloads a bundled order form, completes it, and uploads the finished
+  form (renamed `Lot# – Completed Order Form`).
+- **Apartment Key / Mailbox Key (Online Form)** — `K5`. The product description
+  carries a link to the supplier's online form
+  (`https://www.accesshardware.com.au/locksmiths/key-order-form`). The applicant
+  fills it in (Form Requirements → NO, Authorised Signatory → Ben Quirk, email
+  `order@tocs.co`, property address) and uploads a submission screenshot.
+
+### Changes
+- **New products** `K4`/`K5` seeded in `api/_lib/store.js` (`DEFAULT_DATA` +
+  `DEMO_DEFAULT_DATA`) and `OCOrder/server.js` (`DEFAULT_DATA` + `DEMO_SEED_DATA`),
+  carrying `keyFulfilment` (`"form"` | `"link"`) and `formUrl` fields. The
+  `DEFAULT_DATA` migration auto-adds them to existing stored plans.
+- **Bundled order form** — placeholder PDF at `OCOrder/public/apartment-key-order-form.pdf`,
+  copied to `dist/` by `build.mjs` and served at `/apartment-key-order-form.pdf`.
+- **Review Order step** shows an instructions panel for apartment-key products:
+  download / open the form, scenario-specific guidance, and a required upload of
+  the completed form / submission screenshot.
+- **Second order file** — the completed form / screenshot is validated
+  (PDF/JPG/PNG, magic bytes, 10 MB) and emailed to the orders inbox alongside the
+  authority document; `server.js` also persists it to `uploads/`.
+- **New order status** `Approved – Sent to Locksmith` added to the shared
+  `VALID_STATUSES` enum, the admin status filter, status badges, and an admin
+  "Mark Sent to Locksmith" action for keys orders.
+- URLs in keys product descriptions now render as clickable links.
+
+---
+
 ## 2026-05-13 — Send Certificate failing on mobile Safari with attached file
 
 Sending an OC certificate from an iPhone/iPad rejected the request with `Attach at least one certificate file before sending.` even when a PDF had been attached. The frontend was uploading the file correctly; the Vercel handler dropped it during multipart parsing.

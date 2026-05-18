@@ -11,6 +11,7 @@ export const VALID_STATUSES = Object.freeze([
   "On Hold",
   "Awaiting Documents",
   "Invoice to be issued",
+  "Approved – Sent to Locksmith",
   "Paid",
   "Awaiting Stripe Payment",
 ]);
