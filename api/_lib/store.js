@@ -561,7 +561,33 @@ export async function verifyToken(token) {
   }
 }
 
+/**
+ * Authorisation gate used by read endpoints that only need to know
+ * "is this caller allowed?" without inspecting the admin identity.
+ *
+ * Accepts EITHER:
+ *   1. A static service token from process.env.SERVICE_API_TOKEN
+ *      (constant-time match, min 32 chars). For server-to-server
+ *      callers like the oc-tasks /occ-tracker integration.
+ *   2. A valid 8-hour HMAC session token from verifyToken() (the
+ *      existing human-admin path, unchanged).
+ *
+ * Service tokens are deliberately restricted to validToken(): mutation
+ * endpoints (add-admin, change-credentials, …) call verifyToken() and
+ * read the payload's `user` field, so a service token — which has no
+ * admin identity — cannot impersonate a real admin there.
+ */
 export async function validToken(token) {
+  if (typeof token === "string" && token.length > 0) {
+    const serviceToken = process.env.SERVICE_API_TOKEN;
+    if (serviceToken && serviceToken.length >= 32) {
+      const a = Buffer.from(token);
+      const b = Buffer.from(serviceToken);
+      if (a.length === b.length && timingSafeEqual(a, b)) {
+        return true;
+      }
+    }
+  }
   return (await verifyToken(token)) !== null;
 }
 
