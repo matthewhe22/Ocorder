@@ -1,0 +1,58 @@
+Subject: [PATCH] Accept long-lived SERVICE_API_TOKEN for server-to-server callers
+
+Adds a static-bearer escape hatch alongside the existing 8-hour HMAC
+session token. When SERVICE_API_TOKEN is set in the env, validToken()
+accepts a request whose Authorization: Bearer matches it (constant-time
+compare). The check runs only inside validToken() — not verifyToken() —
+so a service token cannot impersonate a human admin on endpoints that
+parse the payload's `user` claim (e.g. change-credentials, add-admin).
+
+The token must be at least 32 chars; shorter values are ignored to keep
+a weak / empty env var from silently auth'ing every request.
+
+Used by the oc-tasks /occ-tracker integration, which polls /api/data on
+every page render and can't refresh an 8-hour session token.
+
+---
+ api/_lib/store.js | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/api/_lib/store.js b/api/_lib/store.js
+--- a/api/_lib/store.js
++++ b/api/_lib/store.js
+@@ -561,7 +561,33 @@ export async function verifyToken(token) {
+   }
+ }
+
+-export async function validToken(token) {
++/**
++ * Authorisation gate used by read endpoints that only need to know
++ * "is this caller allowed?" without inspecting the admin identity.
++ *
++ * Accepts EITHER:
++ *   1. A static service token from process.env.SERVICE_API_TOKEN
++ *      (constant-time match, min 32 chars). For server-to-server
++ *      callers like the oc-tasks /occ-tracker integration.
++ *   2. A valid 8-hour HMAC session token from verifyToken() (the
++ *      existing human-admin path, unchanged).
++ *
++ * Service tokens are deliberately restricted to validToken(): mutation
++ * endpoints (add-admin, change-credentials, …) call verifyToken() and
++ * read the payload's `user` field, so a service token — which has no
++ * admin identity — cannot impersonate a real admin there.
++ */
++export async function validToken(token) {
++  if (typeof token === "string" && token.length > 0) {
++    const serviceToken = process.env.SERVICE_API_TOKEN;
++    if (serviceToken && serviceToken.length >= 32) {
++      const a = Buffer.from(token);
++      const b = Buffer.from(serviceToken);
++      if (a.length === b.length && timingSafeEqual(a, b)) {
++        return true;
++      }
++    }
++  }
+   return (await verifyToken(token)) !== null;
+ }
+
+--
