@@ -2,6 +2,43 @@
 
 ---
 
+## 2026-06-01 — Multi-quantity keys/fob orders rejected with "Invalid total"
+
+Submitting a keys/fob order with a quantity greater than one was rejected at
+checkout with `Invalid total: expected $440.00 (received $220.00).` — for
+example 2× Garage Remote at $110 each. The displayed/charged total ($220) was
+correct; the server's reconciliation was double-counting quantity.
+
+### Root cause
+The cart stores `item.price` as the **line total** (unit × qty) — see
+`src/App.jsx` where the increment/decrement controls set
+`price: product.price * qty`, and the order total is summed as
+`cart.reduce((s, i) => s + i.price, 0)`. The Vercel order handler
+`api/orders/index.js` trusted the client price for keys orders but then
+multiplied it by `qty` a **second** time
+(`recomputedItemsTotal += item.price * qty`), so a $220 line total recomputed
+to $440 and failed the `Math.abs(recomputedTotal - order.total) > 0.01` check.
+The local `OCOrder/server.js` backend was already correct — it overrides
+`item.price = product.price * qty` and then sums the line totals without
+re-multiplying — so the two backends had diverged. (Introduced by the
+2026-03-25 "round 5: qty×price for keys" change, which assumed `item.price`
+was a unit price.)
+
+### Fix
+- `api/orders/index.js`: for keys orders, add `item.price` directly to
+  `recomputedItemsTotal` (it is already the qty-inclusive line total). This
+  matches both the frontend total computation and the local `server.js`
+  backend. OC orders are unaffected (per-OC line items remain qty 1).
+
+### Verified
+- New `api/orders/index.test.js` regression suite: a 2× keys order with total
+  $220 now succeeds and the server-recomputed total is $220; a single-qty
+  order succeeds; a tampered total is still rejected with the correct expected
+  amount. Re-introducing the `* qty` bug makes the suite fail. Full suite: 55
+  tests passing.
+
+---
+
 ## 2026-05-13 — Send Certificate failing on mobile Safari with attached file
 
 Sending an OC certificate from an iPhone/iPad rejected the request with `Attach at least one certificate file before sending.` even when a PDF had been attached. The frontend was uploading the file correctly; the Vercel handler dropped it during multipart parsing.

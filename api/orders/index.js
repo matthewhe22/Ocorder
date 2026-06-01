@@ -446,8 +446,13 @@ export default async function handler(req, res) {
         }
         const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
         if (order.orderCategory === "keys") {
-          // Keys: trust client price (zero at order time, set by admin on invoice)
-          recomputedItemsTotal += item.price * qty;
+          // Keys: trust client price. `item.price` is already the line total
+          // (unit × qty) — the cart stores and the frontend sums it that way
+          // (App.jsx: `cart.reduce((s, i) => s + i.price, 0)`), so it must NOT
+          // be multiplied by qty again here. Doing so double-counted quantity
+          // and rejected valid multi-qty orders with
+          // "Invalid total: expected $440.00 (received $220.00)".
+          recomputedItemsTotal += item.price;
           continue;
         }
         // OC: must match the plan catalog exactly.
