@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-06-01 — Review fixes: amend shipping loss + background write race
+
+Follow-up fixes from a multi-agent code review of the order flow.
+
+### Amend silently dropped keys-order shipping (High)
+Customer keys orders persist the shipping amount as `selectedShipping.cost`
+(the field the PDF, emails, and customer summary all read), but the amend
+handler read and rebuilt only `.price`. Amending any customer keys order
+therefore computed shipping as $0 — dropping it from the new total and
+overwriting the stored `.cost` with `{ price: 0 }`, so the PDF/email then showed
+shipping as $0.00.
+- `api/orders/[id]/[action].js`: accept `cost ?? price` and persist BOTH fields
+  so every consumer agrees.
+- `OCOrder/src/App.jsx`: the Amend modal's displayed total now reads
+  `cost ?? price` too.
+- Regression test: `api/orders/[id]/amend-shipping.test.js`.
+
+### Background write race could lose audit rows / SharePoint URLs (Medium)
+After the response-latency change, the SharePoint-result write and the
+email-failure audit write run concurrently, each doing an unlocked
+read-modify-write on the same order — last writer wins, dropping the other's
+audit entries or `lotAuthorityUrl`/`summaryUrl`.
+- `api/orders/index.js`: both background read-modify-writes now run inside
+  `withOrderLock(order.id, …)` so they serialise. On SP-result read failure the
+  write is skipped rather than persisting the stale pre-save snapshot (which
+  would have reverted other writers' rows).
+
+---
+
 ## 2026-06-01 — Order submission response cut from ~7 s to sub-second
 
 Placing an order made the customer wait ~7 s for the "order confirmed" screen.

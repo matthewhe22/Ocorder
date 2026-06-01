@@ -5612,7 +5612,7 @@ function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
     setItems(arr => arr.filter((_, i) => i !== idx));
   };
 
-  const shippingCost = order.orderCategory === "keys" ? Number(order.selectedShipping?.price) || 0 : 0;
+  const shippingCost = order.orderCategory === "keys" ? (Number(order.selectedShipping?.cost ?? order.selectedShipping?.price) || 0) : 0;
   const newTotal = items.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost;
   const oldTotal = Number(order.total) || 0;
   const totalChanged = Math.round(newTotal * 100) !== Math.round(oldTotal * 100);

@@ -1,6 +1,6 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
-import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, KV_AVAILABLE } from "../_lib/store.js";
+import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, withOrderLock, KV_AVAILABLE } from "../_lib/store.js";
 import { waitUntil } from "@vercel/functions";
 import { randomBytes } from "crypto";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment, pushAuditOnce } from "../_lib/sharepoint.js";
@@ -650,10 +650,16 @@ export default async function handler(req, res) {
           ]);
           const spUrl     = authResult.status === "fulfilled" ? authResult.value : null;
           const summaryUrl = pdfResult.status  === "fulfilled" ? pdfResult.value  : null;
-          // Fresh read before writing SP results to avoid stale-data overwrites
-          const freshData = await readData().catch(() => data);
-          const freshOi = freshData.orders.find(o => o.id === order.id);
-          if (freshOi) {
+          // Persist SP results under the order lock so this read-modify-write
+          // cannot clobber a concurrent writer (the email-failure audit write
+          // below, a PIQ poll, or an admin amend). On read failure, SKIP the
+          // write rather than persisting the stale pre-save `data` snapshot —
+          // writing that back would revert other writers' audit rows / URLs.
+          await withOrderLock(order.id, async () => {
+            const freshData = await readData().catch(() => null);
+            if (!freshData) { console.error("SP result persist skipped: readData failed"); return; }
+            const freshOi = freshData.orders.find(o => o.id === order.id);
+            if (!freshOi) return;
             if (spUrl) { freshOi.lotAuthorityUrl = spUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
             if (summaryUrl) { freshOi.summaryUrl = summaryUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
             // Failures use pushAuditOnce so a persistently broken SP can't
@@ -664,8 +670,8 @@ export default async function handler(req, res) {
             if (!summaryUrl) {
               pushAuditOnce(freshOi.auditLog, "Order summary SP upload failed", pdfErr?.message?.substring(0, 60) || "See Vercel logs");
             }
-          }
-          await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
+            await writeData(freshData);
+          }).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for order ${order.id}: auth=${!!spUrl} pdf=${!!summaryUrl}`);
         } catch (e) {
           console.error("SP upload block failed:", e.message);
@@ -741,13 +747,17 @@ export default async function handler(req, res) {
         .filter(Boolean);
       if (failures.length > 0) {
         try {
-          const fresh = await readData();
-          const oi = fresh.orders.find(o => o.id === order.id);
-          if (oi) {
-            oi.auditLog = oi.auditLog || [];
-            failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: msg }));
-            await writeData(fresh);
-          }
+          // Under the order lock so this audit write serialises with the
+          // concurrent SharePoint-result write above instead of clobbering it.
+          await withOrderLock(order.id, async () => {
+            const fresh = await readData();
+            const oi = fresh.orders.find(o => o.id === order.id);
+            if (oi) {
+              oi.auditLog = oi.auditLog || [];
+              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: msg }));
+              await writeData(fresh);
+            }
+          });
         } catch (e) { console.error("Email audit log persist failed:", e.message); }
       }
     })();

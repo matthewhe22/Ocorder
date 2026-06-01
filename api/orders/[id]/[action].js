@@ -523,15 +523,24 @@ export default async function handler(req, res) {
 
     let cleanShipping = order.selectedShipping;
     if (order.orderCategory === "keys" && selectedShipping && typeof selectedShipping === "object") {
+      // Customer orders persist the shipping amount as `.cost` (what the PDF,
+      // emails, and customer summary all read); admin/legacy payloads may send
+      // `.price`. Accept either and persist BOTH fields so every consumer
+      // agrees — previously this read only `.price`, so amending a customer
+      // keys order computed shipping as 0 and silently dropped it from the
+      // total and overwrote the stored `.cost`.
+      const shipCost = Math.max(0, Number(selectedShipping.cost) || Number(selectedShipping.price) || 0);
       cleanShipping = {
         id:    String(selectedShipping.id   || "").slice(0, 50),
         name:  String(selectedShipping.name || "").slice(0, 100),
         type:  String(selectedShipping.type || "").slice(0, 50),
-        price: Math.max(0, Number(selectedShipping.price) || 0),
+        cost:  shipCost,
+        price: shipCost,
+        ...(selectedShipping.requiresAddress !== undefined ? { requiresAddress: !!selectedShipping.requiresAddress } : {}),
       };
     }
     const shippingCost = (order.orderCategory === "keys" && cleanShipping)
-      ? Math.max(0, Number(cleanShipping.price) || 0) : 0;
+      ? Math.max(0, Number(cleanShipping.cost) || Number(cleanShipping.price) || 0) : 0;
     const newTotal = Math.round((cleanItems.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost) * 100) / 100;
 
     const oldTotal = Number(order.total) || 0;
