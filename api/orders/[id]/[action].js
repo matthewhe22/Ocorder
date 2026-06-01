@@ -135,10 +135,23 @@ function parseMultipart(buffer, contentType) {
   return { fields, files };
 }
 
+// Cap the buffered request body so a malicious/oversized upload can't OOM the
+// function before the per-attachment size check runs. 5 MB covers a 4.5 MB
+// attachment plus multipart/form overhead (Vercel rejects bodies above ~4.5 MB
+// anyway).
+const RAW_BODY_MAX = 5 * 1024 * 1024;
 async function readRawBody(req) {
   const chunks = [];
+  let total = 0;
   for await (const chunk of req) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    const b = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    total += b.length;
+    if (total > RAW_BODY_MAX) {
+      const err = new Error("Request body too large.");
+      err.statusCode = 413;
+      throw err;
+    }
+    chunks.push(b);
   }
   return Buffer.concat(chunks);
 }

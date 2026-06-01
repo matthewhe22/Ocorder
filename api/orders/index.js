@@ -828,7 +828,9 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error("Order creation failed:", err.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message || "Order could not be saved. Please try again." });
+      // Generic message to the (public) caller — the detail is logged above and
+      // must not leak internal Redis/Stripe/SMTP error text to applicants.
+      res.status(500).json({ error: "Order could not be saved. Please try again." });
     }
   }
 }

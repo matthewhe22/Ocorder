@@ -1,4 +1,4 @@
-import { readConfig, writeConfig, validAdminToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
+import { readConfig, writeConfig, validAdminToken, verifyToken, extractToken, cors, kvGet, kvSet, clientIp, writeAuthAudit, KV_AVAILABLE } from "../_lib/store.js";
 import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots, getAllPiqBuildings, getPiqBuildingById, extractPiqAddress } from "../_lib/piq.js";
 import Stripe from "stripe";
 
@@ -298,9 +298,26 @@ export default async function handler(req, res) {
         }
       }
       await writeConfig(cfg);
+      // Audit the change (who, from where, which sections, whether a secret was
+      // rotated) so a config rewrite via a stolen bearer is at least traceable.
+      const sections = ["orderEmail", "logo", "smtp", "paymentDetails", "paymentMethods", "emailTemplate", "sharepoint", "stripe", "piq"]
+        .filter(k => req.body?.[k] !== undefined);
+      const secretTouched =
+        (smtp?.pass         && smtp.pass         !== "••••••••" && smtp.pass         !== "") ||
+        (stripe?.secretKey  && stripe.secretKey  !== "••••••••" && stripe.secretKey  !== "") ||
+        (sharepoint?.clientSecret && sharepoint.clientSecret !== "••••••••" && sharepoint.clientSecret !== "") ||
+        (piq?.clientSecret  && piq.clientSecret  !== "••••••••" && piq.clientSecret  !== "");
+      const verified = await verifyToken(extractToken(req));
+      await writeAuthAudit({
+        actor:  verified?.user || "unknown",
+        ip:     clientIp(req),
+        action: "config-updated",
+        note:   `${sections.join(", ") || "—"}${secretTouched ? " | secrets changed" : ""}`,
+      });
       return res.status(200).json({ ok: true });
     } catch (err) {
-      return res.status(500).json({ error: "Failed to save settings: " + err.message });
+      console.error("[settings] save failed:", err.message);
+      return res.status(500).json({ error: "Failed to save settings. Please try again." });
     }
   }
 

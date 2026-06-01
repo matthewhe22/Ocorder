@@ -96,15 +96,29 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `Plan "${plan.id}": each product must have a non-empty id.` });
       if (typeof prod.price !== "number" || !isFinite(prod.price) || prod.price < 0)
         return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": price must be a non-negative number.` });
-      if (prod.secondaryPrice !== undefined && (typeof prod.secondaryPrice !== "number" || prod.secondaryPrice < 0))
+      if (prod.secondaryPrice !== undefined && (typeof prod.secondaryPrice !== "number" || !isFinite(prod.secondaryPrice) || prod.secondaryPrice < 0))
         return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": secondaryPrice must be a non-negative number.` });
-      if (prod.externalUrl !== undefined && prod.externalUrl !== "" && !/^https?:\/\/.+/i.test(prod.externalUrl))
-        return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": externalUrl must start with http:// or https://.` });
+      if (prod.managerAdminCharge !== undefined && (typeof prod.managerAdminCharge !== "number" || !isFinite(prod.managerAdminCharge) || prod.managerAdminCharge < 0))
+        return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": managerAdminCharge must be a non-negative number.` });
+      // externalUrl: only on keys-category products, http/https, max 2048 chars (parity with server.js)
+      if (prod.externalUrl !== undefined && prod.externalUrl !== null && prod.externalUrl !== "") {
+        const prodCategory = prod.category || (prod.managerAdminCharge !== undefined ? "keys" : "oc");
+        if (prodCategory !== "keys")
+          return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": externalUrl is only allowed on Keys/Fobs products.` });
+        if (typeof prod.externalUrl !== "string" || prod.externalUrl.length > 2048)
+          return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": externalUrl must be a string of max 2048 characters.` });
+        if (!/^https?:\/\/.+/i.test(prod.externalUrl))
+          return res.status(400).json({ error: `Plan "${plan.id}" product "${prod.id}": externalUrl must start with http:// or https://.` });
+      }
     }
   }
 
+  // Deduplicate plans by id (last occurrence wins) — matches server.js and stops
+  // two plans with the same id from being persisted.
+  const dedupedPlans = [...new Map(plans.map(p => [p.id, p])).values()];
+
   const data = await readData();
-  data.strataPlans = plans;
+  data.strataPlans = dedupedPlans;
 
   // Back-fill piqLotId on keys/invoice orders that were placed before the PIQ
   // sync ran (so the lot had no piqLotId at order-creation time).  Match by
@@ -117,7 +131,7 @@ export default async function handler(req, res) {
     const lotNumber = order.items?.[0]?.lotNumber || "";
     const lotId     = order.items?.[0]?.lotId     || "";
     const planId    = order.items?.[0]?.planId    || "";
-    const plan      = plans.find(p => p.id === planId);
+    const plan      = dedupedPlans.find(p => p.id === planId);
     if (!plan) continue;
     const lots    = plan.lots || [];
     const matches = l =>

@@ -613,6 +613,23 @@ export async function invalidateAllSessions() {
   await bumpSessionEpoch();
 }
 
+// ── Auth / config change audit trail ──────────────────────────────────────────
+// Append-only ring buffer (last 500 entries) of sensitive actions: admin-pool
+// changes, credential changes, and config/secret writes. Lives in store.js as
+// the single source of truth so both auth/index.js and config/settings.js log
+// to the same place. Best-effort — never blocks the action on a failed write.
+const AUTH_AUDIT_KEY = "tocs:auth-audit";
+export async function writeAuthAudit(entry) {
+  if (!KV_AVAILABLE) return;
+  try {
+    const prev = (await kvGet(AUTH_AUDIT_KEY)) || [];
+    const next = [...prev, { ts: new Date().toISOString(), ...entry }].slice(-500);
+    await kvSet(AUTH_AUDIT_KEY, next);
+  } catch (e) {
+    console.error("[auth-audit] persist failed:", e.message);
+  }
+}
+
 // ── Request helpers ───────────────────────────────────────────────────────────
 export function extractToken(req) {
   const auth = req.headers["authorization"] || "";

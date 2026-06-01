@@ -16,6 +16,9 @@ vi.mock("../_lib/store.js", () => ({
   extractToken:  vi.fn(() => "valid-token"),
   validToken:    vi.fn(async () => true),
   validAdminToken: vi.fn(async () => true),
+  verifyToken:   vi.fn(async () => ({ user: "admin@tocs.co" })),
+  clientIp:      vi.fn(() => "127.0.0.1"),
+  writeAuthAudit: vi.fn(async () => {}),
   KV_AVAILABLE:  false,
   kvGet:         vi.fn(async () => null),
   kvSet:         vi.fn(async () => {}),
@@ -326,6 +329,25 @@ describe("POST /api/config/settings — full save without re-entering secrets", 
     expect(storedConfig.piq.clientSecret).toBe("real-piq-secret");
     expect(storedConfig.stripe.secretKey).toBe("sk_live_real");
     expect(storedConfig.orderEmail).toBe("newemail@tocs.co");
+  });
+
+  it("writes an audit entry recording who changed the config and whether a secret rotated", async () => {
+    const { writeAuthAudit } = await import("../_lib/store.js");
+    writeAuthAudit.mockClear();
+    const req = makeReq({
+      method: "POST",
+      headers: { authorization: "Bearer tok" },
+      body: { orderEmail: "x@tocs.co", stripe: { secretKey: "sk_live_NEW" } },
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.ok).toBe(true);
+    expect(writeAuthAudit).toHaveBeenCalledTimes(1);
+    const entry = writeAuthAudit.mock.calls[0][0];
+    expect(entry.action).toBe("config-updated");
+    expect(entry.actor).toBe("admin@tocs.co");
+    expect(entry.note).toMatch(/orderEmail/);
+    expect(entry.note).toMatch(/secrets changed/);
   });
 });
 

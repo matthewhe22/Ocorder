@@ -6,29 +6,16 @@
 //   "remove-admin"       — remove an admin by id (cannot remove last)
 //   "change-credentials" — update own username/password
 import { readConfig, writeConfig, createSession, validToken, verifyToken, extractToken,
-         invalidateAllSessions, cors, kvGet, kvSet, kvDel, clientIp, rateLimit, KV_AVAILABLE } from "../_lib/store.js";
+         invalidateAllSessions, cors, kvGet, kvSet, kvDel, clientIp, rateLimit, writeAuthAudit, KV_AVAILABLE } from "../_lib/store.js";
 import { hashPassword, verifyPassword, needsRehash } from "../_lib/password.js";
 import { createHash, timingSafeEqual } from "crypto";
 
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_TTL = 15 * 60; // seconds
 
-// ── Auth audit trail ─────────────────────────────────────────────────────────
-// Admin-management actions (add / remove / reset password / change credentials)
-// write to a dedicated Redis list so an attacker who hijacks a single token
-// cannot quietly modify the admin pool. Order audit log lives on each order;
-// auth events live here. Keep the last 500 entries.
-const AUTH_AUDIT_KEY = "tocs:auth-audit";
-async function writeAuthAudit(entry) {
-  if (!KV_AVAILABLE) return;
-  try {
-    const prev = (await kvGet(AUTH_AUDIT_KEY)) || [];
-    const next = [...prev, { ts: new Date().toISOString(), ...entry }].slice(-500);
-    await kvSet(AUTH_AUDIT_KEY, next);
-  } catch (e) {
-    console.error("[auth-audit] persist failed:", e.message);
-  }
-}
+// Auth-management actions write to a shared audit trail (writeAuthAudit, defined
+// in store.js) so a hijacked token can't quietly modify the admin pool. Config /
+// secret writes (config/settings.js) log to the same trail.
 
 // Resolve the actor (the admin who owns the bearer token) AND verify they've
 // supplied their current password. Returns { ok: true, actor } on success or

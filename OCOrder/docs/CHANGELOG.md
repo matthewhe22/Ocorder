@@ -2,6 +2,44 @@
 
 ---
 
+## 2026-06-01 — Security pass (cont.): plan-save parity, audit log, error hygiene
+
+Second batch from the review backlog.
+
+### Plan-save validation parity (Medium)
+`POST /api/plans` now matches `server.js`: validates `managerAdminCharge` is a
+non-negative number, restricts `externalUrl` to Keys/Fobs products (http/https,
+≤ 2048 chars), and deduplicates plans by id (last occurrence wins) before
+persisting. Previously production accepted plan arrays the local backend
+rejected and could store duplicate-id plans.
+
+### Config-change audit trail (Medium)
+`writeAuthAudit` moved to `api/_lib/store.js` as the single source of truth
+(was local to `auth/index.js`). `POST /api/config/settings` now records a
+`config-updated` audit entry — actor, IP, which sections changed, and whether a
+secret was rotated — so a config rewrite via a stolen bearer is traceable.
+
+### Error-message hygiene (Low)
+Public-facing 500s no longer echo internal exception text: order creation
+(`api/orders/index.js`) and the settings save (`api/config/settings.js`) now
+return generic messages and log the detail server-side. (Admin-only diagnostic
+endpoints still surface the underlying error, which is useful and trusted.)
+
+### Upload OOM guard (Low)
+The hand-rolled multipart reader in `api/orders/[id]/[action].js` now caps the
+buffered body at 5 MB during streaming, so an oversized `send-certificate` /
+`send-invoice` upload can't exhaust memory before the per-attachment size check.
+
+### Tests
+- `api/plans.test.js` — rejects bad `managerAdminCharge`, rejects `externalUrl`
+  on an OC product, accepts it on keys, dedups plans by id.
+- `api/config/settings.test.js` — a config save writes a `config-updated` audit
+  entry with the actor and a "secrets changed" note.
+
+### Still open
+Config-write **password re-confirmation** (`verifyActor`) — deferred because it
+requires a frontend change (prompt for current password on the settings page).
+
 ## 2026-06-01 — Security pass (token scoping, PII exposure, upload & import hardening)
 
 Follow-up hardening from the multi-agent review.

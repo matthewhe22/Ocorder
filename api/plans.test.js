@@ -58,3 +58,50 @@ describe("POST /api/plans import-lots — field whitelist", () => {
     expect(lot.type).toBe("Residential");
   });
 });
+
+async function savePlans(plans) {
+  storeData = { strataPlans: [], orders: [] };
+  written = null;
+  const res = makeRes();
+  await handler(makeReq({
+    method: "POST",
+    headers: { authorization: "Bearer admin-token" },
+    body: { plans },
+  }), res);
+  return res;
+}
+
+describe("POST /api/plans save — validation parity + dedup", () => {
+  it("rejects a non-numeric managerAdminCharge", async () => {
+    const res = await savePlans([{ id: "SP1", name: "B", products: [
+      { id: "K1", name: "Key", price: 10, category: "keys", managerAdminCharge: "lots" },
+    ] }]);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toMatch(/managerAdminCharge/);
+  });
+
+  it("rejects externalUrl on a non-keys (OC) product", async () => {
+    const res = await savePlans([{ id: "SP1", name: "B", products: [
+      { id: "P1", name: "OC Cert", price: 220, perOC: true, category: "oc", externalUrl: "https://example.com" },
+    ] }]);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toMatch(/externalUrl is only allowed on Keys/);
+  });
+
+  it("accepts externalUrl on a keys product", async () => {
+    const res = await savePlans([{ id: "SP1", name: "B", products: [
+      { id: "K1", name: "Key", price: 10, category: "keys", externalUrl: "https://example.com/buy" },
+    ] }]);
+    expect(res._status).toBe(200);
+  });
+
+  it("deduplicates plans by id (last occurrence wins)", async () => {
+    const res = await savePlans([
+      { id: "SP1", name: "First", products: [] },
+      { id: "SP1", name: "Second", products: [] },
+    ]);
+    expect(res._status).toBe(200);
+    expect(written.strataPlans).toHaveLength(1);
+    expect(written.strataPlans[0].name).toBe("Second");
+  });
+});
