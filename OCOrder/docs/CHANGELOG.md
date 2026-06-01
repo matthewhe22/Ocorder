@@ -2,6 +2,45 @@
 
 ---
 
+## 2026-06-01 — Order submission response cut from ~7 s to sub-second
+
+Placing an order made the customer wait ~7 s for the "order confirmed" screen.
+The Vercel handler `api/orders/index.js` blocked the HTTP response on two
+best-effort operations: confirmation emails (~6.6 s via SMTP2GO on port 2525)
+and SharePoint uploads (~5 s via Graph API). The order itself is durably
+persisted to Redis *before* either runs, so neither is part of the customer's
+critical path.
+
+### Change
+- **Defer best-effort work via `waitUntil`.** Emails and SharePoint uploads are
+  now handed to `waitUntil` from `@vercel/functions`, which keeps the serverless
+  invocation alive until they settle *after* the response is flushed. The
+  customer gets `{ ok: true }` in well under a second; emails/SP complete in the
+  background exactly as before.
+- **Safe fallback.** `waitUntil` only keeps work alive inside a real Vercel
+  request scope, so the deferral is gated on `process.env.VERCEL`. Off-Vercel
+  (local `server.js` flow, tests) the work is awaited inline so nothing is ever
+  silently dropped. The email block was refactored from an inline `await` into a
+  non-blocking `emailPromise`; failure → audit-log behaviour is unchanged.
+- **Fewer Redis round-trips.** The plan catalog (`readData()`) was read twice on
+  keys orders (piqLotId lookup + price reconciliation); it is now read once and
+  reused, since the store is not mutated between the two read-only lookups.
+
+### Notes / risk
+- Relies on Vercel **Fluid Compute** (default since 2025) to finish background
+  work after the response. If Fluid Compute were disabled, deferred emails could
+  be cut short — order data is unaffected (already persisted). Added
+  `@vercel/functions` as a dependency.
+
+### Verified
+- New `api/orders/waituntil.test.js`: with `VERCEL=1` the handler returns 200
+  even when the email send never resolves (proving it does not block on it) and
+  registers the work with `waitUntil` once; without `VERCEL` it awaits inline and
+  does not respond until the work settles. Full suite: 57 tests passing; handler
+  lints clean (no new warnings).
+
+---
+
 ## 2026-06-01 — Multi-quantity keys/fob orders rejected with "Invalid total"
 
 Submitting a keys/fob order with a quantity greater than one was rejected at

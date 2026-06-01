@@ -1,6 +1,7 @@
 // POST /api/orders — Customer places an order (public)
 // GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
 import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, KV_AVAILABLE } from "../_lib/store.js";
+import { waitUntil } from "@vercel/functions";
 import { randomBytes } from "crypto";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment, pushAuditOnce } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
@@ -398,11 +399,16 @@ export default async function handler(req, res) {
       order.status = "Pending Payment";
     }
 
+    // Plan catalog — read ONCE here and reuse for both the piqLotId lookup and
+    // the price/total reconciliation below. Both are read-only plan lookups and
+    // the store is not mutated between them, so a single snapshot is correct and
+    // saves a Redis round-trip per order (previously read twice for keys orders).
+    const planData = await readData();
+
     // Auto-populate piqLotId for keys orders (enables PIQ payment polling)
     // Look up the lot in the plan's lots array by lot number and copy its piqLotId.
     if (order.orderCategory === "keys" && order.payment === "invoice") {
       try {
-        const planData  = await readData();
         const lotNumber = order.items?.[0]?.lotNumber || "";
         const planId    = order.items?.[0]?.planId    || "";
         const plan      = planData.strataPlans?.find(p => p.id === planId);
@@ -433,7 +439,6 @@ export default async function handler(req, res) {
     // (admin sets the real amount on the invoice), so we only enforce the
     // non-negative invariant and trust the rest of the keys-flow.
     {
-      const planData = await readData();
       const planId = order.items[0]?.planId;
       const plan = planData.strataPlans?.find(p => p.id === planId);
       if (order.orderCategory === "oc" && !plan) {
@@ -685,10 +690,12 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── Send emails SYNCHRONOUSLY (before response — guaranteed delivery) ───────
-    // SMTP2GO on port 2525 takes ~6.6 s per send (parallel). SP uploads are
-    // already running above in parallel, so emails don't eat into SP time.
-    if (smtp.host && smtp.user && smtp.pass) {
+    // ── Build the email work as a deferrable promise (do NOT await inline) ──────
+    // SMTP2GO on port 2525 takes ~6.6 s per send (admin + customer in parallel).
+    // Awaiting this before responding was the dominant source of response
+    // latency, so it is handed to the background-work deferral below instead.
+    const emailPromise = (async () => {
+      if (!(smtp.host && smtp.user && smtp.pass)) return;
       console.log(`Sending emails for order ${order.id}...`);
       const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
       const lotNumber = order.items?.[0]?.lotNumber || "";
@@ -724,36 +731,50 @@ export default async function handler(req, res) {
           }).catch(e => console.error("Customer email failed:", e.message))
         );
       }
-      await Promise.allSettled(emailJobs).then(async results => {
-        const sent = results.filter(r => r.status === "fulfilled").length;
-        console.log(`Emails: ${sent}/${results.length} sent for order ${order.id}`);
-        // Log any email failures to the audit log so admins can see them
-        const labels = ["Admin notification", "Customer confirmation"];
-        const failures = results
-          .map((r, i) => r.status === "rejected" ? `${labels[i] || "Email"} failed: ${r.reason?.message || "unknown"}` : null)
-          .filter(Boolean);
-        if (failures.length > 0) {
-          try {
-            const fresh = await readData();
-            const oi = fresh.orders.find(o => o.id === order.id);
-            if (oi) {
-              oi.auditLog = oi.auditLog || [];
-              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: msg }));
-              await writeData(fresh);
-            }
-          } catch (e) { console.error("Email audit log persist failed:", e.message); }
-        }
-      });
-    }
+      const results = await Promise.allSettled(emailJobs);
+      const sent = results.filter(r => r.status === "fulfilled").length;
+      console.log(`Emails: ${sent}/${results.length} sent for order ${order.id}`);
+      // Log any email failures to the audit log so admins can see them
+      const labels = ["Admin notification", "Customer confirmation"];
+      const failures = results
+        .map((r, i) => r.status === "rejected" ? `${labels[i] || "Email"} failed: ${r.reason?.message || "unknown"}` : null)
+        .filter(Boolean);
+      if (failures.length > 0) {
+        try {
+          const fresh = await readData();
+          const oi = fresh.orders.find(o => o.id === order.id);
+          if (oi) {
+            oi.auditLog = oi.auditLog || [];
+            failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: msg }));
+            await writeData(fresh);
+          }
+        } catch (e) { console.error("Email audit log persist failed:", e.message); }
+      }
+    })();
 
-    // ── RESPOND ───────────────────────────────────────────────────────────────
-    // Await SP uploads BEFORE responding — Vercel Node serverless does NOT
-    // keep executing past res.end() (no `waitUntil` shim is in play here),
-    // so any audit-log write that happened after the response would be
-    // dropped. Same fix as PR #36 applied to the Stripe webhook. The SP
-    // IIFE was kicked off at T=0 in parallel with the ~7s email block, so
-    // the await here is usually a small tail (often already resolved).
-    await spPromise;
+    // ── RESPOND FAST; finish best-effort work in the background ─────────────────
+    // The order is already durably persisted in Redis above, so the SharePoint
+    // uploads (~5 s) and confirmation emails (~6.6 s) are best-effort follow-ups,
+    // not part of the customer's critical path. Hand both to Vercel's
+    // `waitUntil`, which keeps the serverless invocation alive until they settle
+    // AFTER the response is flushed — cutting the response from ~7 s to well
+    // under a second.
+    //
+    // Safety: `waitUntil` only keeps work alive inside a real Vercel request
+    // scope. Off-Vercel (local server, tests) we await the work inline so it is
+    // never silently dropped. `process.env.VERCEL` is set to "1" on every Vercel
+    // deployment, which cleanly distinguishes the two environments.
+    const backgroundWork = Promise.allSettled([spPromise, emailPromise]);
+    let deferred = false;
+    if (process.env.VERCEL) {
+      try {
+        waitUntil(backgroundWork);
+        deferred = true;
+      } catch (e) {
+        console.warn("waitUntil registration failed; awaiting background work inline:", e?.message);
+      }
+    }
+    if (!deferred) await backgroundWork;
     return res.status(200).json({ ok: true, order, emailSentTo: toEmail });
 
   } catch (err) {
