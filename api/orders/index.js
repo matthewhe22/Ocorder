@@ -445,6 +445,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Invalid order: unknown planId." });
       }
       let recomputedItemsTotal = 0;
+      const perOcSeen = {}; // productId → number of perOC lines seen (for volume discount)
       for (const item of order.items) {
         if (!Number.isFinite(item.price) || item.price < 0) {
           return res.status(400).json({ error: "Invalid item: price must be a non-negative number." });
@@ -460,20 +461,36 @@ export default async function handler(req, res) {
           recomputedItemsTotal += item.price;
           continue;
         }
-        // OC: must match the plan catalog exactly.
+        // OC: price must match the plan catalog. The "secondary OC" discount is
+        // a VOLUME discount derived SERVER-SIDE — never trusted from the client:
+        // per perOC product the first line is charged the primary price and each
+        // additional line the secondaryPrice. (Previously the client's
+        // `isSecondaryOC` flag chose the rate, so a crafted request could claim
+        // the discount on a primary OC and under-pay.)
         const product = plan.products?.find(p => p.id === item.productId);
         if (!product) {
           return res.status(400).json({ error: `Invalid order: unknown productId "${item.productId}".` });
         }
-        const expectedUnit = (product.perOC && item.isSecondaryOC && Number.isFinite(Number(product.secondaryPrice)))
-          ? Number(product.secondaryPrice)
-          : Number(product.price) || 0;
-        if (Math.abs(item.price - expectedUnit) > 0.01) {
+        const primary = Number(product.price) || 0;
+        const hasSecondary = product.perOC && Number.isFinite(Number(product.secondaryPrice));
+        const secondary = hasSecondary ? Number(product.secondaryPrice) : primary;
+        // Anti-tamper: each submitted line price must equal one of the catalog
+        // rates (the server decides which one actually applies below).
+        if (Math.abs(item.price - primary) > 0.01 && Math.abs(item.price - secondary) > 0.01) {
+          const opts = (hasSecondary && Math.abs(primary - secondary) > 0.01)
+            ? `$${primary.toFixed(2)} or $${secondary.toFixed(2)}`
+            : `$${primary.toFixed(2)}`;
           return res.status(400).json({
-            error: `Invalid order: ${product.id} must be $${expectedUnit.toFixed(2)} (received $${Number(item.price).toFixed(2)}).`,
+            error: `Invalid order: ${product.id} must be ${opts} (received $${Number(item.price).toFixed(2)}).`,
           });
         }
-        recomputedItemsTotal += expectedUnit * qty;
+        if (product.perOC) {
+          // First line of this product → primary rate; each additional → secondary.
+          perOcSeen[item.productId] = (perOcSeen[item.productId] || 0) + 1;
+          recomputedItemsTotal += (perOcSeen[item.productId] === 1) ? primary : secondary;
+        } else {
+          recomputedItemsTotal += primary * qty;
+        }
       }
       const shippingCost = (order.orderCategory === "keys" && order.selectedShipping)
         ? Math.max(0, Number(order.selectedShipping.cost) || Number(order.selectedShipping.price) || 0)

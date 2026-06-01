@@ -2,6 +2,31 @@
 
 ---
 
+## 2026-06-01 — Secondary-OC discount now derived server-side (anti under-pay)
+
+For a per-OC certificate ordered across multiple Owner Corporations, the first
+OC pays the primary rate and additional OCs get the discounted `secondaryPrice`
+(a volume discount). The production handler chose the rate from the client's
+`isSecondaryOC` flag, so a crafted request could claim the discount on a primary
+(or single) OC and under-pay.
+
+### Change
+- `api/orders/index.js`: the discount is now derived **server-side** — per perOC
+  product the first line is charged the primary rate and each additional line
+  the `secondaryPrice`, ignoring the client flag. Each submitted line price must
+  still equal one of the two catalog rates (anti-tamper); the server decides
+  which one applies and the existing total check rejects any mismatch.
+- `OCOrder/src/App.jsx`: removing a per-OC line from the cart now re-derives the
+  remaining lines (first = primary, rest = secondary) so the displayed/submitted
+  total matches the server — otherwise removing the only primary-rate OC would
+  leave a secondary-priced lone line and the order would be rejected as an
+  invalid total.
+- Regression tests: `api/orders/oc-pricing.test.js` (accepts primary+secondary;
+  accepts a lone primary; rejects a lone OC claiming secondary, both-secondary
+  under-pay attempts, and off-catalog prices).
+
+---
+
 ## 2026-06-01 — Review fixes: amend shipping loss + background write race
 
 Follow-up fixes from a multi-agent code review of the order flow.

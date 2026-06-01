@@ -2131,7 +2131,24 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     </div>
                   </div>
                   <div className="ci-price">{fmt(item.price)}</div>
-                  <button className="ci-rm" onClick={() => setCart(p => p.filter(i => i.key !== item.key))}><Ic n="trash" s={15}/></button>
+                  <button className="ci-rm" onClick={() => setCart(p => {
+                    const filtered = p.filter(i => i.key !== item.key);
+                    // Removing a per-OC line shifts the volume discount: the
+                    // server charges the first remaining OC line of a product at
+                    // the primary rate and the rest at secondary, so re-derive
+                    // the remaining lines here to keep the displayed/submitted
+                    // total in sync (otherwise the order is rejected as an
+                    // invalid total — e.g. removing the only primary-rate OC).
+                    if (item.ocId == null) return filtered;
+                    const prod = (plan?.products || []).find(pr => pr.id === item.productId);
+                    if (!prod || !prod.perOC) return filtered;
+                    let seen = 0;
+                    return filtered.map(i => {
+                      if (i.productId !== item.productId || i.ocId == null) return i;
+                      const isSec = seen++ > 0;
+                      return { ...i, isSecondaryOC: isSec, price: isSec ? (prod.secondaryPrice ?? prod.price) : prod.price };
+                    });
+                  })}><Ic n="trash" s={15}/></button>
                 </div>
               ))}
               {/* ── Applicant Summary (OC orders only) ── */}
