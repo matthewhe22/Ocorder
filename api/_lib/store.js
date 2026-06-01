@@ -591,6 +591,20 @@ export async function validToken(token) {
   return (await verifyToken(token)) !== null;
 }
 
+/**
+ * Authorisation gate for MUTATING admin endpoints (save plans, write config,
+ * change order status/amend/delete, send certificate/invoice/notify, …).
+ *
+ * Unlike validToken(), this REJECTS the static SERVICE_API_TOKEN: service /
+ * integration tokens are read-only by design (see validToken). Only a human
+ * admin's 8-hour HMAC session token (verifyToken) may perform writes. This
+ * closes the gap where a leaked read-only integration token could replace all
+ * strata plans, overwrite SMTP/Stripe secrets, or delete orders.
+ */
+export async function validAdminToken(token) {
+  return (await verifyToken(token)) !== null;
+}
+
 export async function invalidateSession(_token) {
   // Stateless tokens are invalidated by bumping the session epoch.
 }

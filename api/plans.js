@@ -2,7 +2,7 @@
 // Routes on req.body.action:
 //   (none / "save") — replace full strataPlans array
 //   "import-lots"   — import lots for a specific plan from parsed Excel data
-import { readData, writeData, validToken, extractToken, cors } from "./_lib/store.js";
+import { readData, writeData, validAdminToken, extractToken, cors } from "./_lib/store.js";
 
 export default async function handler(req, res) {
   cors(res, req);
@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const token = extractToken(req);
-  if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+  if (!await validAdminToken(token)) return res.status(401).json({ error: "Not authenticated." });
 
   const body = req.body || {};
 
@@ -56,9 +56,19 @@ export default async function handler(req, res) {
         if (incoming.ownerCorps?.length) existingLots[existIdx].ownerCorps = incoming.ownerCorps;
         updated++;
       } else {
+        // Whitelist lot fields from the (client-supplied) import. Spreading
+        // `...incoming` previously let an importer inject arbitrary fields —
+        // most dangerously a forged `piqLotId`, which drives PIQ payment
+        // matching. piqLotId is set only by the trusted PIQ sync, never here.
         existingLots.push({
-          ...incoming,
-          type: VALID_TYPES.includes(incoming.type) ? incoming.type : "Residential",
+          ...(incoming.id != null ? { id: String(incoming.id).slice(0, 100) } : {}),
+          number:      String(incoming.number).slice(0, 100),
+          type:        VALID_TYPES.includes(incoming.type) ? incoming.type : "Residential",
+          ...(incoming.level       != null ? { level:       String(incoming.level).slice(0, 50) } : {}),
+          ...(incoming.unitNumber  != null ? { unitNumber:  String(incoming.unitNumber).slice(0, 50) } : {}),
+          ...(incoming.streetNumber != null ? { streetNumber: String(incoming.streetNumber).slice(0, 50) } : {}),
+          ...(incoming.streetName  != null ? { streetName:  String(incoming.streetName).slice(0, 200) } : {}),
+          ...(Array.isArray(incoming.ownerCorps) ? { ownerCorps: incoming.ownerCorps } : {}),
         });
         added++;
       }

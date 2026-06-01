@@ -12,8 +12,17 @@ export default async function handler(req, res) {
   const token = extractToken(req);
   const isAdmin = !!(await validToken(token));
 
+  // `managerAdminCharge` is an internal admin-only figure (used on invoices /
+  // CSV export, never shown to applicants). Strip it from the public catalog so
+  // it isn't exposed to anonymous callers. Build new objects rather than
+  // deleting in place — readData() may hand back a shared default reference.
+  const publicPlans = (data.strataPlans || []).map(p => ({
+    ...p,
+    products: (p.products || []).map(({ managerAdminCharge: _omit, ...rest }) => rest),
+  }));
+
   return res.status(200).json({
-    strataPlans: data.strataPlans,
+    strataPlans: isAdmin ? data.strataPlans : publicPlans,
     orders: isAdmin ? data.orders : [],
   });
 }

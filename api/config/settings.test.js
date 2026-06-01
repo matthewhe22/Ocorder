@@ -15,6 +15,7 @@ vi.mock("../_lib/store.js", () => ({
   cors:          vi.fn(),
   extractToken:  vi.fn(() => "valid-token"),
   validToken:    vi.fn(async () => true),
+  validAdminToken: vi.fn(async () => true),
   KV_AVAILABLE:  false,
   kvGet:         vi.fn(async () => null),
   kvSet:         vi.fn(async () => {}),
@@ -332,8 +333,8 @@ describe("POST /api/config/settings — full save without re-entering secrets", 
 
 describe("GET/POST /api/config/settings — auth guard", () => {
   it("rejects unauthenticated GET with 401", async () => {
-    const { validToken } = await import("../_lib/store.js");
-    validToken.mockResolvedValueOnce(false);
+    const { validAdminToken } = await import("../_lib/store.js");
+    validAdminToken.mockResolvedValueOnce(false);
     const req = makeReq({ method: "GET", headers: {} });
     const res = makeRes();
     await handler(req, res);
@@ -341,8 +342,8 @@ describe("GET/POST /api/config/settings — auth guard", () => {
   });
 
   it("rejects unauthenticated POST with 401", async () => {
-    const { validToken } = await import("../_lib/store.js");
-    validToken.mockResolvedValueOnce(false);
+    const { validAdminToken } = await import("../_lib/store.js");
+    validAdminToken.mockResolvedValueOnce(false);
     const req = makeReq({ method: "POST", headers: {}, body: { orderEmail: "x@x.com" } });
     const res = makeRes();
     await handler(req, res);

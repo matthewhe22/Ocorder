@@ -2,6 +2,56 @@
 
 ---
 
+## 2026-06-01 — Security pass (token scoping, PII exposure, upload & import hardening)
+
+Follow-up hardening from the multi-agent review.
+
+### Service token scoped to read-only (High)
+`SERVICE_API_TOKEN` (the static server-to-server integration token) was accepted
+by `validToken()`, which also gated mutating endpoints — so a leaked read-only
+integration token could replace all strata plans, overwrite SMTP/Stripe/
+SharePoint/PIQ secrets, or change/delete orders.
+- New `validAdminToken()` in `api/_lib/store.js` accepts ONLY a human admin's
+  HMAC session token (rejects the service token).
+- Mutating endpoints now gate on `validAdminToken`: `POST /api/plans`
+  (save + import-lots), `POST /api/config/settings` (GET + POST), and the order
+  `status`/`amend`/`delete`/`send-certificate`/`send-invoice`/`notify`/
+  `save-to-sharepoint`/`check-piq-payment` actions. Read endpoints
+  (`/api/data`, CSV export, authority/certificate downloads, PIQ status) keep
+  `validToken`, so the read-only integration still works.
+
+### managerAdminCharge no longer exposed (Medium)
+The internal admin-only `managerAdminCharge` figure was returned in the public
+`GET /api/data` catalog and echoed back in the order-creation response.
+- `api/data.js` strips it from products for non-admin callers.
+- `api/orders/index.js` strips it from the order echoed to the customer (the
+  stored order keeps it for CSV/admin).
+
+### Authority upload magic-byte validation (Low)
+`api/orders/index.js` validated only the MIME string + size; it now also checks
+the decoded file's magic bytes match the declared type (parity with
+`server.js`) — a mislabelled/garbage blob can no longer be stored as a "PDF".
+
+### Lot import field whitelist (Medium)
+`POST /api/plans` `import-lots` spread `...incoming` into new lots, letting an
+importer inject arbitrary fields — most dangerously a forged `piqLotId` (which
+drives PIQ payment matching). New lots are now built from a fixed whitelist;
+`piqLotId` is never accepted here (set only by the trusted PIQ sync).
+
+### Tests
+- `api/_lib/admin-token.test.js` — service token accepted by `validToken`,
+  rejected by `validAdminToken`; admin session accepted by both.
+- `api/data.test.js` — `managerAdminCharge` stripped for non-admin, kept for admin.
+- `api/plans.test.js` — forged `piqLotId`/arbitrary fields dropped on import.
+
+### Still open (not in this pass)
+Config-write password re-confirmation + audit log (needs frontend coupling);
+generic error messages (several handlers still echo `err.message`); plan-save
+parity (`managerAdminCharge` type / `externalUrl` OC restriction / plan dedup);
+multipart body streamed-size cap.
+
+---
+
 ## 2026-06-01 — Secondary-OC discount now derived server-side (anti under-pay)
 
 For a per-OC certificate ordered across multiple Owner Corporations, the first

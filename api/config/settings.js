@@ -1,4 +1,4 @@
-import { readConfig, writeConfig, validToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
+import { readConfig, writeConfig, validAdminToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
 import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots, getAllPiqBuildings, getPiqBuildingById, extractPiqAddress } from "../_lib/piq.js";
 import Stripe from "stripe";
 
@@ -7,7 +7,9 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const token = extractToken(req);
-  if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+  // Admin-session only — config holds SMTP/Stripe/SharePoint/PIQ secrets, so the
+  // read-only SERVICE_API_TOKEN must not read (masked) or write them.
+  if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
   if (req.method === "GET") {
     try {

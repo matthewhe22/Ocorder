@@ -9,7 +9,7 @@
 
 import Stripe from "stripe";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
+import { readData, writeData, readConfig, validToken, validAdminToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment, pushAuditOnce } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
@@ -291,7 +291,7 @@ export default async function handler(req, res) {
   // no-op (no audit log noise, no Graph API calls).
   if (action === "save-to-sharepoint" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     // PDF generation is CPU-bound and each call hits the Graph API; rate-limit
     // to stop a script (or a leaked token) from amplifying into a function /
@@ -444,7 +444,7 @@ export default async function handler(req, res) {
   // ── PUT /api/orders/:id/status ────────────────────────────────────────────
   if (action === "status" && req.method === "PUT") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { status, note } = req.body || {};
     if (!status) return res.status(400).json({ error: "status is required." });
@@ -481,7 +481,7 @@ export default async function handler(req, res) {
   // re-issue invoices automatically.
   if (action === "amend" && req.method === "PUT") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     // AMENDABLE_STATUSES imported from _lib/constants.js for cross-handler consistency.
     const { items, selectedShipping, note } = req.body || {};
@@ -695,7 +695,7 @@ export default async function handler(req, res) {
   // without needing access to server logs.
   if (action === "notify" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { subject, message } = req.body || {};
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -751,7 +751,7 @@ export default async function handler(req, res) {
   // ── POST /api/orders/:id/send-certificate ─────────────────────────────────
   if (action === "send-certificate" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { message, attachments } = await readMessageAndAttachments(req);
     const ATTACH_LIMIT = 4.5 * 1024 * 1024;
@@ -865,7 +865,7 @@ export default async function handler(req, res) {
   // ── POST /api/orders/:id/send-invoice ────────────────────────────────────
   if (action === "send-invoice" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { message, attachments: invoiceAttachments } = await readMessageAndAttachments(req);
     // Mirror the 4.5 MB cap on send-certificate. Without this, an admin (or
@@ -1274,7 +1274,7 @@ export default async function handler(req, res) {
   // Admin only. Permanently removes an order from Redis. No undo.
   if (action === "delete" && req.method === "DELETE") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     // Wrap the read-modify-write in the order lock so a concurrent amend /
     // status / piq / send-cert cannot race against the splice.
@@ -1303,7 +1303,7 @@ export default async function handler(req, res) {
   // Returns current levy/payment status and persists results to Redis.
   if (action === "check-piq-payment" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const data  = await readData();
     const idx   = data.orders.findIndex(o => o.id === id);

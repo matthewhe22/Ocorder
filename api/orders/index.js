@@ -522,6 +522,23 @@ export default async function handler(req, res) {
       if (byteSize > 10 * 1024 * 1024) {
         return res.status(400).json({ error: "Authority document must be under 10 MB." });
       }
+      // Magic-byte check: the decoded bytes must actually match the declared
+      // type, so a mislabelled or garbage blob can't be stored as a "PDF".
+      // (The local server.js already did this; the Vercel handler did not.)
+      const decoded = Buffer.from(body.lotAuthority.data, "base64");
+      if (decoded.length === 0) {
+        return res.status(400).json({ error: "Authority document is empty or not valid base64." });
+      }
+      const ct     = body.lotAuthority.contentType;
+      const isPDF  = decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46; // %PDF
+      const isJPEG = decoded[0] === 0xFF && decoded[1] === 0xD8 && decoded[2] === 0xFF;
+      const isPNG  = decoded[0] === 0x89 && decoded[1] === 0x50 && decoded[2] === 0x4E && decoded[3] === 0x47;
+      const validMagic = (ct === "application/pdf" && isPDF)
+        || ((ct === "image/jpeg" || ct === "image/jpg") && isJPEG)
+        || (ct === "image/png" && isPNG);
+      if (!validMagic) {
+        return res.status(400).json({ error: "Authority document content does not match the declared file type." });
+      }
     }
 
     // Set filename synchronously — sanitise client-supplied name to prevent path traversal
@@ -802,7 +819,11 @@ export default async function handler(req, res) {
       }
     }
     if (!deferred) await backgroundWork;
-    return res.status(200).json({ ok: true, order, emailSentTo: toEmail });
+    // Strip the internal `managerAdminCharge` from each item before echoing the
+    // order back to the (public) caller — it's an admin-only figure and must
+    // not be disclosed to applicants. The stored order keeps it for CSV/admin.
+    const customerOrder = { ...order, items: (order.items || []).map(({ managerAdminCharge: _omit, ...rest }) => rest) };
+    return res.status(200).json({ ok: true, order: customerOrder, emailSentTo: toEmail });
 
   } catch (err) {
     console.error("Order creation failed:", err.message);

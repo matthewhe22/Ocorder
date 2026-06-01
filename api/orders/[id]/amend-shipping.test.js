@@ -17,6 +17,7 @@ vi.mock("../../_lib/store.js", () => ({
   writeData:       vi.fn(async (d) => { written = d; }),
   readConfig:      vi.fn(async () => ({ smtp: {}, sharepoint: {} })), // no smtp → skip emails
   validToken:      vi.fn(async () => true),
+  validAdminToken: vi.fn(async () => true),
   extractToken:    vi.fn(() => "valid-token"),
   cors:            vi.fn(),
   readAuthority:   vi.fn(async () => null),
