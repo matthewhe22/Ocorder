@@ -2,6 +2,50 @@
 
 ---
 
+## 2026-06-10 — Performance pass 2: server data cache, admin URL state, UI responsiveness
+
+Second batch from the multi-agent speed review (structural tier).
+
+### In-memory data/config cache in server.js (High)
+`readData`/`readConfig` previously did a synchronous full-file read +
+`JSON.parse` on every call (~40 call sites, multiple per request) — blocking
+the event loop with work that grows with order count. Both now cache the
+parsed object keyed on file mtime and hand out `structuredClone` snapshots,
+so existing read-modify-write semantics are preserved exactly. `writeData`/
+`writeConfig` refresh the cache from the just-written object. Measured:
+`/api/data` 10.9 ms → 1.3 ms per request.
+
+### Admin view/tab survive refresh via URL hash (High, admin UX)
+`#admin/<tab>` is mirrored into the URL (replaceState — no extra history
+entries to fight the wizard's back-button handling). Refreshing or
+bookmarking while in Admin now lands back on the same tab instead of
+resetting to the customer portal.
+
+### Optimistic modals close immediately (Medium)
+All 8 plan/product/lot/OC CRUD modals awaited the network round-trip before
+closing, with no pending indicator — inviting double-clicks that created
+duplicate products (`Date.now()` ids). Since `savePlans` already applies
+changes optimistically with rollback + toast on failure, the modals now
+close instantly and the save settles in the background.
+
+### Save buttons get busy states (Medium)
+Email-, Payment-, and Storage-settings Save buttons had no disabled/spinner
+state (nothing visibly happened until the round-trip finished). All three
+now use the same `saving` spinner pattern as BrandingTab and ignore repeat
+clicks while in flight.
+
+### Render-cost fixes (Medium)
+- The `Ic` icon component built all ~30 SVG element trees on every render
+  (tables render hundreds of icons) just to return one. Icons are now
+  factories — only the requested icon's tree is constructed.
+- The lot-search dropdown rendered every lot of a building (1000+ for large
+  plans, re-rendered per keystroke). Capped at 50 rows with a "keep typing
+  to narrow down" hint.
+- The cart/contact localStorage mirror ran a synchronous stringify+write on
+  every keystroke in the checkout form; now debounced at 300 ms.
+
+---
+
 ## 2026-06-10 — Performance pass: build fix, bundle splitting, response latency
 
 First batch from the multi-agent speed review (frontend, backend, UI/UX).

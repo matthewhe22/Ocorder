@@ -239,21 +239,37 @@ function atomicWriteJson(targetPath, obj) {
   } catch { /* non-fatal */ }
 }
 
+// In-memory caches keyed on file mtime. readData/readConfig are called on
+// nearly every route; without the cache each call is a synchronous full-file
+// read + JSON.parse that blocks the event loop and grows with order count.
+// Readers receive a structuredClone snapshot, so the existing read-modify-write
+// semantics are preserved exactly — a mutated-but-never-written object can
+// never leak into another request. write* refreshes the cache from the object
+// just persisted.
+let dataCache = null;   // { mtimeMs, value }
+let configCache = null; // { mtimeMs, value }
+
 function readData() {
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
-    // Reject empty / truncated files so we don't replace good in-memory state
-    // with a parseable-but-empty object on startup after a crashed write.
-    if (!raw.trim()) throw new Error("Data file is empty");
-    const d = JSON.parse(raw);
-    if (Array.isArray(d.orders)) {
-      d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
+    const mtimeMs = fs.statSync(DATA_FILE).mtimeMs;
+    if (!dataCache || dataCache.mtimeMs !== mtimeMs) {
+      const raw = fs.readFileSync(DATA_FILE, "utf8");
+      // Reject empty / truncated files so we don't replace good in-memory state
+      // with a parseable-but-empty object on startup after a crashed write.
+      if (!raw.trim()) throw new Error("Data file is empty");
+      const d = JSON.parse(raw);
+      if (Array.isArray(d.orders)) {
+        d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
+      }
+      dataCache = { mtimeMs, value: d };
     }
-    return d;
+    return structuredClone(dataCache.value);
   } catch { return structuredClone(DEMO_MODE ? DEMO_SEED_DATA : DEFAULT_DATA); }
 }
 function writeData(d) {
   atomicWriteJson(DATA_FILE, d);
+  try { dataCache = { mtimeMs: fs.statSync(DATA_FILE).mtimeMs, value: structuredClone(d) }; }
+  catch { dataCache = null; }
   // After every successful write, ensure today's snapshot exists. We only
   // create one snapshot per UTC day so writeData stays cheap; recovery scope
   // is "yesterday's data" worst case. Failures here must NOT propagate — the
@@ -287,9 +303,13 @@ function pruneOldBackups() {
 }
 function readConfig() {
   try {
-    const raw = fs.readFileSync(CONFIG_FILE, "utf8");
-    if (!raw.trim()) throw new Error("Config file is empty");
-    return JSON.parse(raw);
+    const mtimeMs = fs.statSync(CONFIG_FILE).mtimeMs;
+    if (!configCache || configCache.mtimeMs !== mtimeMs) {
+      const raw = fs.readFileSync(CONFIG_FILE, "utf8");
+      if (!raw.trim()) throw new Error("Config file is empty");
+      configCache = { mtimeMs, value: JSON.parse(raw) };
+    }
+    return structuredClone(configCache.value);
   } catch {
     const seed = DEMO_MODE ? DEMO_DEFAULT_CONFIG : DEFAULT_CONFIG;
     writeConfig(seed); return structuredClone(seed);
@@ -297,6 +317,8 @@ function readConfig() {
 }
 function writeConfig(c) {
   atomicWriteJson(CONFIG_FILE, c);
+  try { configCache = { mtimeMs: fs.statSync(CONFIG_FILE).mtimeMs, value: structuredClone(c) }; }
+  catch { configCache = null; }
 }
 
 // ── Demo-mode startup seeding ─────────────────────────────────────────────────

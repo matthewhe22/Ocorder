@@ -75,42 +75,43 @@ const calcShippingCost = (opt, cartItems, products) => {
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const Ic = ({ n, s=18 }) => {
-  const icons = {
-    arrow:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>,
-    arrowL:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>,
-    check:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>,
-    trash:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>,
-    plus:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>,
-    cart:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/></svg>,
-    settings:<svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
-    doc:     <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>,
-    x:       <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>,
-    bank:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/></svg>,
-    credit:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>,
-    building:<svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M9 3.75H4.5A2.25 2.25 0 002.25 6v13.5H9M9 3.75h6M9 3.75V21m6-17.25h4.5A2.25 2.25 0 0121.75 6v13.5H15M15 3.75V21M9 9h.008v.008H9V9zm3 0h.008v.008H12V9zm3 0h.008v.008H15V9zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008z"/></svg>,
-    search:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>,
-    copy:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>,
-    lock:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>,
-    eye:     <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
-    eyeOff:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>,
-    shield:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>,
-    edit:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>,
-    print:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z"/></svg>,
-    list:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
-    info:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>,
-    logout:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>,
-    upload:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13"/></svg>,
-    download: <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>,
-    mail:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>,
-    image:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
-    cloud:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/></svg>,
-    key:     <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>,
-    invoice: <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/></svg>,
-    truck:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>,
-  };
-  return icons[n] || null;
+// Icon factories — built per request. A plain object literal here would
+// construct all ~30 SVG element trees on every <Ic/> render (tables render
+// hundreds of icons), only to return one of them.
+const ICONS = {
+    arrow:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>,
+    arrowL:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>,
+    check:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>,
+    trash:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>,
+    plus:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>,
+    cart:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/></svg>,
+    settings:(s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
+    doc:     (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>,
+    x:       (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>,
+    bank:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/></svg>,
+    credit:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>,
+    building:(s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M9 3.75H4.5A2.25 2.25 0 002.25 6v13.5H9M9 3.75h6M9 3.75V21m6-17.25h4.5A2.25 2.25 0 0121.75 6v13.5H15M15 3.75V21M9 9h.008v.008H9V9zm3 0h.008v.008H12V9zm3 0h.008v.008H15V9zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008z"/></svg>,
+    search:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>,
+    copy:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>,
+    lock:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>,
+    eye:     (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
+    eyeOff:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>,
+    shield:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>,
+    edit:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>,
+    print:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z"/></svg>,
+    list:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
+    info:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>,
+    logout:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>,
+    upload:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13"/></svg>,
+    download: (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>,
+    mail:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>,
+    image:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
+    cloud:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/></svg>,
+    key:     (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>,
+    invoice: (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/></svg>,
+    truck:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>,
 };
+const Ic = ({ n, s = 18 }) => (ICONS[n] ? ICONS[n](s) : null);
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 /* Fonts are loaded via <link> in dist/index.html (see build.mjs) so they start
@@ -887,9 +888,21 @@ function clearCartFor(planId) {
 }
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
+// Admin view/tab are mirrored into the URL hash (#admin/orders) so a refresh,
+// bookmark, or open-in-new-tab lands the admin back on the same screen instead
+// of resetting to the customer portal with all tab state lost.
+const ADMIN_TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
+function viewFromHash() {
+  return window.location.hash.startsWith("#admin") ? "admin" : "portal";
+}
+function adminTabFromHash() {
+  const m = window.location.hash.match(/^#admin\/([a-zA-Z]+)/);
+  return m && ADMIN_TABS.includes(m[1]) ? m[1] : "plans";
+}
+
 export default function App() {
   const [data, setData] = useState(INITIAL_DATA);
-  const [currentView, setCurrentView] = useState("portal");
+  const [currentView, setCurrentView] = useState(viewFromHash);
   const [step, setStep] = useState(1);
   const [selPlan, setSelPlan] = useState(null);
   const [lotNumber, setLotNumber] = useState("");
@@ -901,7 +914,7 @@ export default function App() {
   const [contact, setContact] = useState(DEFAULT_CONTACT);
   const [selectedShipping, setSelectedShipping] = useState(null);
   const [lotAuthFile, setLotAuthFile] = useState(null);
-  const [adminTab, setAdminTab] = useState("plans");
+  const [adminTab, setAdminTab] = useState(adminTabFromHash);
   const [adminToken, setAdminToken] = useState(() => {
     try { return sessionStorage.getItem("admin_token") || null; } catch { return null; }
   });
@@ -994,6 +1007,15 @@ export default function App() {
       });
   }, [stripeConfirming, stripeOrderId]);
 
+  // Mirror admin view/tab into the URL hash. replaceState (not pushState) —
+  // the wizard owns history entries for its steps below; the view only needs
+  // refresh / deep-link persistence, not extra back-button entries.
+  useEffect(() => {
+    const hash = currentView === "admin" ? `#admin/${adminTab}` : "";
+    const url = window.location.pathname + window.location.search + hash;
+    window.history.replaceState(window.history.state, "", url);
+  }, [currentView, adminTab]);
+
   // Browser back button: push a history entry on step advance so back returns to previous step
   useEffect(() => {
     if (step > 1 && step < 6) window.history.pushState({ step }, "");
@@ -1047,7 +1069,13 @@ export default function App() {
     // Only persist while the wizard is active (steps 2–4); after submit the
     // entry is cleared explicitly by reset().
     if (step >= 5) return;
-    saveCartFor(selPlan, { cart, contact, selectedShipping, orderCategory, payMethod });
+    // Debounced: this effect re-runs on every contact-form keystroke, and a
+    // synchronous JSON.stringify + localStorage.setItem per keystroke adds
+    // measurable input latency on low-end devices.
+    const t = setTimeout(() => {
+      saveCartFor(selPlan, { cart, contact, selectedShipping, orderCategory, payMethod });
+    }, 300);
+    return () => clearTimeout(t);
   }, [selPlan, step, cart, contact, selectedShipping, orderCategory, payMethod]);
 
   // When lot number or plan changes on an OC order, auto-assign that lot's OCs
@@ -1723,7 +1751,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     />
                     {lotDropdownOpen && filtered.length > 0 && (
                       <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid var(--border)", borderRadius: "4px", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 50, maxHeight: "220px", overflowY: "auto", marginTop: "2px" }}>
-                        {filtered.map(l => (
+                        {/* Cap rendered rows — large buildings can have 1000+ lots and the
+                            dropdown re-renders per keystroke; only ~8 rows are visible in
+                            the 220px scroll area anyway. Typing narrows the match set. */}
+                        {filtered.slice(0, 50).map(l => (
                           <div
                             key={l.id}
                             onMouseDown={() => selectLot(l.number)}
@@ -1742,6 +1773,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                             </span>
                           </div>
                         ))}
+                        {filtered.length > 50 && (
+                          <div style={{ padding: "8px 14px", fontSize: "0.75rem", color: "var(--muted)", background: "var(--sage-tint)" }}>
+                            Showing first 50 of {filtered.length} — keep typing to narrow down
+                          </div>
+                        )}
                       </div>
                     )}
                     {lotInputText && !lotNumber && filtered.length === 0 && (
@@ -3310,7 +3346,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
   const plan = (data.strataPlans || []).find(p => p.id === planId);
 
-  const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
+  const TABS = ADMIN_TABS; // module-scope — shared with the URL-hash restore in App
 
   // ── API helper ──────────────────────────────────────────────────────────────
   const savePlans = async (plans) => {
@@ -3342,8 +3378,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       return;
     }
     const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
-    await savePlans(plans);
+    // savePlans applies the change optimistically (rollback + toast on
+    // failure), so close the modal immediately — leaving it open with no
+    // pending indicator invites a double-click that creates duplicates.
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const openEditPlan = (p) => {
@@ -3355,8 +3394,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const savePlan = async () => {
     if (!form.name) return;
     const plans = data.strataPlans.map(p => p.id !== editTarget.id ? p : { ...p, name: form.name, address: form.address || "" });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const confirmDeletePlans = async (ids) => {
@@ -3400,8 +3439,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ...(shippingCosts ? { shippingCosts } : {}),
       }]
     });
-    await savePlans(plans);
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const saveProduct = async () => {
@@ -3420,8 +3459,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ...(shippingCosts ? { shippingCosts } : { shippingCosts: undefined }),
       })
     });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const deleteProd = async (pid) => {
@@ -3462,8 +3501,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, unitNumber: form.unitNumber || "", streetNumber: form.streetNumber || "", streetName: form.streetName || "", type: form.lotType || "Residential", ownerCorps: ocList }]
     });
-    await savePlans(plans);
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const saveLot = async () => {
@@ -3480,8 +3519,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ownerCorps: ocList,
       })
     });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const deleteLot = async (lid) => {
@@ -3496,8 +3535,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, ownerCorps: { ...pl.ownerCorps, [form.ocId]: { name: form.ocName, levy: form.ocLevy ? parseFloat(form.ocLevy) : 0 } }
     });
-    await savePlans(plans);
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const saveOC = async () => {
@@ -3505,8 +3544,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, ownerCorps: { ...pl.ownerCorps, [editTarget.id]: { name: form.ocName, levy: form.ocLevy ? parseFloat(form.ocLevy) : 0 } }
     });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const deleteOC = async (ocId) => {
@@ -6023,6 +6062,7 @@ function SettingsTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const [loading, setLoading] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
@@ -6044,7 +6084,8 @@ function SettingsTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const updTpl  = (k, v) => { setEmailTpl(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
 
   const save = async () => {
-    setSaveErr(""); setTestResult(null);
+    if (saving) return;
+    setSaving(true); setSaveErr(""); setTestResult(null);
     try {
       const smtpPayload = { ...smtp };
       if (!smtpPayload.pass && smtpPassPlaceholder) delete smtpPayload.pass;
@@ -6076,6 +6117,7 @@ function SettingsTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
       }
       else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
     } catch { setSaveErr("Unable to connect to server."); }
+    setSaving(false);
   };
 
   const testEmail = async () => {
@@ -6224,8 +6266,11 @@ function SettingsTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
       {testResult?.ok  === false  && <div className="alert alert-err">{testResult.msg}</div>}
 
       <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save}>
-          <Ic n="check" s={15}/> Save Settings
+        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save} disabled={saving}>
+          {saving
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+            : <><Ic n="check" s={15}/> Save Settings</>
+          }
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testEmail} disabled={testing}>
           {testing
@@ -6252,6 +6297,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const [testingStripe,   setTestingStripe]   = useState(false);
   const [stripeTestResult, setStripeTestResult] = useState(null);
   const [saved,    setSaved]   = useState(false);
+  const [saving,   setSaving]  = useState(false);
   const [saveErr,  setSaveErr] = useState("");
   const [loading,  setLoading] = useState(true);
 
@@ -6272,7 +6318,8 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const updPay = (k, v) => { setPayDetails(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
 
   const save = async () => {
-    setSaveErr("");
+    if (saving) return;
+    setSaving(true); setSaveErr("");
     try {
       const r = await fetch("/api/config/settings", {
         method: "POST",
@@ -6289,6 +6336,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
         if (setPubConfig) setPubConfig(p => ({ ...p, bankEnabled, payidEnabled }));
       } else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
     } catch { setSaveErr("Unable to connect to server."); }
+    setSaving(false);
   };
 
   const testStripe = async () => {
@@ -6433,8 +6481,11 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
       {saveErr && <div className="alert alert-err">{saveErr}</div>}
       {saved   && <div className="alert alert-ok">Settings saved.</div>}
       <div>
-        <button className="btn btn-blk" style={{ width: "100%" }} onClick={save}>
-          <Ic n="check" s={15}/> Save Payment Settings
+        <button className="btn btn-blk" style={{ width: "100%" }} onClick={save} disabled={saving}>
+          {saving
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+            : <><Ic n="check" s={15}/> Save Payment Settings</>
+          }
         </button>
       </div>
     </div>
@@ -6704,6 +6755,7 @@ function StorageTab({ adminToken, setPubConfig }) {
   const [showSecret, setShowSecret] = useState(false);
   const [secretPlaceholder, setSecretPlaceholder] = useState(false); // true when server returned "••••••••"
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [spTesting, setSpTesting] = useState(false);
@@ -6782,7 +6834,8 @@ function StorageTab({ adminToken, setPubConfig }) {
   };
 
   const save = async () => {
-    setErr("");
+    if (saving) return;
+    setSaving(true); setErr("");
     try {
       const payload = { ...sp };
       // If secret is blank and placeholder was shown, don't overwrite it
@@ -6810,6 +6863,7 @@ function StorageTab({ adminToken, setPubConfig }) {
       }
       else { const d = await r.json(); setErr(d.error || "Save failed."); }
     } catch { setErr("Unable to connect to server."); }
+    setSaving(false);
   };
 
   if (loading) return <div className="panel" style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}>Loading…</div>;
@@ -6861,8 +6915,11 @@ function StorageTab({ adminToken, setPubConfig }) {
       {saved && <div className="alert alert-ok">SharePoint settings saved.</div>}
 
       <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save}>
-          <Ic n="check" s={15}/> Save Storage Settings
+        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save} disabled={saving}>
+          {saving
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+            : <><Ic n="check" s={15}/> Save Storage Settings</>
+          }
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testSharePoint} disabled={spTesting}>
           {spTesting
