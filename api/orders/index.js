@@ -310,8 +310,8 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   // Rate-limit unauthenticated order POSTs. Without this, a single IP can
-  // loop and (a) inflate tocs:data (every read/write is O(N)), (b) burn
-  // SMTP quota, (c) fill SP with junk folders, (d) starve the function pool.
+  // loop and (a) flood the order store, (b) burn SMTP quota, (c) fill SP
+  // with junk folders, (d) starve the function pool.
   // 5 orders/minute per IP is well above legitimate use (a normal customer
   // places 1-3 orders in a session) while blunting scripted abuse.
   const orderRl = await rateLimit(`orders-post:${clientIp(req)}`, 5, 60);

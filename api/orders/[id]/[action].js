@@ -9,7 +9,7 @@
 
 import { waitUntil } from "@vercel/functions";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { readData, writeData, readConfig, validToken, validAdminToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
+import { readData, readOrder, writeData, readConfig, validToken, validAdminToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment, pushAuditOnce } from "../../_lib/sharepoint.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
@@ -1486,9 +1486,15 @@ export default async function handler(req, res) {
     if (typeof id !== "string" || !id.trim()) {
       return res.status(400).json({ error: "Order reference is required." });
     }
+    // Single-key lookup — order ids are generated uppercase, so trying the
+    // uppercased input hits directly without assembling the whole dataset.
+    // readOrder falls back to a full scan for odd-cased legacy ids.
     const upperId = id.toUpperCase();
-    const data = await readData();
-    const order = data.orders.find(o => typeof o.id === "string" && o.id.toUpperCase() === upperId);
+    let order = await readOrder(upperId);
+    if (!order) {
+      const data = await readData();
+      order = data.orders.find(o => typeof o.id === "string" && o.id.toUpperCase() === upperId);
+    }
     if (!order) return res.status(404).json({ error: "Order not found. Please check your reference number." });
     const firstItem = order.items?.[0] || {};
     return res.status(200).json({

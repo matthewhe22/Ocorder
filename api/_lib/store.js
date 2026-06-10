@@ -377,6 +377,21 @@ async function kvDel(key) {
   } catch { /* best-effort */ }
 }
 
+// Batched GET — one MGET round trip on Redis instead of N sequential GETs.
+async function kvMGet(keys) {
+  if (keys.length === 0) return [];
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return Promise.all(keys.map(_fileKvGet));
+  if (!KV_AVAILABLE) return keys.map(() => null);
+  try {
+    const client = await getClient();
+    const vals = await client.mGet(keys);
+    return vals.map(v => (v ? JSON.parse(v) : null));
+  } catch (err) {
+    console.error("Redis MGET error:", err.message);
+    throw err;
+  }
+}
+
 export { kvGet, kvSet, kvDel };
 
 // ── Authority document helpers ────────────────────────────────────────────────
@@ -441,18 +456,41 @@ export async function readPiqPollStatus() {
 export { KV_AVAILABLE };
 
 // ── Data helpers ──────────────────────────────────────────────────────────────
-export async function readData() {
-  const d = await kvGet(DATA_KEY);
-  if (!d) return DEMO_MODE ? structuredClone(DEMO_DEFAULT_DATA) : DEFAULT_DATA;
+// Storage layout (since 2026-06): the dataset is SPLIT across keys instead of
+// one monolithic JSON blob —
+//   PLANS_KEY      strataPlans array (changes rarely)
+//   ORDER_IDS_KEY  array of order ids, newest first (the index)
+//   orderKey(id)   one key per order
+// readData()/writeData() keep their original whole-dataset signature so every
+// handler works unchanged, but writeData now DIFFS against the snapshot taken
+// at read time and writes only the orders that actually changed — a status
+// update touches one small key instead of re-serialising every order ever
+// placed. Reads assemble the dataset with a single MGET. The legacy blob
+// (DATA_KEY) is migrated on first read and kept as a backup.
+const PLANS_KEY         = DEMO_MODE ? "demo:plans"          : "tocs:plans";
+const ORDER_IDS_KEY     = DEMO_MODE ? "demo:order-ids"      : "tocs:order-ids";
+const LEGACY_BACKUP_KEY = DEMO_MODE ? "demo:data:pre-split" : "tocs:data:pre-split";
+const orderKey = (id) => (DEMO_MODE ? "demo:order:" : "tocs:order:") + id;
 
-  // One-time migrations for plans stored in Redis before new fields were added.
+// Per-warm-instance snapshot of what we last read/wrote, used by writeData's
+// diff. Handlers follow read-modify-write within one invocation, so the
+// snapshot is fresh when the diff runs.
+let _seenOrders    = new Map(); // order id -> JSON string
+let _seenIds       = null;      // ids array as last read/written
+let _seenPlansJson = null;
+
+function defaultData() {
+  return structuredClone(DEMO_MODE ? DEMO_DEFAULT_DATA : DEFAULT_DATA);
+}
+
+// One-time migrations for plans stored before new fields were added.
+// Returns true if anything changed (caller persists).
+function migratePlans(strataPlans) {
   let migrated = false;
-  // Build O(1) lookup map so migration doesn't do O(n²) searches.
-  const storedById = new Map((d.strataPlans || []).map(p => [p.id, p]));
+  const storedById = new Map((strataPlans || []).map(p => [p.id, p]));
   for (const defPlan of DEFAULT_DATA.strataPlans) {
     const plan = storedById.get(defPlan.id);
     if (!plan) continue;
-
     // Migrate missing products (e.g. K1/K2/K3 added after initial seed).
     const existingIds = new Set((plan.products || []).map(p => p.id));
     const missing = defPlan.products.filter(p => !existingIds.has(p.id));
@@ -460,33 +498,146 @@ export async function readData() {
       plan.products = [...(plan.products || []), ...missing];
       migrated = true;
     }
-
     // Migrate missing shippingOptions field (added 2026-03-20).
-    // Inject an empty array so admin can configure options via the UI.
     if (!Array.isArray(plan.shippingOptions)) {
       plan.shippingOptions = [];
       migrated = true;
     }
   }
-
-  // Migrate keysShipping on ALL stored plans (incl. custom plans not in DEFAULT_DATA).
-  for (const plan of (d.strataPlans || [])) {
+  // Migrate keysShipping on ALL stored plans (incl. custom plans).
+  for (const plan of (strataPlans || [])) {
     if (!plan.keysShipping) {
       plan.keysShipping = { deliveryCost: 0, expressCost: 0 };
       migrated = true;
     }
   }
+  return migrated;
+}
 
-  if (migrated) {
-    // Write back so subsequent reads don't need to migrate again
-    try { await kvSet(DATA_KEY, d); } catch { /* best-effort */ }
+// Split the legacy monolithic blob into per-order keys. Runs at most once —
+// guarded by a lock so two cold instances can't double-migrate. The blob is
+// preserved under LEGACY_BACKUP_KEY for manual rollback.
+async function migrateLegacyData() {
+  await withLock("data-migrate", async () => {
+    if ((await kvGet(ORDER_IDS_KEY)) !== null) return; // raced — already migrated
+    const legacy = await kvGet(DATA_KEY);
+    if (!legacy) return; // fresh install — nothing to migrate
+    const orders = legacy.orders || [];
+    await Promise.all(orders.map(o => kvSet(orderKey(o.id), o)));
+    await kvSet(PLANS_KEY, legacy.strataPlans || []);
+    await kvSet(ORDER_IDS_KEY, orders.map(o => o.id));
+    await kvSet(LEGACY_BACKUP_KEY, legacy);
+    await kvDel(DATA_KEY);
+    console.log(`[store] migrated ${orders.length} orders + ${(legacy.strataPlans || []).length} plans from monolithic ${DATA_KEY} to split keys`);
+  });
+}
+
+export async function readData() {
+  let ids = await kvGet(ORDER_IDS_KEY);
+  if (ids === null) {
+    await migrateLegacyData();
+    ids = await kvGet(ORDER_IDS_KEY);
+    if (ids === null) {
+      // Fresh install (or no KV at all) — defaults, nothing persisted yet.
+      _seenOrders = new Map(); _seenIds = []; _seenPlansJson = null;
+      return defaultData();
+    }
   }
 
-  return d;
+  const [plans, ...orderVals] = await kvMGet([PLANS_KEY, ...ids.map(orderKey)]);
+  const strataPlans = plans || defaultData().strataPlans;
+
+  const orders = [];
+  const seen = new Map();
+  ids.forEach((id, i) => {
+    const o = orderVals[i];
+    if (!o) { console.warn(`[store] order ${id} in index but key missing — skipping`); return; }
+    if (!o.status) o.status = "Pending Payment";
+    orders.push(o);
+    seen.set(id, JSON.stringify(o));
+  });
+
+  if (migratePlans(strataPlans)) {
+    try { await kvSet(PLANS_KEY, strataPlans); } catch { /* best-effort */ }
+  }
+
+  _seenOrders = seen;
+  _seenIds = ids;
+  _seenPlansJson = JSON.stringify(strataPlans);
+  return { strataPlans, orders };
+}
+
+// Fast path for handlers that need ONE order (e.g. the public /track lookup):
+// a single GET instead of assembling the whole dataset. Falls back to a full
+// readData() when the key is absent — which also covers a store that hasn't
+// been migrated yet.
+export async function readOrder(orderId) {
+  const o = await kvGet(orderKey(orderId));
+  if (o) {
+    if (!o.status) o.status = "Pending Payment";
+    _seenOrders.set(orderId, JSON.stringify(o));
+    return o;
+  }
+  const d = await readData();
+  return d.orders.find(x => x.id === orderId) || null;
 }
 
 export async function writeData(d) {
-  await kvSet(DATA_KEY, d);
+  const orders = d.orders || [];
+  const plans  = d.strataPlans || [];
+  const dIds   = orders.map(o => o.id);
+
+  const ops = [];
+  const plansJson = JSON.stringify(plans);
+  if (plansJson !== _seenPlansJson) {
+    ops.push(kvSet(PLANS_KEY, plans).then(() => { _seenPlansJson = plansJson; }));
+  }
+  for (const o of orders) {
+    const j = JSON.stringify(o);
+    if (_seenOrders.get(o.id) !== j) {
+      ops.push(kvSet(orderKey(o.id), o).then(() => { _seenOrders.set(o.id, j); }));
+    }
+  }
+  // Orders we deleted relative to our read snapshot (NOT relative to the live
+  // index — another instance may have added orders we never saw).
+  const dIdSet = new Set(dIds);
+  const removed = (_seenIds || []).filter(id => !dIdSet.has(id));
+  for (const id of removed) {
+    ops.push(kvDel(orderKey(id)).then(() => { _seenOrders.delete(id); }));
+  }
+  await Promise.all(ops);
+
+  // Index update: merge with the LIVE index under a short lock so two
+  // instances creating different orders concurrently can't lose each other's
+  // additions (the old whole-blob write lost far more in that race).
+  const sameAsSeen = _seenIds !== null
+    && _seenIds.length === dIds.length
+    && _seenIds.every((v, i) => v === dIds[i]);
+  if (!sameAsSeen) {
+    await withLock("order-index", async () => {
+      const fresh = (await kvGet(ORDER_IDS_KEY)) || [];
+      const known = new Set([...dIds, ...(_seenIds || []), ...removed]);
+      const others = fresh.filter(id => !known.has(id)); // added by other instances
+      const merged = [...others, ...dIds];
+      await kvSet(ORDER_IDS_KEY, merged);
+      _seenIds = merged;
+    });
+  }
+}
+
+// Replace-ALL semantics (demo reset): deletes every existing order key, then
+// writes the new dataset from scratch. writeData's diff/merge would otherwise
+// preserve orders the caller intends to wipe.
+export async function replaceData(d) {
+  const existing = (await kvGet(ORDER_IDS_KEY)) || [];
+  await Promise.all(existing.map(id => kvDel(orderKey(id))));
+  const orders = d.orders || [];
+  await Promise.all(orders.map(o => kvSet(orderKey(o.id), o)));
+  await kvSet(PLANS_KEY, d.strataPlans || []);
+  await kvSet(ORDER_IDS_KEY, orders.map(o => o.id));
+  _seenOrders = new Map(orders.map(o => [o.id, JSON.stringify(o)]));
+  _seenIds = orders.map(o => o.id);
+  _seenPlansJson = JSON.stringify(d.strataPlans || []);
 }
 
 // ── Config helpers ────────────────────────────────────────────────────────────
@@ -735,9 +886,9 @@ const LOCK_TTL_SECONDS = 10;
 const LOCK_RETRY_MS    = 75;
 const LOCK_MAX_WAIT_MS = 5000;
 
-export async function withOrderLock(orderId, fn) {
+async function withLock(name, fn) {
   if (!KV_AVAILABLE) return await fn();
-  const key   = `tocs:lock:order:${orderId}`;
+  const key   = `tocs:lock:${name}`;
   const token = randomBytes(16).toString("hex");
   const client = await getClient();
   const start  = Date.now();
@@ -759,6 +910,10 @@ export async function withOrderLock(orderId, fn) {
       if (current === token) await client.del(key);
     } catch { /* lock will expire via TTL */ }
   }
+}
+
+export async function withOrderLock(orderId, fn) {
+  return withLock(`order:${orderId}`, fn);
 }
 
 // ── Stripe webhook event deduplication ────────────────────────────────────────

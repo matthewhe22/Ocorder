@@ -2,6 +2,50 @@
 
 ---
 
+## 2026-06-10 — Performance pass 4: per-order Redis keys replace the monolithic blob
+
+Final batch from the multi-agent speed review — removes the long-term
+scalability ceiling on the Vercel deployment.
+
+### Split storage layout in api/_lib/store.js (High, strategic)
+The entire dataset previously lived in ONE Redis JSON blob (`tocs:data`):
+every request read, parsed, and often rewrote every order ever placed (with
+their growing audit logs) — O(all orders) per request, with concurrent
+writers clobbering each other. The store is now split:
+
+- `tocs:plans` — strataPlans array (changes rarely)
+- `tocs:order-ids` — order id index, newest first
+- `tocs:order:{id}` — one key per order
+
+`readData()`/`writeData()` keep their whole-dataset signature so **every
+handler works unchanged**, but `writeData` now diffs against the snapshot
+taken at read time and writes only the orders that actually changed — a
+status update touches one small key instead of re-serialising the entire
+order history. Reads assemble via a single MGET. Index updates merge with
+the live index under a short lock, so two instances creating orders
+concurrently no longer lose each other's writes (verified by test).
+
+### Migration + rollback safety
+The legacy blob is split automatically on first read (idempotent, guarded
+by a migration lock against double-running cold starts) and preserved under
+`tocs:data:pre-split` for manual rollback. Demo namespaces (`demo:*`) get
+the same treatment.
+
+### New store helpers
+- `readOrder(id)` — single-key fast path; the public `/track` endpoint now
+  does one GET instead of assembling the whole dataset.
+- `replaceData(d)` — replace-ALL semantics for `/api/demo/reset` (the
+  diff/merge in writeData would otherwise preserve orders the reset is
+  meant to wipe).
+- `kvMGet`, generalised `withLock` (order locks unchanged).
+
+7 new tests run the real store against the file-KV fallback: legacy
+migration, diff-writes (a concurrent update by another instance is NOT
+clobbered by our stale copy — strictly better than the old blob), index
+merge under concurrency, deletion, replaceData, readOrder, round-trip.
+
+---
+
 ## 2026-06-10 — Performance pass 3: plan summaries, per-building fetch, instant portal shell
 
 Third batch from the multi-agent speed review — the public payload no longer
