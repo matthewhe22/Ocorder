@@ -2,6 +2,41 @@
 
 ---
 
+## 2026-06-10 — Performance pass 3: plan summaries, per-building fetch, instant portal shell
+
+Third batch from the multi-agent speed review — the public payload no longer
+grows with the portfolio.
+
+### Public /api/data returns plan summaries only (High)
+Anonymous visitors previously downloaded **every lot, product, and owner
+corporation of every building** on first paint — the startup-blocking payload
+grew linearly with the portfolio. The public response is now constant-size
+summaries (`id`, `name`, `address`, `active`, `lotCount`, `ocCount`); the
+search step needs nothing more. Side benefit: lots/products are no longer
+exposed wholesale to anonymous scrapers. Authenticated admins still get full
+data, and `handleAuth` already refetches with the token on login. Parity
+maintained across `server.js` and `api/data.js`.
+
+### New: GET /api/plans?id=SP12345 (public, both backends)
+Returns the full catalog for ONE building (admin-only product fields
+stripped, inactive plans 404). The portal fetches this when the customer
+selects their building — `selectPlan` merges the detail into state *before*
+`selPlan` is set, so every downstream wizard step sees a complete plan
+exactly as before. The clicked card shows an inline "Loading building…"
+spinner; failures toast and stay on search. Admin sessions skip the fetch
+(plans already full in memory).
+
+### Portal shell renders instantly (High)
+The global `appLoading` gate that replaced the entire app with a spinner
+until `/api/data` + `/api/config/public` both resolved is gone. The step-1
+hero, search box, "How it works", and order tracking are static and now
+paint immediately; only the building-search results show a loading state
+while plans arrive. Admin keeps a gate (it genuinely needs the dataset).
+
+Also: hoisted a single global `@keyframes spin` into the main stylesheet.
+
+---
+
 ## 2026-06-10 — Performance pass 2: server data cache, admin URL state, UI responsiveness
 
 Second batch from the multi-agent speed review (structural tier).

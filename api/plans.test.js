@@ -31,6 +31,47 @@ async function importLots(lots) {
   return res;
 }
 
+describe("GET /api/plans?id= — public single-plan detail", () => {
+  async function getPlan(id) {
+    storeData = {
+      strataPlans: [
+        {
+          id: "SP1", name: "Harbour View", address: "45 Marina Drive",
+          lots: [{ id: "L1", number: "Lot 1" }],
+          ownerCorps: { "OC-A": { name: "Main" } },
+          products: [{ id: "K3", name: "Garage Remote", price: 110, managerAdminCharge: 25, category: "keys" }],
+        },
+        { id: "SP2", name: "Hidden", active: false, lots: [], ownerCorps: {}, products: [] },
+      ],
+      orders: [],
+    };
+    const res = makeRes();
+    await handler(makeReq({ method: "GET", query: { id } }), res);
+    return res;
+  }
+
+  it("returns the full plan with managerAdminCharge stripped from products", async () => {
+    const res = await getPlan("SP1");
+    expect(res._status).toBe(200);
+    const plan = res._body.plan;
+    expect(plan.id).toBe("SP1");
+    expect(plan.lots).toHaveLength(1);
+    expect(plan.ownerCorps["OC-A"]).toBeDefined();
+    const product = plan.products[0];
+    expect(product.price).toBe(110);
+    expect("managerAdminCharge" in product).toBe(false);
+  });
+
+  it("404s for unknown and inactive plans", async () => {
+    expect((await getPlan("NOPE"))._status).toBe(404);
+    expect((await getPlan("SP2"))._status).toBe(404);
+  });
+
+  it("400s when id is missing", async () => {
+    expect((await getPlan(""))._status).toBe(400);
+  });
+});
+
 describe("POST /api/plans import-lots — field whitelist", () => {
   it("drops a forged piqLotId and arbitrary fields on a new lot", async () => {
     const res = await importLots([{

@@ -119,6 +119,8 @@ const Ic = ({ n, s = 18 }) => (ICONS[n] ? ICONS[n](s) : null);
 const CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   :root {
     --forest:      #1c3326;
     --forest2:     #243d2e;
@@ -1208,6 +1210,37 @@ export default function App() {
     if (s < step) setStep(s);
   };
 
+  // ── Plan selection ───────────────────────────────────────────────────────────
+  // Public /api/data carries plan summaries only (no lots/products), so the
+  // full catalog for the chosen building is fetched here and merged into
+  // `data` BEFORE selPlan is set — every downstream effect and component then
+  // sees a complete plan, exactly as when the whole catalog was preloaded.
+  // Admin sessions (and freshly saved plans) already have `lots` in memory and
+  // skip the fetch.
+  const [planFetching, setPlanFetching] = useState(null); // plan id being fetched
+  const selectPlan = async (p) => {
+    if (planFetching) return false;
+    setCart([]); setLotNumber("");
+    if (Array.isArray(p.lots)) { setSelPlan(p.id); return true; }
+    setPlanFetching(p.id);
+    try {
+      const r = await fetch(`/api/plans?id=${encodeURIComponent(p.id)}`);
+      if (!r.ok) throw new Error();
+      const { plan: full } = await r.json();
+      setData(prev => ({
+        ...prev,
+        strataPlans: (prev.strataPlans || []).map(sp => (sp.id === full.id ? full : sp)),
+      }));
+      setSelPlan(p.id);
+      return true;
+    } catch {
+      appToast({ type: "err", message: "Could not load building details. Please check your connection and try again." });
+      return false;
+    } finally {
+      setPlanFetching(null);
+    }
+  };
+
   // 5 wizard steps; step 6 = confirmation page, outside the wizard track
   const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment"];
 
@@ -1264,13 +1297,11 @@ export default function App() {
         </header>
 
         <main className="main">
-          {appLoading ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
-              <div aria-hidden="true" style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
-              <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            </div>
-          ) : currentPath === "/privacy-policy" ? (
+          {/* The portal shell renders immediately — only the building-search
+              results depend on /api/data, and Portal shows its own inline
+              loading state for them (appLoading). Admin still gates on the
+              fetch because every tab needs the order/plan dataset. */}
+          {currentPath === "/privacy-policy" ? (
             <ErrorBoundary label="PrivacyPolicy">
               <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
             </ErrorBoundary>
@@ -1287,12 +1318,19 @@ export default function App() {
                 selectedShipping={selectedShipping} setSelectedShipping={setSelectedShipping}
                 shippingCost={shippingCost}
                 stripeConfirming={stripeConfirming} stripeConfirmErr={stripeConfirmErr} stripeOrderId={stripeOrderId}
-                stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled} />
+                stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled}
+                selectPlan={selectPlan} planFetching={planFetching} appLoading={appLoading} />
             </ErrorBoundary>
           ) : !adminToken ? (
             <ErrorBoundary label="AdminLogin">
               <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />
             </ErrorBoundary>
+          ) : appLoading ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
+              <div aria-hidden="true" style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+              <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
           ) : (
             <ErrorBoundary label="Admin">
               <Admin data={data} setData={setData} adminTab={adminTab} setAdminTab={setAdminTab}
@@ -1310,7 +1348,7 @@ export default function App() {
 }
 
 // ─── PORTAL ───────────────────────────────────────────────────────────────────
-function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
+function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled, selectPlan, planFetching, appLoading }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [extLinkTarget, setExtLinkTarget] = useState(null); // product with externalUrl awaiting confirm
@@ -1607,6 +1645,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Keep typing…</p>
                 <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Type at least 3 characters to search buildings.</p>
               </div>
+            ) : appLoading ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div aria-hidden="true" style={{ width: 24, height: 24, margin: "0 auto 0.75rem", borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Loading buildings…</p>
+              </div>
             ) : filteredPlans.length === 0 ? (
               <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
                 <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
@@ -1616,11 +1659,16 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             ) : (
               <div className="plan-grid" style={{ marginBottom: "14px" }}>
                 {filteredPlans.map(p => (
-                  <div key={p.id} className="plan-card" onClick={() => { setCart([]); setLotNumber(""); setSelPlan(p.id); setSearch(""); }}>
+                  <div key={p.id} className="plan-card" style={planFetching && planFetching !== p.id ? { opacity: 0.55, pointerEvents: "none" } : undefined}
+                    onClick={() => { selectPlan(p).then(ok => { if (ok) setSearch(""); }); }}>
                     <div className="pc-id">{p.id}</div>
                     <div className="pc-name">{p.name}</div>
                     <div className="pc-addr">{p.address}</div>
-                    <div className="pc-meta">{p.lots.length} lots &nbsp;·&nbsp; {Object.keys(p.ownerCorps).length} Owner Corporations</div>
+                    <div className="pc-meta">
+                      {planFetching === p.id
+                        ? <><span aria-hidden="true" style={{display:"inline-block",verticalAlign:"-2px",animation:"spin 0.8s linear infinite",border:"2px solid rgba(28,51,38,0.15)",borderTop:"2px solid var(--forest)",borderRadius:"50%",width:12,height:12,marginRight:6}}/>Loading building…</>
+                        : <>{p.lotCount ?? (p.lots || []).length} lots &nbsp;·&nbsp; {p.ocCount ?? Object.keys(p.ownerCorps || {}).length} Owner Corporations</>}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1644,11 +1692,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <div className="bsel-addr">📍 {plan.address}</div>
                 <div className="bsel-stats">
                   <div className="bsel-stat">
-                    <div className="bsel-stat-val">{plan.lots.length}</div>
+                    <div className="bsel-stat-val">{(plan.lots || []).length}</div>
                     <div className="bsel-stat-lbl">Total Lots</div>
                   </div>
                   <div className="bsel-stat">
-                    <div className="bsel-stat-val">{Object.keys(plan.ownerCorps).length}</div>
+                    <div className="bsel-stat-val">{Object.keys(plan.ownerCorps || {}).length}</div>
                     <div className="bsel-stat-lbl">Owner Corporations</div>
                   </div>
                 </div>

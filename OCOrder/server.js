@@ -781,6 +781,25 @@ function authHeader(req) {
   return h.startsWith("Bearer ") ? h.slice(7) : null;
 }
 
+// ── Public plan shapes ────────────────────────────────────────────────────────
+// Summary: what the portal's building-search step renders (cards show
+// name/address + lot/OC counts). Detail: the full plan for one selected
+// building with admin-only product fields stripped. Both must stay in sync
+// with api/data.js and api/plans.js (the Vercel handlers).
+function planSummary(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    address: p.address || "",
+    active: p.active !== false,
+    lotCount: (p.lots || []).length,
+    ocCount: Object.keys(p.ownerCorps || {}).length,
+  };
+}
+function publicPlanDetail(p) {
+  return { ...p, products: (p.products || []).map(({ managerAdminCharge, ...prod }) => prod) };
+}
+
 // ── MIME + Cache ──────────────────────────────────────────────────────────────
 const MIME = {
   ".html":"text/html; charset=utf-8", ".js":"application/javascript; charset=utf-8",
@@ -834,13 +853,23 @@ async function handler(req, res) {
     const d = readData();
     // Authenticated admins get full data (incl. orders); public callers get only plans.
     if (validToken(token)) return json(res, 200, d);
-    // Strip admin-only fields from products before returning to public callers
+    // Public callers get plan SUMMARIES only — the portal's search step needs
+    // id/name/address (+ counts for the card meta), and the full catalog for
+    // one building is fetched on selection via GET /api/plans?id=… . Shipping
+    // every lot/product of every building to every visitor made the
+    // startup-blocking payload grow linearly with the portfolio.
     return json(res, 200, {
-      strataPlans: d.strataPlans.filter(p => p.active !== false).map(plan => ({
-        ...plan,
-        products: (plan.products || []).map(({ managerAdminCharge, ...prod }) => prod),
-      })),
+      strataPlans: d.strataPlans.filter(p => p.active !== false).map(planSummary),
     });
+  }
+
+  // ── GET /api/plans?id=SP12345  (public — full catalog for ONE building) ────
+  if (urlPath === "/api/plans" && method === "GET") {
+    const id = new URL("http://x" + req.url).searchParams.get("id") || "";
+    const d = readData();
+    const plan = d.strataPlans.find(p => p.id === id && p.active !== false);
+    if (!plan) return json(res, 404, { error: "Building not found." });
+    return json(res, 200, { plan: publicPlanDetail(plan) });
   }
 
   // ── POST /api/auth  (unified auth endpoint) ───────────────────────────────
@@ -2172,7 +2201,7 @@ async function handler(req, res) {
       [/^\/api\/orders\/[^/]+\/stripe-cancel$/,      ["POST"]],
       [/^\/api\/stripe-webhook$/,                     ["POST"]],
       [/^\/api\/lots\/import$/, ["POST"]],
-      [/^\/api\/plans$/, ["POST"]],
+      [/^\/api\/plans$/, ["GET", "POST"]],
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
       [/^\/api\/config\/public$/, ["GET"]],
       [/^\/api\/config\/test-email$/, ["POST"]],

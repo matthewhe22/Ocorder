@@ -43,13 +43,14 @@
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/auth` | — | Login: `{action:"login", user, pass}` → `{token}` |
-| GET | `/api/data` | Optional Bearer | Public: strataPlans only. With valid token: full data incl. orders |
+| GET | `/api/data` | Optional Bearer | Public: plan summaries only (id/name/address/lotCount/ocCount). With valid token: full data incl. orders |
 | POST | `/api/orders` | — | Place order (public). Recalculates total server-side. |
 | PUT | `/api/orders/:id/status` | Bearer | Update order status (enum-validated) |
 | GET | `/api/orders/:id/authority` | Bearer + `?token=` | Download lot authority document |
 | POST | `/api/orders/:id/send-certificate` | Bearer | Send OC cert email with optional attachment |
 | GET | `/api/orders/export` | Bearer or `?token=` | CSV export of all orders |
 | POST | `/api/lots/import` | Bearer | Bulk import lots for a plan |
+| GET | `/api/plans?id=SP…` | — | Full catalog for one building (public; admin-only fields stripped, inactive 404) |
 | POST | `/api/plans` | Bearer | Save full strata plans array (schema-validated) |
 | GET | `/api/config/settings` | Bearer | Get config (SMTP pass masked) |
 | POST | `/api/config/settings` | Bearer | Save config (partial merge) |

@@ -1,3 +1,4 @@
+// GET  /api/plans?id=SP12345 — Full catalog for ONE building (public)
 // POST /api/plans — Plan and lot management (admin only)
 // Routes on req.body.action:
 //   (none / "save") — replace full strataPlans array
@@ -7,6 +8,22 @@ import { readData, writeData, validAdminToken, extractToken, cors } from "./_lib
 export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // ── GET: public single-plan detail ──────────────────────────────────────────
+  // The public /api/data response carries plan summaries only; the portal
+  // fetches the selected building's lots/products here. Admin-only product
+  // fields are stripped. Must stay in sync with server.js.
+  if (req.method === "GET") {
+    const id = String(req.query?.id || "");
+    if (!id) return res.status(400).json({ error: "id query parameter is required." });
+    const data = await readData();
+    const plan = (data.strataPlans || []).find(p => p.id === id && p.active !== false);
+    if (!plan) return res.status(404).json({ error: "Building not found." });
+    return res.status(200).json({
+      plan: { ...plan, products: (plan.products || []).map(({ managerAdminCharge: _omit, ...rest }) => rest) },
+    });
+  }
+
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
   const token = extractToken(req);

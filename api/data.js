@@ -1,4 +1,4 @@
-// GET /api/data — Returns strataPlans (public) + orders (admin only, requires Bearer token)
+// GET /api/data — Returns strataPlans (public: summaries) + orders (admin only, requires Bearer token)
 import { readData, validToken, extractToken, cors } from "./_lib/store.js";
 
 export default async function handler(req, res) {
@@ -12,17 +12,26 @@ export default async function handler(req, res) {
   const token = extractToken(req);
   const isAdmin = !!(await validToken(token));
 
-  // `managerAdminCharge` is an internal admin-only figure (used on invoices /
-  // CSV export, never shown to applicants). Strip it from the public catalog so
-  // it isn't exposed to anonymous callers. Build new objects rather than
-  // deleting in place — readData() may hand back a shared default reference.
-  const publicPlans = (data.strataPlans || []).map(p => ({
-    ...p,
-    products: (p.products || []).map(({ managerAdminCharge: _omit, ...rest }) => rest),
-  }));
+  if (isAdmin) {
+    return res.status(200).json({ strataPlans: data.strataPlans, orders: data.orders });
+  }
 
-  return res.status(200).json({
-    strataPlans: isAdmin ? data.strataPlans : publicPlans,
-    orders: isAdmin ? data.orders : [],
-  });
+  // Public callers get plan SUMMARIES only — the portal's search step needs
+  // id/name/address (+ counts for the card meta); the full catalog for one
+  // building is fetched on selection via GET /api/plans?id=… . This keeps the
+  // startup-blocking payload constant-size instead of growing with every lot
+  // of every building, and means lots/products/managerAdminCharge are never
+  // exposed to anonymous callers at all. Must stay in sync with server.js.
+  const summaries = (data.strataPlans || [])
+    .filter(p => p.active !== false)
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      address: p.address || "",
+      active: p.active !== false,
+      lotCount: (p.lots || []).length,
+      ocCount: Object.keys(p.ownerCorps || {}).length,
+    }));
+
+  return res.status(200).json({ strataPlans: summaries, orders: [] });
 }
