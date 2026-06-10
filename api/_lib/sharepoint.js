@@ -10,7 +10,9 @@
 //   Sites.ReadWrite.All
 //   → Grant admin consent after adding
 
-import { ClientSecretCredential } from "@azure/identity";
+// @azure/identity drags in the multi-MB MSAL dependency tree; it is lazy-loaded
+// inside getGraphToken so handlers that import this module for its constants
+// (SHAREPOINT_ENABLED, sanitiseSegment, …) don't pay for it on cold start.
 
 // Env-var fallbacks (used when Redis config is not set)
 const TENANT_ID     = process.env.AZURE_TENANT_ID;
@@ -21,6 +23,28 @@ export const FOLDER_PATH = process.env.SHAREPOINT_FOLDER_PATH || "Top Owners Cor
 
 // True only when all required env vars are present (used as a quick check for env-var path)
 export const SHAREPOINT_ENABLED = !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET && SITE_ID);
+
+// ── AAD token cache ───────────────────────────────────────────────────────────
+// Client-credential tokens last ~1 h. Without caching, every uploaded file pays
+// a login.microsoftonline.com round trip (~300–800 ms) — and a single order can
+// upload 3 files. Cached per tenant/client at module scope (mirrors the PIQ
+// token cache in piq.js) and refreshed 5 minutes before expiry.
+const aadTokenCache = new Map(); // "tenantId|clientId" -> { token, expiresOnTimestamp }
+
+async function getGraphToken(tenantId, clientId, clientSecret) {
+  const key = `${tenantId}|${clientId}`;
+  const cached = aadTokenCache.get(key);
+  if (cached && cached.expiresOnTimestamp - Date.now() > 5 * 60 * 1000) return cached.token;
+
+  const { ClientSecretCredential } = await import("@azure/identity");
+  const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+  const tokenResponse = await credential.getToken("https://graph.microsoft.com/.default");
+  aadTokenCache.set(key, {
+    token: tokenResponse.token,
+    expiresOnTimestamp: tokenResponse.expiresOnTimestamp || Date.now() + 30 * 60 * 1000,
+  });
+  return tokenResponse.token;
+}
 
 /**
  * Upload a file to SharePoint and return an organisation-scoped view link.
@@ -53,10 +77,9 @@ export async function uploadToSharePoint(filename, contentType, base64Data, spCo
   const GRAPH_TIMEOUT_MS = 4500;
 
   try {
-    // Get OAuth2 token via client credentials (calls login.microsoftonline.com — fast ~1 s)
-    const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-    const tokenResponse = await credential.getToken("https://graph.microsoft.com/.default");
-    const accessToken = tokenResponse.token;
+    // OAuth2 token via client credentials — served from the module-scope cache
+    // except on the first call per warm instance (or near expiry).
+    const accessToken = await getGraphToken(tenantId, clientId, clientSecret);
 
     const fileBuffer = Buffer.isBuffer(base64Data) ? base64Data : Buffer.from(base64Data, "base64");
     // Encode each path segment so spaces/special chars in folder names are handled correctly

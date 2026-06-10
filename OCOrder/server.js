@@ -2,6 +2,7 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
@@ -737,8 +738,19 @@ async function callVercelHandler(handler, req, res, opts = {}) {
 }
 
 // ── Response helpers ──────────────────────────────────────────────────────────
+function acceptsGzip(req) {
+  return /\bgzip\b/.test(req?.headers?.["accept-encoding"] || "");
+}
 function json(res, code, data) {
   const body = JSON.stringify(data);
+  // Gzip larger JSON responses (e.g. /api/data with all plans + orders is the
+  // app's startup-critical payload and compresses 3-5×). Small bodies skip it —
+  // the gzip header overhead outweighs the saving.
+  if (Buffer.byteLength(body) > 1024 && acceptsGzip(res.req)) {
+    const gz = zlib.gzipSync(body);
+    res.writeHead(code, { "Content-Type": "application/json", "Content-Encoding": "gzip", "Vary": "Accept-Encoding", "Content-Length": gz.length });
+    return res.end(gz);
+  }
   res.writeHead(code, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
   res.end(body);
 }
@@ -1168,41 +1180,45 @@ async function handler(req, res) {
     writeData(d);
 
     const cfg = readConfig();
-    // Send emails — capture failures and append them to the order's auditLog.
-    // Order is persisted BEFORE emails fire so an SMTP outage cannot lose the
-    // order. Failures are recorded structurally on the order so admin UI can
-    // surface them, and logged with the order id so ops can correlate.
-    const emailResults = await Promise.allSettled([
-      sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
-      sendCustomerEmail(order, cfg),
-    ]);
-    const emailLabels = ["Admin notification", "Customer confirmation"];
-    let needsWrite = false;
-    const failures = [];
-    emailResults.forEach((r, i) => {
-      if (r.status === "rejected") {
-        const reason = r.reason?.message || String(r.reason || "unknown");
-        failures.push({ label: emailLabels[i], reason });
-        const entry = { ts: new Date().toISOString(), action: "Email send failed", note: `${emailLabels[i]}: ${reason}` };
-        const idx2 = d.orders.findIndex(o => o.id === order.id);
-        if (idx2 !== -1) { d.orders[idx2].auditLog = [...(d.orders[idx2].auditLog || []), entry]; needsWrite = true; }
-      }
-    });
-    if (failures.length) {
+    // Send emails detached — the order is already durably persisted above, so
+    // SMTP (~6+ s with SMTP2GO) must not sit on the customer's critical path.
+    // Failures are captured after the fact: re-read data fresh (other requests
+    // may have written between the response and email settlement) and append
+    // to the order's auditLog so the admin UI can surface them.
+    const emailWork = (async () => {
+      const emailResults = await Promise.allSettled([
+        sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
+        sendCustomerEmail(order, cfg),
+      ]);
+      const emailLabels = ["Admin notification", "Customer confirmation"];
+      const failures = [];
+      emailResults.forEach((r, i) => {
+        if (r.status === "rejected") {
+          failures.push({ label: emailLabels[i], reason: r.reason?.message || String(r.reason || "unknown") });
+        }
+      });
+      if (!failures.length) return;
       console.error(`  ⚠️   Email failures for ${order.id}:`, failures.map(f => `${f.label} (${f.reason})`).join("; "));
-      // Mark the order with an emailDeliveryStatus flag so admin UI can show
-      // a "needs follow-up" badge without grepping the audit log.
-      const idx2 = d.orders.findIndex(o => o.id === order.id);
-      if (idx2 !== -1) {
-        d.orders[idx2].emailDeliveryStatus = {
-          state: "failed",
-          failures: failures.map(f => f.label),
-          ts: new Date().toISOString(),
-        };
-        needsWrite = true;
+      try {
+        const fresh = readData();
+        const idx2 = fresh.orders.findIndex(o => o.id === order.id);
+        if (idx2 !== -1) {
+          const entries = failures.map(f => ({ ts: new Date().toISOString(), action: "Email send failed", note: `${f.label}: ${f.reason}` }));
+          fresh.orders[idx2].auditLog = [...(fresh.orders[idx2].auditLog || []), ...entries];
+          // Mark the order with an emailDeliveryStatus flag so admin UI can show
+          // a "needs follow-up" badge without grepping the audit log.
+          fresh.orders[idx2].emailDeliveryStatus = {
+            state: "failed",
+            failures: failures.map(f => f.label),
+            ts: new Date().toISOString(),
+          };
+          writeData(fresh);
+        }
+      } catch (e) {
+        console.error(`  ⚠️   Could not persist email failure audit for ${order.id}:`, e.message);
       }
-    }
-    if (needsWrite) writeData(d);
+    })();
+    emailWork.catch(e => console.error("Detached email work failed:", e.message));
 
     // Strip admin-only fields before returning to the customer
     const customerOrder = { ...order, items: order.items.map(({ managerAdminCharge, ...item }) => item) };
@@ -2158,18 +2174,44 @@ async function handler(req, res) {
     if (err) {
       fs.readFile(path.join(DIST, "index.html"), (err2, html) => {
         if (err2) { res.writeHead(404); return res.end("Not found"); }
-        res.writeHead(200, { "Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-cache, no-store, must-revalidate" });
-        res.end(html);
+        sendStatic(req, res, html, ".html", path.join(DIST, "index.html"), "no-cache, no-store, must-revalidate");
       });
       return;
     }
-    res.writeHead(200, {
-      "Content-Type": MIME[ext] || "application/octet-stream",
-      "Cache-Control": cacheHeader(ext),
-      "Content-Length": data.length,
-    });
-    res.end(data);
+    sendStatic(req, res, data, ext, filePath);
   });
+}
+
+// ── Static response with cached gzip ──────────────────────────────────────────
+// Text assets (the JS bundle in particular) compress 3-4×. Compressed bodies
+// are cached in memory keyed on file mtime, so each asset is gzipped once per
+// change rather than per request (gzipSync on the ~500 KB bundle costs ~10 ms —
+// fine once, not on every page load).
+const COMPRESSIBLE = new Set([".html", ".js", ".css", ".svg", ".json"]);
+const gzipCache = new Map(); // filePath -> { mtimeMs, gz }
+function sendStatic(req, res, data, ext, filePath, cacheControl) {
+  const headers = {
+    "Content-Type": MIME[ext] || "application/octet-stream",
+    "Cache-Control": cacheControl || cacheHeader(ext),
+  };
+  if (COMPRESSIBLE.has(ext) && data.length > 1024 && acceptsGzip(req)) {
+    try {
+      const mtimeMs = fs.statSync(filePath).mtimeMs;
+      let entry = gzipCache.get(filePath);
+      if (!entry || entry.mtimeMs !== mtimeMs) {
+        entry = { mtimeMs, gz: zlib.gzipSync(data) };
+        gzipCache.set(filePath, entry);
+      }
+      headers["Content-Encoding"] = "gzip";
+      headers["Vary"] = "Accept-Encoding";
+      headers["Content-Length"] = entry.gz.length;
+      res.writeHead(200, headers);
+      return res.end(entry.gz);
+    } catch { /* fall through to uncompressed */ }
+  }
+  headers["Content-Length"] = data.length;
+  res.writeHead(200, headers);
+  res.end(data);
 }
 
 // ── Server bootstrap ──────────────────────────────────────────────────────────

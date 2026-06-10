@@ -113,9 +113,9 @@ const Ic = ({ n, s=18 }) => {
 };
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
+/* Fonts are loaded via <link> in dist/index.html (see build.mjs) so they start
+   downloading in parallel with the bundle instead of after first React render. */
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {

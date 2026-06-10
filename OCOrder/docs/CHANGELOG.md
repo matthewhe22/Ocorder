@@ -2,6 +2,57 @@
 
 ---
 
+## 2026-06-10 — Performance pass: build fix, bundle splitting, response latency
+
+First batch from the multi-agent speed review (frontend, backend, UI/UX).
+
+### Production build unbroken (Critical)
+`node build.mjs` failed outright on esbuild 0.27: the `safari13` target
+requires a destructuring lowering esbuild doesn't implement (Safari ≤ 14.0
+engine bug). Target floor raised to `safari14.1` / `es2020` — the build (and
+therefore Vercel deploys) works again.
+
+### Bundle splitting — main bundle halved (High)
+Build now emits ESM with code splitting and content-hashed filenames.
+`xlsx` (423 KB, admin-only Excel import/export) was being inlined into the
+single bundle every visitor downloaded despite the lazy `await import("xlsx")`
+in App.jsx. Main bundle: 920 KB → 488 KB raw (279 KB → 138 KB gzipped); xlsx
+loads on demand as its own chunk. Hashed names mean unchanged code stays
+cached across deploys (previously `?v=Date.now()` busted cache every build).
+
+### Font loading off the JS critical path (High)
+Google Fonts were loaded via `@import` inside the JS-injected CSS string —
+fonts couldn't start downloading until the bundle was parsed and React had
+rendered. Now `<link rel="preconnect">` + `<link rel="stylesheet">` in
+index.html, parallel with the bundle.
+
+### gzip in server.js (High, self-hosted deploys)
+Static assets and JSON API responses > 1 KB are gzip-compressed when the
+client accepts it (~3–4× transfer reduction on the bundle and `/api/data`).
+Compressed static bodies are cached in memory keyed on file mtime.
+
+### Emails off the customer's critical path (High)
+- `server.js` order creation awaited both SMTP sends (~6+ s with SMTP2GO)
+  before returning 201 — now detached; failures still land in the order's
+  auditLog and `emailDeliveryStatus` via a fresh read-modify-write.
+- `stripe-confirm` (the post-payment redirect) awaited admin + customer
+  emails before responding — now deferred via the same `waitUntil` pattern
+  as order creation on Vercel; awaited after the response off-Vercel.
+
+### Serverless cold-start weight (Medium)
+`pdfkit` (embedded font data), `@azure/identity` (MSAL tree), and `stripe`
+are now lazy-loaded at point of use instead of at module scope, so hot public
+routes served by the merged handlers (e.g. `/track`) stop paying for them.
+
+### Misc request-path savings (Medium)
+- AAD Graph tokens cached at module scope per tenant/client (~0.3–0.8 s saved
+  per SharePoint file; an order uploads up to 3 files).
+- Order POST: `readConfig`/`readData` fetched in parallel; body-size cap
+  checked via `Content-Length` instead of re-`JSON.stringify`ing a payload
+  that can be 10 MB+ of base64.
+
+---
+
 ## 2026-06-01 — Security pass (cont.): plan-save parity, audit log, error hygiene
 
 Second batch from the review backlog.

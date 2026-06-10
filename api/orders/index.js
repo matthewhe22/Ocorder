@@ -8,7 +8,6 @@ import { generateOrderPdf } from "../_lib/pdf.js";
 import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
 import { detectPiqPayment } from "../_lib/piq.js";
 import { normaliseLotNumber } from "../_lib/constants.js";
-import Stripe from "stripe";
 
 // Cold-start assertion: log loudly if CRON_SECRET is missing. Without it, the
 // Vercel cron at 02:30 UTC is rejected with 401 inside the handler below and
@@ -323,21 +322,24 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   // Cap the request body size to keep a malicious client from streaming a
-  // huge JSON blob through req.json(). 10 MB is generous (covers a max-sized
-  // authority PDF after base64 inflation) but bounded.
+  // huge JSON blob through req.json(). 12 MB is generous (covers a max-sized
+  // authority PDF after base64 inflation) but bounded. Checked via the
+  // Content-Length header — re-serialising the parsed body just to measure it
+  // costs a full extra copy of a potentially 10 MB payload on every order.
   const ORDER_BODY_MAX = 12 * 1024 * 1024;
-  try {
-    if (JSON.stringify(body).length > ORDER_BODY_MAX) {
-      return res.status(413).json({ error: "Order payload too large." });
-    }
-  } catch { /* not stringifiable — fall through to other validators */ }
+  const contentLength = Number(req.headers?.["content-length"] || 0);
+  if (contentLength > ORDER_BODY_MAX || (body.lotAuthority?.data?.length || 0) > ORDER_BODY_MAX) {
+    return res.status(413).json({ error: "Order payload too large." });
+  }
 
   const order = body.order || body;
   if (!Array.isArray(order?.items) || order.items.length === 0) return res.status(400).json({ error: "Invalid order: 'items' must be a non-empty array." });
   if (!order?.payment) return res.status(400).json({ error: "Invalid order: 'payment' method is required (bank, payid, stripe)." });
 
   try {
-    const cfg      = await readConfig();
+    // Config and plan catalog are independent reads — fetch in parallel to
+    // save a sequential Redis round-trip on every order.
+    const [cfg, planData] = await Promise.all([readConfig(), readData()]);
     const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
     const smtp     = cfg.smtp || {};
     const toEmail  = cfg.orderEmail || "Orders@tocs.co";
@@ -399,11 +401,11 @@ export default async function handler(req, res) {
       order.status = "Pending Payment";
     }
 
-    // Plan catalog — read ONCE here and reuse for both the piqLotId lookup and
-    // the price/total reconciliation below. Both are read-only plan lookups and
-    // the store is not mutated between them, so a single snapshot is correct and
-    // saves a Redis round-trip per order (previously read twice for keys orders).
-    const planData = await readData();
+    // Plan catalog (`planData`, fetched above with the config) is read ONCE and
+    // reused for both the piqLotId lookup and the price/total reconciliation
+    // below. Both are read-only plan lookups and the store is not mutated
+    // between them, so a single snapshot is correct and saves a Redis
+    // round-trip per order.
 
     // Auto-populate piqLotId for keys orders (enables PIQ payment polling)
     // Look up the lot in the plan's lots array by lot number and copy its piqLotId.
@@ -585,6 +587,9 @@ export default async function handler(req, res) {
     // are all skipped for Stripe orders (accepted limitation for initial implementation).
     if (order.payment === "stripe") {
       try {
+        // Lazy import — stripe's module graph is multi-MB and only the stripe
+        // payment branch needs it; keeps cold starts fast for bank/PayID orders.
+        const { default: Stripe } = await import("stripe");
         const stripe = new Stripe(stripeKey);
         // Prefer the env-configured canonical origin so a tampered `Host`
         // header can't redirect paying customers to attacker.com after Stripe

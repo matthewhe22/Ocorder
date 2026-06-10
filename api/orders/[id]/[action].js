@@ -7,7 +7,7 @@
 //                 POST /api/orders/:id/stripe-confirm  (public — no admin auth)
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
-import Stripe from "stripe";
+import { waitUntil } from "@vercel/functions";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readData, writeData, readConfig, validToken, validAdminToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
 import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment, pushAuditOnce } from "../../_lib/sharepoint.js";
@@ -15,6 +15,14 @@ import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, 
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
 import { detectPiqPayment } from "../../_lib/piq.js";
 import { VALID_STATUSES, AMENDABLE_STATUSES, normaliseLotNumber } from "../../_lib/constants.js";
+
+// Stripe is only needed by the stripe-confirm/stripe-cancel actions, but this
+// merged handler also serves hot public routes like /track. Lazy-loading keeps
+// the multi-MB stripe module graph out of every cold start.
+async function getStripe(key) {
+  const { default: Stripe } = await import("stripe");
+  return new Stripe(key);
+}
 
 // ── HTML escape helper ────────────────────────────────────────────────────────
 function esc(str) {
@@ -1019,7 +1027,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No Stripe session associated with this order." });
     }
 
-    const stripe = new Stripe(stripeKey);
+    const stripe = await getStripe(stripeKey);
     let session;
     try {
       session = await stripe.checkout.sessions.retrieve(stripeSessionIdRef);
@@ -1142,6 +1150,7 @@ export default async function handler(req, res) {
     }
     // ── END SP uploads ──────────────────────────────────────────────────────────
 
+    let emailPromise = Promise.resolve();
     if (smtp.host && smtp.user && smtp.pass) {
       const authAttachment = (authDoc?.data && authDoc.filename)
         ? [{ filename: authDoc.filename, content: authDoc.data, encoding: "base64", contentType: authDoc.contentType || "application/octet-stream" }]
@@ -1175,7 +1184,7 @@ export default async function handler(req, res) {
           }).catch(e => console.error("Customer stripe email failed:", e.message))
         );
       }
-      await Promise.allSettled(emailJobs).then(async results => {
+      emailPromise = Promise.allSettled(emailJobs).then(async results => {
         const sent = results.filter(r => r.status === "fulfilled").length;
         console.log(`Stripe-confirm emails: ${sent}/${results.length} sent for order ${id}`);
         const labels = ["Admin notification", "Customer confirmation"];
@@ -1199,16 +1208,26 @@ export default async function handler(req, res) {
       });
     }
 
-    // Send response before awaiting SP — customer should not wait for uploads
+    // Respond BEFORE emails (~6.6 s with SMTP2GO) and SP uploads settle — this
+    // is the post-payment redirect, so the paying customer should see their
+    // confirmation in well under a second. The "Paid" status is already durable
+    // in Redis. Same waitUntil pattern as orders/index.js: on Vercel the
+    // invocation is kept alive after the response is flushed; off-Vercel
+    // (local server, tests) the work is awaited inline after the response so
+    // it is never silently dropped.
     res.status(200).json({ success: true, order: confirmedOrder });
 
-    // Allow SP uploads to finish if still in-flight.
-    // NOTE: stripe-confirm has ~1–1.5s of pre-IIFE overhead (readData, Stripe API, writeData,
-    // readConfig, readAuthority) before the IIFE and emails start. Combined with ~6.6s emails,
-    // the remaining budget for await spPromise is tighter than orders/index.js (~1–2s max).
-    // SP uploads typically complete in 2–3s; if they exceed the Vercel 10s limit, audit log
-    // entries will not be written but Redis data is not corrupted.
-    await spPromise;
+    const backgroundWork = Promise.allSettled([spPromise, emailPromise]);
+    let deferred = false;
+    if (process.env.VERCEL) {
+      try {
+        waitUntil(backgroundWork);
+        deferred = true;
+      } catch (e) {
+        console.warn("waitUntil registration failed; awaiting background work inline:", e?.message);
+      }
+    }
+    if (!deferred) await backgroundWork;
     return;
   }
   // ── END stripe-confirm ─────────────────────────────────────────────────────
@@ -1262,7 +1281,7 @@ export default async function handler(req, res) {
     const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
     if (stripeKey) {
       try {
-        const stripe = new Stripe(stripeKey);
+        const stripe = await getStripe(stripeKey);
         const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
         if (session.payment_status === "paid") {
           // Race condition: payment completed just as user hit cancel — honour the payment

@@ -1,7 +1,15 @@
 // api/_lib/pdf.js — Order summary PDF generation using pdfkit
 // Produces an A4 PDF receipt for each order, saved to SharePoint alongside authority docs.
 
-import PDFDocument from "pdfkit";
+// pdfkit bundles megabytes of embedded font data — loading it at module scope
+// would tax the cold start of every handler that imports this file, including
+// routes that never generate a PDF (e.g. public /track). Load it on first use
+// instead and cache the promise so repeat calls pay nothing.
+let pdfkitPromise = null;
+function getPDFDocument() {
+  if (!pdfkitPromise) pdfkitPromise = import("pdfkit").then(m => m.default);
+  return pdfkitPromise;
+}
 
 // Currency formatter
 const fmt = (n) => "$" + Number(n || 0).toFixed(2);
@@ -14,7 +22,8 @@ const exGst  = (total) => total - gstOf(total);
  * @param {object} order  — Full order object from Redis
  * @returns {Promise<Buffer>} PDF file as a Node.js Buffer
  */
-export function generateOrderPdf(order) {
+export async function generateOrderPdf(order) {
+  const PDFDocument = await getPDFDocument();
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, info: {
       Title: `Order ${order.id} — TOCS`,
@@ -208,7 +217,8 @@ export function generateOrderPdf(order) {
  * @param {string} sessionId   — Stripe checkout session ID (cs_live_... or cs_test_...)
  * @returns {Promise<Buffer>}  PDF file as a Node.js Buffer
  */
-export function generateReceiptPdf(order, sessionId) {
+export async function generateReceiptPdf(order, sessionId) {
+  const PDFDocument = await getPDFDocument();
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, info: {
       Title: `Payment Receipt — Order ${order.id} — TOCS`,
