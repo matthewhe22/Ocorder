@@ -2,6 +2,37 @@
 
 ---
 
+## 2026-06-23 — Prevent duplicate Owner Corporations on lot import
+
+A PropertyIQ-imported building creates its Owner Corporations as
+`OC-<piqScheduleId>` (e.g. OC-159, OC-160). The spreadsheet lot import,
+however, minted brand-new ids by sheet position (`OC-1`, `OC-2`, …) and
+assigned every lot to them — leaving buildings with duplicate OCs and lots
+pointing at the wrong pair.
+
+### Import now reconciles against existing OCs by name (src/App.jsx)
+`importLotsFromFile` resolves each sheet/section to an OC id by **matching its
+name (case-insensitive, whitespace-normalised) against the building's existing
+Owner Corporations first**. Only when there is no match does it mint a fresh,
+**non-colliding** id (lowest unused `OC-N`, instead of a position-based one
+that collided with the PIQ ids). A repeated sheet name reuses the same id.
+
+### Import confirmation shows the OC mapping (src/App.jsx)
+Before writing, the confirm dialog now lists which sheets **matched existing
+OCs** (`"Owners Corporation 1" → OC-159`) versus which will **create new OCs**,
+so allocations are visible up front.
+
+### Server-side backstop warning (api/plans.js, server.js)
+`import-lots` now detects when an import would add brand-new OCs to a building
+already linked to PropertyIQ (`piqBuildingId`, or any OC with `piqScheduleId`)
+and returns a non-blocking `warning` — surfaced in the admin toast — so a
+direct API caller or a name mismatch can't silently re-introduce duplicates.
+
+### One-time data repair (scripts/fix-oc-allocation.mjs)
+Added earlier: a dry-run-by-default, name-based migration that re-points lots
+from placeholder OCs onto the canonical PIQ OCs and removes the orphans, for
+buildings already affected.
+
 ## 2026-06-10 — Performance pass 4: per-order Redis keys replace the monolithic blob
 
 Final batch from the multi-agent speed review — removes the long-term

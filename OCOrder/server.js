@@ -1826,13 +1826,23 @@ async function handler(req, res) {
       const d = readData();
       const idx = d.strataPlans.findIndex(p => p.id === planId);
       if (idx === -1) return json(res, 404, { error: "Plan not found." });
+      // Backstop warning (non-blocking): minting brand-new OCs onto a building
+      // already linked to PropertyIQ is the signature of the duplicate-OC bug.
+      let ocWarning = null;
       // Merge ownerCorps non-destructively (add new, keep existing)
       if (ownerCorps) {
         const existing = d.strataPlans[idx].ownerCorps || {};
+        const piqLinked = !!d.strataPlans[idx].piqBuildingId ||
+          Object.values(existing).some(oc => oc && oc.piqScheduleId != null);
+        const addedOcIds = [];
         for (const [id, oc] of Object.entries(ownerCorps)) {
-          if (!existing[id]) existing[id] = oc;
+          if (!existing[id]) { existing[id] = oc; addedOcIds.push(id); }
         }
         d.strataPlans[idx].ownerCorps = existing;
+        if (piqLinked && addedOcIds.length > 0) {
+          ocWarning = `Import added ${addedOcIds.length} new Owner Corporation(s) (${addedOcIds.join(", ")}) to a PropertyIQ-linked building. If these duplicate existing OCs, re-check the lot allocation.`;
+          console.warn(`[plans] import-lots WARNING: plan ${planId}: ${ocWarning}`);
+        }
       }
       // Merge lots by lot number (update existing, add new — never delete)
       const VALID_TYPES = ["Residential", "Commercial", "Parking"];
@@ -1859,7 +1869,7 @@ async function handler(req, res) {
         { ts: new Date().toISOString(), action: "Lots imported", note: `+${added} new, ${updated} updated${ocNote}` },
       ];
       writeData(d);
-      return json(res, 200, { ok: true, count: existingLots.length, added, updated, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined });
+      return json(res, 200, { ok: true, count: existingLots.length, added, updated, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined, ...(ocWarning ? { warning: ocWarning } : {}) });
     }
     const { plans } = body;
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });

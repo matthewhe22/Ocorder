@@ -41,6 +41,14 @@ export default async function handler(req, res) {
     const idx = data.strataPlans.findIndex(p => p.id === planId);
     if (idx === -1) return res.status(404).json({ error: "Plan not found." });
 
+    // Backstop warning (non-blocking): minting brand-new OCs onto a building
+    // that is already linked to PropertyIQ is the signature of the duplicate-OC
+    // bug (a per-sheet import creating OC-1/OC-2 alongside the real
+    // OC-<scheduleId>). The client now matches by name to avoid this, but a
+    // direct API caller or a name mismatch could still trigger it — so we
+    // surface a warning the admin UI shows after the import.
+    let ocWarning = null;
+
     // ── Validate + merge ownerCorps (non-destructive: add new OCs, keep existing) ─
     if (incomingOCs !== undefined) {
       if (!incomingOCs || typeof incomingOCs !== "object" || Array.isArray(incomingOCs))
@@ -52,10 +60,17 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: `ownerCorps entry '${ocId}' must have a name string.` });
       }
       const existing = data.strataPlans[idx].ownerCorps || {};
+      const piqLinked = !!data.strataPlans[idx].piqBuildingId ||
+        Object.values(existing).some(oc => oc && oc.piqScheduleId != null);
+      const addedOcIds = [];
       for (const [id, oc] of Object.entries(incomingOCs)) {
-        if (!existing[id]) existing[id] = oc;
+        if (!existing[id]) { existing[id] = oc; addedOcIds.push(id); }
       }
       data.strataPlans[idx].ownerCorps = existing;
+      if (piqLinked && addedOcIds.length > 0) {
+        ocWarning = `Import added ${addedOcIds.length} new Owner Corporation(s) (${addedOcIds.join(", ")}) to a PropertyIQ-linked building. If these duplicate existing OCs, re-check the lot allocation.`;
+        console.warn(`[plans] import-lots WARNING: plan ${planId}: ${ocWarning}`);
+      }
     }
 
     // ── Merge lots (non-destructive: update existing by lot number, add new) ────
@@ -94,7 +109,7 @@ export default async function handler(req, res) {
     data.strataPlans[idx].lots = existingLots;
     console.log(`[plans] import-lots: Plan ${planId}: +${added} new, ${updated} updated (total ${existingLots.length})`);
     await writeData(data);
-    return res.status(200).json({ ok: true, count: existingLots.length, added, updated });
+    return res.status(200).json({ ok: true, count: existingLots.length, added, updated, ...(ocWarning ? { warning: ocWarning } : {}) });
   }
 
   // ── Save / replace full strataPlans array ─────────────────────────────────

@@ -3951,14 +3951,45 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       let lots = [];
       let newOwnerCorps = null;
+      let ocMapping = null; // [{ sheet, ocId, status:"existing"|"new" }] — shown in the confirm dialog
+
+      // Existing OCs on the target building, indexed by normalised name so an
+      // import can be REUSED onto them instead of minting fresh OC-N ids. This
+      // is what stops a per-sheet import from creating duplicate OCs: e.g. a
+      // PropertyIQ building already carries OC-159 "Owners Corporation 1", so a
+      // sheet named "Owners Corporation 1" must map onto OC-159, not a new OC-1.
+      const targetPlan = (data.strataPlans || []).find(p => p.id === targetPlanId);
+      const existingOCs = targetPlan?.ownerCorps || {};
+      const normName = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const existingByName = new Map(
+        Object.entries(existingOCs).map(([id, oc]) => [normName(oc?.name), id])
+      );
+      // Lowest unused OC-N id, considering existing OCs and ones minted this import.
+      const freshOcId = (created) => {
+        let n = 1;
+        while (existingOCs[`OC-${n}`] || created[`OC-${n}`]) n++;
+        return `OC-${n}`;
+      };
+      // Resolve a sheet/section name to an OC id: reuse an existing OC with the
+      // same name (case-insensitive), otherwise mint a fresh non-colliding id.
+      const resolveOcId = (rawName, created, mapping) => {
+        const name = String(rawName || "").trim();
+        const match = name ? existingByName.get(normName(name)) : null;
+        if (match) { mapping.push({ sheet: name, ocId: match, status: "existing" }); return match; }
+        const id = freshOcId(created);
+        created[id] = { name, levy: 0 };
+        existingByName.set(normName(name), id); // a repeated sheet name reuses this id
+        mapping.push({ sheet: name, ocId: id, status: "new" });
+        return id;
+      };
 
       if (wb.SheetNames.length > 1) {
-        // Multi-sheet: each sheet = one Owner Corporation
+        // Multi-sheet: each sheet = one Owner Corporation. Match by name first.
         newOwnerCorps = {};
+        ocMapping = [];
         let lotIdx = 0;
-        wb.SheetNames.forEach((sheetName, sheetIdx) => {
-          const ocId = "OC-" + (sheetIdx + 1);
-          newOwnerCorps[ocId] = { name: sheetName.trim(), levy: 0 };
+        wb.SheetNames.forEach((sheetName) => {
+          const ocId = resolveOcId(sheetName, newOwnerCorps, ocMapping);
           const ws = wb.Sheets[sheetName];
           const sheetLots = parseSheetLots(ws, ocId, lotIdx);
           lotIdx += sheetLots.length;
@@ -3978,21 +4009,24 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         lots = [...byNumber.values()];
       } else {
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const targetPlan = (data.strataPlans || []).find(p => p.id === targetPlanId);
-        const ocIds = Object.keys(targetPlan?.ownerCorps || {});
+        const ocIds = Object.keys(existingOCs);
         if (ocIds.length === 1) {
           // One OC already defined — auto-assign it to all lots
           lots = parseSheetLots(ws, ocIds[0], 0);
         } else if (ocIds.length === 0) {
           // No OCs yet — create one from the sheet name (mirrors multi-sheet behaviour)
-          const ocId = "OC-1";
-          newOwnerCorps = { [ocId]: { name: wb.SheetNames[0].trim(), levy: 0 } };
+          newOwnerCorps = {};
+          ocMapping = [];
+          const ocId = resolveOcId(wb.SheetNames[0], newOwnerCorps, ocMapping);
           lots = parseSheetLots(ws, ocId, 0);
         } else {
           // Multiple OCs — read OC assignment from the Excel column
           lots = parseSheetLots(ws, null, 0);
         }
       }
+
+      // If every sheet matched an existing OC, there is nothing new to create.
+      if (newOwnerCorps && Object.keys(newOwnerCorps).length === 0) newOwnerCorps = null;
 
       if (!lots.length) { appToast({ type: "err", message: "No lots found in the file. Check that the spreadsheet has a 'Lot Number' column." }); return; }
 
@@ -4010,10 +4044,22 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         if (!proceed) return;
       }
 
-      const ocMsg = newOwnerCorps
-        ? "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
-          Object.entries(newOwnerCorps).map(([id, oc]) => "• " + id + ": " + oc.name).join("\n")
-        : "";
+      let ocMsg = "";
+      if (ocMapping && ocMapping.length) {
+        const matched = ocMapping.filter(m => m.status === "existing");
+        const created = ocMapping.filter(m => m.status === "new");
+        if (matched.length) {
+          ocMsg += "\n\nMatched to existing Owner Corporations:\n" +
+            matched.map(m => `• "${m.sheet}" → ${m.ocId} (${existingOCs[m.ocId]?.name || m.ocId})`).join("\n");
+        }
+        if (created.length) {
+          ocMsg += "\n\nNEW Owner Corporations to be created:\n" +
+            created.map(m => `• ${m.ocId}: ${m.sheet}`).join("\n");
+        }
+      } else if (newOwnerCorps) {
+        ocMsg = "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
+          Object.entries(newOwnerCorps).map(([id, oc]) => "• " + id + ": " + oc.name).join("\n");
+      }
       const confirmed = await appConfirm({
         title: `Import ${lots.length} lots into ${targetPlanId}?`,
         message: `Existing lots will be updated (matched by lot number). New lots will be added. No lots will be deleted.${ocMsg}`,
@@ -4039,7 +4085,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         } catch { /* UI will reflect server state on next load */ }
         const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) created/updated." : "";
         const summary = rj.added != null ? ` (${rj.added} new, ${rj.updated} updated)` : "";
-        appToast({ type: "ok", message: `Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}` });
+        appToast({
+          type: rj.warning ? "err" : "ok",
+          message: `Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}` + (rj.warning ? `\n\n⚠ ${rj.warning}` : ""),
+        });
       } else {
         const d = await r.json().catch(() => ({}));
         appToast({ type: "err", message: "Import failed: " + (d.error || "Unknown error") });
