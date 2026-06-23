@@ -72,24 +72,33 @@ function buildMapping(plan) {
   if (placeholder.length === 0)
     return { map: {}, canonical, placeholder }; // already clean
 
-  // Index canonical OCs by normalised name (must be unique to match safely).
+  // Index canonical OCs by normalised name AND by normalised id, so a
+  // placeholder can be matched either way:
+  //   • by name  — e.g. OC-1 "Owners Corporation 1" → OC-159 (same name)
+  //   • by id    — e.g. OC-3 whose *name* is literally "OC-159" (the user named
+  //                a spreadsheet tab after the target OC id) → OC-159
   const canonByName = new Map();
+  const canonById   = new Map();
   for (const [id, oc] of canonical) {
+    canonById.set(norm(id), id);
     const key = norm(oc.name);
-    if (canonByName.has(key))
-      throw new Error(`Two PIQ OCs share the name "${oc.name}" on ${plan.id}; can't map by name safely. Aborting.`);
-    canonByName.set(key, id);
+    if (key) {
+      if (canonByName.has(key))
+        throw new Error(`Two PIQ OCs share the name "${oc.name}" on ${plan.id}; can't map by name safely. Aborting.`);
+      canonByName.set(key, id);
+    }
   }
 
   const map = {};
   const unmatched = [];
   for (const [id, oc] of placeholder) {
-    const target = canonByName.get(norm(oc?.name));
+    const name = norm(oc?.name);
+    const target = canonByName.get(name) || canonById.get(name);
     if (!target) unmatched.push(`${id} ("${oc?.name ?? ""}")`);
     else map[id] = target;
   }
   if (unmatched.length)
-    throw new Error(`Could not match these placeholder OCs to a PIQ OC by name: ${unmatched.join(", ")}. Aborting — no changes made.`);
+    throw new Error(`Could not match these placeholder OCs to a PIQ OC by name or id: ${unmatched.join(", ")}. Aborting — no changes made.`);
   return { map, canonical, placeholder };
 }
 
