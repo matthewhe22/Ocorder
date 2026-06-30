@@ -9,6 +9,7 @@ import nodemailer from "nodemailer";
 // Shared with the Vercel handlers so the local dev server can't drift from
 // production on what counts as a valid order status.
 import { VALID_STATUSES } from "../api/_lib/constants.js";
+import { generateOrderListPdf } from "../api/_lib/pdf.js";
 // Vercel handlers, mounted via callVercelHandler() so the local dev server
 // can exercise Stripe / SharePoint / PIQ flows end-to-end without duplicating
 // ~1500 lines of handler logic. Set LOCAL_KV_DIR (or REDIS_URL) so the
@@ -1714,45 +1715,20 @@ async function handler(req, res) {
     }
   }
 
-  // ── GET /api/orders/export  (admin — CSV download) ────────────────────────
-  // Bearer header only; query-string token fallback removed to prevent token
-  // leakage via browser history, server logs, referrer headers and CDN caches.
+  // ── GET /api/orders/export  (admin — formatted PDF download) ───────────────
   if (urlPath === "/api/orders/export" && method === "GET") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const d = readData();
-    const rows = [["Order ID","Date","Name","Email","Phone","Building Name","Lot Number","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"]];
-    for (const o of d.orders) {
-      const adminCharge = (o.items || []).reduce((sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0);
-      rows.push([
-        o.id,
-        new Date(o.date).toLocaleDateString("en-AU"),
-        o.contactInfo?.name  || "",
-        o.contactInfo?.email || "",
-        o.contactInfo?.phone || "",
-        o.items?.[0]?.planName  || "",
-        o.items?.[0]?.lotNumber || "",
-        o.items?.length ?? 0,
-        (o.total || 0).toFixed(2),
-        o.payment || "",
-        o.status  || "",
-        adminCharge > 0 ? adminCharge.toFixed(2) : "",
-      ]);
-    }
-    // Strip control characters (including embedded newlines) to prevent row-splitting in spreadsheets
-    const csvEsc = v => {
-      const s = String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""');
-      // Prefix formula-injection characters to prevent spreadsheet code execution
-      return /^[=+\-@\t]/.test(s) ? `"'${s}"` : `"${s}"`;
-    };
-    const csv = rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
-    const csvBuf = Buffer.from(csv, "utf8");
+    const d   = readData();
+    const cfg = readConfig();
+    const pdfBuf = await generateOrderListPdf(d.orders, cfg);
+    const date = new Date().toISOString().slice(0, 10);
     res.writeHead(200, {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="tocs-orders-${new Date().toISOString().slice(0,10)}.csv"`,
-      "Content-Length": csvBuf.length,
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="tocs-orders-${date}.pdf"`,
+      "Content-Length": pdfBuf.length,
     });
-    return res.end(csvBuf);
+    return res.end(pdfBuf);
   }
 
   // ── POST /api/lots/import  (admin — import lots from parsed Excel data) ────

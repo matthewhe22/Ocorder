@@ -4408,11 +4408,11 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                       if (!r.ok) { showAdminToast("err", "Export failed."); return; }
                       const blob = await r.blob();
                       const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a"); a.href = url; a.download = "orders.csv"; a.click();
+                      const a = document.createElement("a"); a.href = url; a.download = "orders.pdf"; a.click();
                       URL.revokeObjectURL(url);
                     } catch { showAdminToast("err", "Export failed."); }
                   }}>
-                  <Ic n="doc" s={13}/> Export CSV
+                  <Ic n="doc" s={13}/> Export PDF
                 </button>
               )}
             </div>
