@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment, Component } from "react";
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const LOGO_B64 = "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";
@@ -56,7 +56,7 @@ const PHONE_RE  = /^\+?[\d\s\-().]{7,20}$/;
 const DEFAULT_CONTACT = {
   name: "", email: "", phone: "", companyName: "",
   applicantType: "owner", ownerName: "", ocReference: "",
-  shippingAddress: { street: "", suburb: "", state: "NSW", postcode: "" },
+  shippingAddress: { street: "", suburb: "", state: "VIC", postcode: "" },
 };
 
 // Infer effective applicant type for orders that pre-date the applicantType field
@@ -75,47 +75,51 @@ const calcShippingCost = (opt, cartItems, products) => {
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const Ic = ({ n, s=18 }) => {
-  const icons = {
-    arrow:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>,
-    arrowL:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>,
-    check:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>,
-    trash:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>,
-    plus:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>,
-    cart:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/></svg>,
-    settings:<svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
-    doc:     <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>,
-    x:       <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>,
-    bank:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/></svg>,
-    credit:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>,
-    building:<svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M9 3.75H4.5A2.25 2.25 0 002.25 6v13.5H9M9 3.75h6M9 3.75V21m6-17.25h4.5A2.25 2.25 0 0121.75 6v13.5H15M15 3.75V21M9 9h.008v.008H9V9zm3 0h.008v.008H12V9zm3 0h.008v.008H15V9zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008z"/></svg>,
-    search:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>,
-    copy:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>,
-    lock:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>,
-    eye:     <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
-    eyeOff:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>,
-    shield:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>,
-    edit:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>,
-    print:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z"/></svg>,
-    list:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
-    info:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>,
-    logout:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>,
-    upload:  <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13"/></svg>,
-    mail:    <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>,
-    image:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
-    cloud:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/></svg>,
-    key:     <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>,
-    invoice: <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/></svg>,
-    truck:   <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>,
-  };
-  return icons[n] || null;
+// Icon factories — built per request. A plain object literal here would
+// construct all ~30 SVG element trees on every <Ic/> render (tables render
+// hundreds of icons), only to return one of them.
+const ICONS = {
+    arrow:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>,
+    arrowL:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>,
+    check:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>,
+    trash:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>,
+    plus:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>,
+    cart:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/></svg>,
+    settings:(s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
+    doc:     (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>,
+    x:       (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>,
+    bank:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/></svg>,
+    credit:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>,
+    building:(s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M9 3.75H4.5A2.25 2.25 0 002.25 6v13.5H9M9 3.75h6M9 3.75V21m6-17.25h4.5A2.25 2.25 0 0121.75 6v13.5H15M15 3.75V21M9 9h.008v.008H9V9zm3 0h.008v.008H12V9zm3 0h.008v.008H15V9zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008zm-6 3h.008v.008H9v-.008zm3 0h.008v.008H12v-.008zm3 0h.008v.008H15v-.008z"/></svg>,
+    search:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>,
+    copy:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>,
+    lock:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>,
+    eye:     (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
+    eyeOff:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>,
+    shield:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>,
+    edit:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>,
+    print:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z"/></svg>,
+    list:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
+    info:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>,
+    logout:  (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>,
+    upload:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13"/></svg>,
+    download: (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>,
+    mail:    (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>,
+    image:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>,
+    cloud:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/></svg>,
+    key:     (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>,
+    invoice: (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/></svg>,
+    truck:   (s) => <svg width={s} height={s} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>,
 };
+const Ic = ({ n, s = 18 }) => (ICONS[n] ? ICONS[n](s) : null);
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
+/* Fonts are loaded via <link> in dist/index.html (see build.mjs) so they start
+   downloading in parallel with the bundle instead of after first React render. */
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   :root {
     --forest:      #1c3326;
@@ -332,6 +336,7 @@ const CSS = `
   .bg-slate { background: #e8edf5; color: #2d4a7a; }
   .bg-purple { background: #f3f0ff; color: #6d28d9; }
   .bg-warn { background: var(--warn-light); color: var(--warn); }
+  .bg-issued { background: #166534; color: #fff; }
   .search-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); }
   /* Category selector cards */
   .cat-card { background: #fff; border: 2px solid var(--border); border-radius: 8px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; position: relative; }
@@ -340,12 +345,17 @@ const CSS = `
   .cat-card-icon { font-size: 1.6rem; margin-bottom: 4px; }
   .cat-card-title { font-size: 0.95rem; font-weight: 700; color: var(--forest); }
   .cat-card-sub { font-size: 0.78rem; color: var(--mid); line-height: 1.4; }
-  .tbl-act-btn { background: none; border: 1px solid var(--border); font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 4px 10px; border-radius: 3px; transition: all 0.15s; color: var(--mid); }
+  .tbl-act-btn { background: none; border: 1px solid var(--border); font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 4px 10px; border-radius: 3px; transition: all 0.15s; color: var(--mid); white-space: nowrap; }
   .tbl-act-btn:hover { border-color: var(--forest); color: var(--forest); background: var(--sage-tint); }
   .tbl-act-btn.danger { color: var(--red); border-color: var(--red-light); }
   .tbl-act-btn.danger:hover { background: var(--red-light); }
   .tbl-act-btn.success { color: var(--ok); border-color: var(--ok-light); }
   .tbl-act-btn.success:hover { background: var(--ok-light); }
+  .order-more-menu { position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.13); z-index:60; min-width:170px; padding:4px 0; }
+  .order-more-item { display:block; width:100%; text-align:left; background:none; border:none; padding:7px 14px; font-family:'Inter',sans-serif; font-size:0.75rem; font-weight:600; cursor:pointer; color:var(--mid); white-space:nowrap; text-decoration:none; }
+  .order-more-item:hover { background:var(--sage-tint); color:var(--forest); }
+  .order-more-item.danger { color:var(--red); }
+  .order-more-item.danger:hover { background:var(--red-light); color:var(--red); }
 
   /* ── LOGIN SCREEN ── */
   .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--cream); padding: 2rem; }
@@ -387,6 +397,19 @@ const CSS = `
   .hiw-cell.hiw-act .hiw-name { color:white; }
   .hiw-desc { font-size:0.64rem; color:var(--muted); line-height:1.5; position:relative; z-index:1; }
   .hiw-cell.hiw-act .hiw-desc { color:rgba(255,255,255,0.55); }
+  /* Order tracking section */
+  .track-section { border:1.5px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:14px; background:white; }
+  .track-row { display:flex; gap:10px; align-items:center; }
+  .track-input { flex:1; padding:10px 14px; border:1.5px solid var(--border); border-radius:7px; font-family:'Inter',sans-serif; font-size:0.88rem; color:var(--ink); background:white; transition:border-color 0.15s; }
+  .track-input:focus { border-color:var(--forest); outline:none; box-shadow:0 0 0 3px rgba(28,51,38,0.08); }
+  .track-btn { padding:10px 18px; background:var(--forest); color:white; border:none; border-radius:7px; font-family:'Inter',sans-serif; font-size:0.85rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:background 0.15s; }
+  .track-btn:hover:not(:disabled) { background:var(--forest3); }
+  .track-btn:disabled { opacity:0.55; cursor:not-allowed; }
+  .track-result { margin-top:14px; padding:14px 16px; border:1.5px solid var(--border); border-radius:9px; background:#fafafa; }
+  .track-result-id { font-size:0.65rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .track-result-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .track-status-badge { font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
+  .track-error { margin-top:10px; font-size:0.82rem; color:var(--red); }
   /* Selected building card */
   .bsel { border:2px solid var(--forest); border-radius:14px; overflow:hidden; box-shadow:0 4px 20px rgba(28,51,38,0.12); margin-bottom:14px; background:white; }
   .bsel-hdr { background:var(--forest); padding:12px 18px; display:flex; align-items:center; justify-content:space-between; }
@@ -451,12 +474,437 @@ const CSS = `
     .step-lbl.curr { display: block; }
   }
   ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: var(--cream); } ::-webkit-scrollbar-thumb { background: var(--sage-light); }
+
+  /* ── ADDITIONAL DESIGN TOKENS ──────────────────────────────────────────────
+     Status-badge & action-button colours that previously lived as inline hex
+     in row-action JSX. Centralising them keeps the palette consistent and
+     makes future re-themes a single-file edit. */
+  :root {
+    --teal:        #0d6e62;
+    --teal-tint:   #e0f5f2;
+    --slate:       #2d4a7a;
+    --slate-tint:  #e8edf5;
+    --purple:      #6d28d9;
+    --purple-tint: #f3f0ff;
+    --amber:       #c2410c;
+    --amber-tint:  #fff7ed;
+    --amber-bd:    #fed7aa;
+    --green:       #16a34a;
+    --green-tint:  #f0fdf4;
+    --yellow-tint: #fefce8;
+    --hairline:    #e8edf0;
+  }
+
+  /* ── FOCUS-VISIBLE ─────────────────────────────────────────────────────────
+     Keyboard users currently see no focus ring on most action surfaces.
+     Apply a consistent 3px sage-tinted ring across primary interactive elements.
+     Mouse users still see the existing hover state — :focus-visible only fires
+     for keyboard navigation. */
+  .btn:focus-visible,
+  .hn:focus-visible,
+  .add-btn:focus-visible,
+  .at:focus-visible,
+  .tbl-act-btn:focus-visible,
+  .copy-btn:focus-visible,
+  .bsel-change:focus-visible,
+  .ci-rm:focus-visible,
+  .pw-toggle:focus-visible,
+  .track-btn:focus-visible,
+  .s1-search-btn:focus-visible,
+  .search-clear:focus-visible {
+    outline: 3px solid var(--sage);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .cat-card:focus-visible,
+  .pay-method:focus-visible,
+  .lot-card:focus-visible,
+  .plan-card:focus-visible {
+    outline: 3px solid var(--forest);
+    outline-offset: 2px;
+  }
+
+  /* ── TAP TARGETS ──────────────────────────────────────────────────────────
+     iOS HIG and WCAG 2.5.5 recommend 44px minimums; existing buttons range
+     from 24–30px. Apply a min-height + extra padding on touch-friendly
+     surfaces. Desktop layouts are unaffected because none of these had a
+     fixed height. */
+  .tbl-act-btn { min-height: 32px; padding: 6px 12px; }
+  .hn          { min-height: 36px; }
+  .ci-rm       { min-width: 32px; min-height: 32px; padding: 6px; }
+  .copy-btn    { min-width: 36px; min-height: 36px; padding: 8px; }
+  .bsel-change { min-height: 28px; }
+
+  /* ── STICKY CART SAFE AREA ─────────────────────────────────────────────────
+     iPhones with home-indicator gestures clip the bottom 34px. env() shifts
+     the cart up so it stays tappable. */
+  .sticky-cart {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ── MOBILE CARD FALLBACK FOR TABLES ───────────────────────────────────────
+     Under 720px the .tbl rows reflow to vertically-stacked label/value pairs.
+     Each <td> exposes its column header via data-label="…" or aria-label;
+     where neither is present the row falls through unstyled (still readable
+     because we keep the natural <table> semantics).
+     Layout: each <tr> becomes a card with rounded corners + subtle border,
+     each <td> becomes a label/value row using a flex layout. */
+  @media (max-width: 720px) {
+    .tbl-stack thead { display: none; }
+    .tbl-stack tbody, .tbl-stack tr, .tbl-stack td { display: block; width: 100%; }
+    .tbl-stack tr {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 1px 3px rgba(28,51,38,0.04);
+    }
+    .tbl-stack td {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 6px 0;
+      border: none;
+      text-align: left;
+      font-size: 0.84rem;
+      min-height: 28px;
+    }
+    .tbl-stack td::before {
+      content: attr(data-label);
+      flex: 0 0 38%;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-top: 1px;
+    }
+    .tbl-stack td:not([data-label])::before { content: ""; flex: 0; }
+    .tbl-stack td.tbl-actions { flex-wrap: wrap; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--border); margin-top: 4px; }
+    .tbl-stack td.tbl-actions::before { display: none; }
+  }
 `;
 
+// ─── CONFIRM / TOAST PUB-SUB ──────────────────────────────────────────────────
+// Module-level helpers that replace `window.confirm` and `window.alert`. They
+// dispatch DOM CustomEvents which the <DialogHost> below listens for.
+// `appConfirm` returns a Promise<boolean>; `appToast` is fire-and-forget.
+//
+// Why pub/sub instead of context: this codebase keeps everything in one file
+// and a context provider would require threading through 6,000+ lines of
+// existing components; events let us drop the helpers in at any call-site.
+let _confirmResolver = null;
+function appConfirm(opts) {
+  return new Promise(resolve => {
+    if (typeof window === "undefined") return resolve(false);
+    if (_confirmResolver) _confirmResolver(false); // stack-resolve any prior dialog
+    _confirmResolver = resolve;
+    window.dispatchEvent(new CustomEvent("tocs:confirm:show", { detail: opts || {} }));
+  });
+}
+function _confirmAnswer(answer) {
+  const r = _confirmResolver;
+  _confirmResolver = null;
+  if (r) r(answer);
+}
+function appToast(opts) {
+  if (typeof window === "undefined") return;
+  const detail = typeof opts === "string" ? { type: "info", message: opts } : (opts || {});
+  window.dispatchEvent(new CustomEvent("tocs:toast:show", { detail }));
+}
+
+// Host component: renders the active confirm dialog + toast stack, listens
+// to module-level events. One instance is rendered at the App root.
+function DialogHost() {
+  const [confirmState, setConfirmState] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
+
+  useEffect(() => {
+    const onConfirm = (e) => setConfirmState({
+      title:        e.detail?.title    || "Are you sure?",
+      message:      e.detail?.message  || "",
+      confirmText:  e.detail?.confirmText || "Confirm",
+      cancelText:   e.detail?.cancelText  || "Cancel",
+      danger:       !!e.detail?.danger,
+      // When passwordPrompt is set, the dialog shows a password field and
+      // resolves with the entered string (or null on cancel) instead of a
+      // boolean. Used to gate destructive admin actions on a re-confirmation
+      // of the current password, so a stolen 8-h bearer alone isn't enough.
+      passwordPrompt: !!e.detail?.passwordPrompt,
+      passwordLabel:  e.detail?.passwordLabel || "Your current password",
+      password:       "",
+    });
+    const onToast = (e) => {
+      const id = ++toastIdRef.current;
+      const t = {
+        id,
+        type:    e.detail?.type    || "info",
+        message: e.detail?.message || "",
+        timeout: e.detail?.timeout ?? (e.detail?.type === "err" ? 6000 : 3500),
+      };
+      setToasts(arr => [...arr, t]);
+      if (t.timeout > 0) {
+        setTimeout(() => setToasts(arr => arr.filter(x => x.id !== id)), t.timeout);
+      }
+    };
+    window.addEventListener("tocs:confirm:show", onConfirm);
+    window.addEventListener("tocs:toast:show", onToast);
+    return () => {
+      window.removeEventListener("tocs:confirm:show", onConfirm);
+      window.removeEventListener("tocs:toast:show", onToast);
+    };
+  }, []);
+
+  // Escape closes confirm dialog as a "no" / null for passwordPrompt
+  useEffect(() => {
+    if (!confirmState) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { _confirmAnswer(confirmState.passwordPrompt ? null : false); setConfirmState(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmState]);
+
+  return (
+    <>
+      {confirmState && (
+        <div role="dialog" aria-modal="true" aria-labelledby="tocs-confirm-title"
+          onClick={(e) => { if (e.target === e.currentTarget) { _confirmAnswer(false); setConfirmState(null); } }}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.42)", zIndex:1000,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
+          <div style={{ background:"#fff", borderRadius:8, maxWidth:460, width:"100%",
+            padding:"22px 24px 18px", boxShadow:"0 10px 32px rgba(0,0,0,0.25)" }}>
+            <h3 id="tocs-confirm-title" style={{ margin:"0 0 8px", color:"#1c3326", fontSize:"1.05rem" }}>{confirmState.title}</h3>
+            {confirmState.message && (
+              <p style={{ margin:"0 0 14px", color:"#333", fontSize:"0.92rem", whiteSpace:"pre-wrap", lineHeight:1.45 }}>{confirmState.message}</p>
+            )}
+            {confirmState.passwordPrompt && (
+              <div style={{ margin:"0 0 16px" }}>
+                <label style={{ display:"block", fontSize:"0.82rem", color:"#555", marginBottom:6 }}>{confirmState.passwordLabel}</label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={confirmState.password}
+                  onChange={(e) => setConfirmState(s => s ? { ...s, password: e.target.value } : s)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && confirmState.password) { _confirmAnswer(confirmState.password); setConfirmState(null); } }}
+                  style={{ width:"100%", padding:"8px 10px", borderRadius:4, border:"1px solid #c8cdd1", fontSize:"0.92rem", boxSizing:"border-box" }}
+                />
+              </div>
+            )}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+              <button autoFocus={!confirmState.passwordPrompt} onClick={() => { _confirmAnswer(confirmState.passwordPrompt ? null : false); setConfirmState(null); }}
+                style={{ padding:"9px 16px", minHeight:38, borderRadius:4, border:"1px solid #c8cdd1",
+                  background:"#fff", color:"#333", cursor:"pointer", fontSize:"0.88rem" }}>
+                {confirmState.cancelText}
+              </button>
+              <button
+                disabled={confirmState.passwordPrompt && !confirmState.password}
+                onClick={() => {
+                  if (confirmState.passwordPrompt) {
+                    if (!confirmState.password) return;
+                    _confirmAnswer(confirmState.password);
+                  } else {
+                    _confirmAnswer(true);
+                  }
+                  setConfirmState(null);
+                }}
+                style={{ padding:"9px 16px", minHeight:38, borderRadius:4, border:"none",
+                  background: confirmState.danger ? "#b91c1c" : "#1c3326", color:"#fff",
+                  cursor: (confirmState.passwordPrompt && !confirmState.password) ? "not-allowed" : "pointer",
+                  opacity: (confirmState.passwordPrompt && !confirmState.password) ? 0.55 : 1,
+                  fontSize:"0.88rem", fontWeight:600 }}>
+                {confirmState.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toasts.length > 0 && (
+        <div aria-live="polite" style={{ position:"fixed", bottom:"calc(16px + env(safe-area-inset-bottom, 0px))", right:16, zIndex:1100,
+          display:"flex", flexDirection:"column", gap:8, maxWidth:"min(360px, calc(100vw - 32px))" }}>
+          {toasts.map(t => (
+            <div key={t.id} role="status"
+              style={{ background: t.type === "err" ? "#fef2f2" : t.type === "ok" ? "#f0f7f3" : "#f7f7f4",
+                color: t.type === "err" ? "#7f1d1d" : "#1c3326",
+                border: `1px solid ${t.type === "err" ? "#fecaca" : t.type === "ok" ? "#bfd9c8" : "#e0ddd4"}`,
+                borderRadius:6, padding:"10px 14px", fontSize:"0.86rem", lineHeight:1.4,
+                boxShadow:"0 4px 12px rgba(0,0,0,0.08)" }}>
+              {t.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── ERROR BOUNDARY ────────────────────────────────────────────────────────────
+// Catches render-time and lifecycle exceptions in any child subtree so a single
+// thrown error in Admin (or any tab) doesn't white-screen the whole app.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("[ErrorBoundary]", this.props.label || "(unlabeled)", error, info?.componentStack);
+  }
+  reset = () => this.setState({ error: null });
+  render() {
+    if (!this.state.error) return this.props.children;
+    const msg = this.state.error?.message || String(this.state.error || "Unknown error");
+    return (
+      <div role="alert" style={{ maxWidth: 620, margin: "32px auto", padding: "24px 28px",
+        background: "#fff", border: "1px solid var(--border, #e8edf0)", borderRadius: 8,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+        <h2 style={{ marginTop: 0, color: "#1c3326", fontSize: "1.15rem" }}>Something went wrong</h2>
+        <p style={{ color: "#555", fontSize: "0.92rem" }}>
+          The page hit an unexpected error. Please refresh — if it keeps happening, contact{" "}
+          <a href="mailto:info@tocs.co">info@tocs.co</a>.
+        </p>
+        <details style={{ marginTop: 12, fontSize: "0.78rem", color: "#666" }}>
+          <summary style={{ cursor: "pointer" }}>Technical details</summary>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: 8, padding: 8, background: "#f7f7f4", borderRadius: 4 }}>{msg}</pre>
+        </details>
+        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          <button onClick={this.reset} style={{ padding: "8px 14px", borderRadius: 4, border: "1px solid #1c3326", background: "#1c3326", color: "#fff", cursor: "pointer", minHeight: 36 }}>Try again</button>
+          <button onClick={() => window.location.reload()} style={{ padding: "8px 14px", borderRadius: 4, border: "1px solid #1c3326", background: "#fff", color: "#1c3326", cursor: "pointer", minHeight: 36 }}>Reload page</button>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ─── apiCall HELPER ────────────────────────────────────────────────────────────
+// Read a fetch Response safely — returns parsed JSON on success, or { error }
+// extracted from a non-JSON body (e.g. a Vercel 413 plain-text "Request Entity
+// Too Large" page) so callers can show a meaningful message instead of
+// "Unexpected token 'R'".
+async function safeReadResponse(r) {
+  const ct = (r.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    try { return await r.json(); } catch { return {}; }
+  }
+  const text = await r.text().catch(() => "");
+  return { error: (text || "").trim().slice(0, 200) || `HTTP ${r.status}` };
+}
+
+// One thin fetch wrapper used by every component. Centralises:
+//   - Authorization header from sessionStorage (when method !== GET or callers ask for auth)
+//   - JSON request/response handling
+//   - Network-error vs HTTP-error normalisation (caller always sees an Error)
+//   - 401 handling: clears the session token + dispatches "tocs:auth-fail" so
+//     the App can route back to login without prop-drilling onAuthFail
+//   - AbortController integration: pass `signal` from useEffect cleanup to
+//     cancel in-flight requests on unmount/dep-change
+//
+// Usage:
+//   const data = await apiCall("/api/orders", { method: "POST", body: order, signal });
+//   apiCall returns the parsed JSON body, or throws a tagged Error.
+async function apiCall(url, opts = {}) {
+  const { method = "GET", body, headers = {}, signal, auth = true, raw = false } = opts;
+  const finalHeaders = { ...headers };
+  if (auth) {
+    let tok = null;
+    try { tok = sessionStorage.getItem("admin_token"); } catch {}
+    if (tok) finalHeaders["Authorization"] = `Bearer ${tok}`;
+  }
+  let bodyToSend;
+  if (body !== undefined && body !== null) {
+    if (typeof body === "string" || body instanceof FormData) {
+      bodyToSend = body;
+    } else {
+      finalHeaders["Content-Type"] = finalHeaders["Content-Type"] || "application/json";
+      bodyToSend = JSON.stringify(body);
+    }
+  }
+  let res;
+  try {
+    res = await fetch(url, { method, headers: finalHeaders, body: bodyToSend, signal });
+  } catch (e) {
+    if (e?.name === "AbortError") throw e;
+    const err = new Error("Network error — please check your connection and try again.");
+    err.cause = e;
+    err.kind = "network";
+    throw err;
+  }
+  if (res.status === 401 && auth) {
+    try { sessionStorage.removeItem("admin_token"); } catch {}
+    try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {}
+  }
+  if (raw) return res;
+  let payload = null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    try { payload = await res.json(); } catch { payload = null; }
+  } else {
+    try { payload = await res.text(); } catch { payload = null; }
+  }
+  if (!res.ok) {
+    const msg = (payload && payload.error) || (typeof payload === "string" && payload) || `Request failed (${res.status}).`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.kind = "http";
+    err.payload = payload;
+    throw err;
+  }
+  return payload;
+}
+
+// ─── CART PERSISTENCE ──────────────────────────────────────────────────────────
+// Mirror cart + contact + selectedShipping into localStorage keyed by plan id.
+// Survives a page refresh / accidental tab close during step 4. Stale entries
+// (different plan, expired, malformed) are silently dropped on read.
+const CART_TTL_MS = 24 * 3600 * 1000; // 24 hours
+const cartStorageKey = (planId) => `tocs_cart_v1:${planId || "_none"}`;
+function loadCartFor(planId) {
+  if (!planId) return null;
+  try {
+    const raw = localStorage.getItem(cartStorageKey(planId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (parsed.savedAt && Date.now() - parsed.savedAt > CART_TTL_MS) {
+      localStorage.removeItem(cartStorageKey(planId));
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+function saveCartFor(planId, snapshot) {
+  if (!planId) return;
+  try {
+    localStorage.setItem(cartStorageKey(planId), JSON.stringify({ ...snapshot, savedAt: Date.now() }));
+  } catch { /* quota exceeded — ignore */ }
+}
+function clearCartFor(planId) {
+  if (!planId) return;
+  try { localStorage.removeItem(cartStorageKey(planId)); } catch {}
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
+// Admin view/tab are mirrored into the URL hash (#admin/orders) so a refresh,
+// bookmark, or open-in-new-tab lands the admin back on the same screen instead
+// of resetting to the customer portal with all tab state lost.
+const ADMIN_TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
+function viewFromHash() {
+  return window.location.hash.startsWith("#admin") ? "admin" : "portal";
+}
+function adminTabFromHash() {
+  const m = window.location.hash.match(/^#admin\/([a-zA-Z]+)/);
+  return m && ADMIN_TABS.includes(m[1]) ? m[1] : "plans";
+}
+
 export default function App() {
   const [data, setData] = useState(INITIAL_DATA);
-  const [currentView, setCurrentView] = useState("portal");
+  const [currentView, setCurrentView] = useState(viewFromHash);
   const [step, setStep] = useState(1);
   const [selPlan, setSelPlan] = useState(null);
   const [lotNumber, setLotNumber] = useState("");
@@ -468,7 +916,7 @@ export default function App() {
   const [contact, setContact] = useState(DEFAULT_CONTACT);
   const [selectedShipping, setSelectedShipping] = useState(null);
   const [lotAuthFile, setLotAuthFile] = useState(null);
-  const [adminTab, setAdminTab] = useState("plans");
+  const [adminTab, setAdminTab] = useState(adminTabFromHash);
   const [adminToken, setAdminToken] = useState(() => {
     try { return sessionStorage.getItem("admin_token") || null; } catch { return null; }
   });
@@ -487,7 +935,7 @@ export default function App() {
     const savedTok = (() => { try { return sessionStorage.getItem("admin_token"); } catch { return null; } })();
     const dataHeaders = savedTok ? { "Authorization": "Bearer " + savedTok } : {};
     Promise.all([
-      fetch("/api/data", { headers: dataHeaders }).then(r => r.json()).then(d => setData(d)).catch(() => {}),
+      fetch("/api/data", { headers: dataHeaders }).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(d => setData(d)).catch(() => {}),
       fetch("/api/config/public").then(r => r.json()).then(d => setPubConfig(d)).catch(() => {}),
     ]).finally(() => setAppLoading(false));
     // Detect Stripe payment redirect: /complete?orderId=xxx&stripeOk=1
@@ -499,19 +947,37 @@ export default function App() {
       setStep(6);
       setCurrentView("portal");
     }
-    // Detect Stripe cancel redirect: /?cancelled=1&orderId=xxx — clean up the pending order
+    // Detect Stripe cancel redirect: /?cancelled=1&orderId=xxx&session_id=cs_… —
+    // clean up the pending order. Pass session_id back to /stripe-cancel so the
+    // server can prove the caller is the actual paying customer (not an
+    // attacker who guessed the order id).
     if (params.get("cancelled") === "1") {
       const cancelledOrderId = params.get("orderId");
+      const cancelledSessionId = params.get("session_id");
       window.history.replaceState({}, "", "/");
       setStripeCancelled(true);
       if (cancelledOrderId) {
-        fetch(`/api/orders/${cancelledOrderId}/stripe-cancel`, { method: "POST" }).catch(() => {});
+        fetch(`/api/orders/${cancelledOrderId}/stripe-cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: cancelledSessionId || undefined }),
+        }).catch(() => {});
       }
     }
     // Detect privacy policy route
     if (window.location.pathname === "/privacy-policy") {
       setCurrentPath("/privacy-policy");
     }
+    // Listen for auth failures dispatched by apiCall when a 401 comes back.
+    // Clears the in-memory token + sends the user back to the login screen.
+    const onAuthFail = () => {
+      setAdminToken(null);
+      // Don't bounce the user mid-checkout — only force login if they were
+      // actively in the admin area.
+      setCurrentView(v => v === "admin" ? "admin" : v);
+    };
+    window.addEventListener("tocs:auth-fail", onAuthFail);
+    return () => window.removeEventListener("tocs:auth-fail", onAuthFail);
   }, []);
 
   // Call stripe-confirm endpoint after Stripe redirects back with ?stripeOk=1
@@ -543,6 +1009,15 @@ export default function App() {
       });
   }, [stripeConfirming, stripeOrderId]);
 
+  // Mirror admin view/tab into the URL hash. replaceState (not pushState) —
+  // the wizard owns history entries for its steps below; the view only needs
+  // refresh / deep-link persistence, not extra back-button entries.
+  useEffect(() => {
+    const hash = currentView === "admin" ? `#admin/${adminTab}` : "";
+    const url = window.location.pathname + window.location.search + hash;
+    window.history.replaceState(window.history.state, "", url);
+  }, [currentView, adminTab]);
+
   // Browser back button: push a history entry on step advance so back returns to previous step
   useEffect(() => {
     if (step > 1 && step < 6) window.history.pushState({ step }, "");
@@ -557,7 +1032,7 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, [step]);
 
-  const plan = data.strataPlans.find(p => p.id === selPlan);
+  const plan = (data.strataPlans || []).find(p => p.id === selPlan);
   const shippingCost = selectedShipping?.cost || 0;
   const total = cart.reduce((s, i) => s + i.price, 0) + shippingCost;
 
@@ -571,7 +1046,41 @@ export default function App() {
     }
   }, [selPlan]);
 
-  // When lot number changes on an OC order, auto-assign that lot's OCs
+  // ── Cart persistence ───────────────────────────────────────────────────────
+  // Restore cart + contact + shipping when the user picks a plan, then mirror
+  // any subsequent edits back to localStorage. After the order is placed (step
+  // 5+), the corresponding entry is cleared by `reset()` below.
+  // Tracked separately from the 1st useEffect to avoid stomping selectedOCs on
+  // restore — the OC effect runs first and clears them, then the user re-picks
+  // their lot which repopulates selectedOCs naturally.
+  const cartHydratedRef = useRef(null); // last-restored plan id, to avoid re-hydrating mid-session
+  useEffect(() => {
+    if (!selPlan || cartHydratedRef.current === selPlan) return;
+    const saved = loadCartFor(selPlan);
+    cartHydratedRef.current = selPlan;
+    if (!saved) return;
+    if (Array.isArray(saved.cart) && saved.cart.length > 0) setCart(saved.cart);
+    if (saved.contact && typeof saved.contact === "object") setContact(c => ({ ...c, ...saved.contact }));
+    if (saved.selectedShipping) setSelectedShipping(saved.selectedShipping);
+    if (saved.orderCategory) setOrderCategory(saved.orderCategory);
+    if (saved.payMethod) setPayMethod(saved.payMethod);
+  }, [selPlan]);
+
+  useEffect(() => {
+    if (!selPlan) return;
+    // Only persist while the wizard is active (steps 2–4); after submit the
+    // entry is cleared explicitly by reset().
+    if (step >= 5) return;
+    // Debounced: this effect re-runs on every contact-form keystroke, and a
+    // synchronous JSON.stringify + localStorage.setItem per keystroke adds
+    // measurable input latency on low-end devices.
+    const t = setTimeout(() => {
+      saveCartFor(selPlan, { cart, contact, selectedShipping, orderCategory, payMethod });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [selPlan, step, cart, contact, selectedShipping, orderCategory, payMethod]);
+
+  // When lot number or plan changes on an OC order, auto-assign that lot's OCs
   useEffect(() => {
     if (!plan || orderCategory !== "oc") return;
     const trimmed = lotNumber.trim();
@@ -586,7 +1095,7 @@ export default function App() {
       // Lot not found in mapping — keep all OCs selectable
       setSelectedOCs(Object.keys(plan.ownerCorps || {}));
     }
-  }, [lotNumber, orderCategory]);
+  }, [lotNumber, orderCategory, selPlan]);
 
   const inCart = (pid, ocId=null) => cart.some(i => i.productId === pid && i.ocId === ocId);
 
@@ -644,6 +1153,8 @@ export default function App() {
       setCart([]);
       setStep(6);
       setPlacing(false);
+      // Drop the persisted draft now that the order is on the server.
+      if (selPlan) clearCartFor(selPlan);
       try { localStorage.setItem("tocs_last_order", JSON.stringify({ id: finalOrder.id, date: finalOrder.date, email: finalOrder.contactInfo.email, total: finalOrder.total, payment: finalOrder.payment, orderCategory: finalOrder.orderCategory })); } catch {}
     } catch (err) {
       if (setErr) setErr(err.message || "Network error — please check your connection and try again.");
@@ -651,7 +1162,22 @@ export default function App() {
     }
   };
 
-  const reset = () => { setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false); };
+  const reset = () => {
+    // Clear any persisted draft for the plan they just ordered against, so
+    // returning to the portal starts fresh rather than restoring a paid cart.
+    if (selPlan) clearCartFor(selPlan);
+    cartHydratedRef.current = null;
+    setStep(1); setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setOrderCategory(null); setCart([]); setOrder(null); setContact(DEFAULT_CONTACT); setPayMethod("bank"); setLotAuthFile(null); setSelectedShipping(null); setStripeConfirming(false); setStripeConfirmErr(""); setStripeOrderId(null); setStripeCancelled(false);
+  };
+
+  const handleAuth = async (token, user) => {
+    try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
+    try {
+      const r = await fetch("/api/data", { headers: { "Authorization": "Bearer " + token } });
+      if (r.ok) { const d = await r.json(); setData(d); }
+    } catch {}
+    setAdminToken(token);
+  };
 
   // Auto-correct payMethod when pubConfig loads and the current selection is disabled
   useEffect(() => {
@@ -684,11 +1210,47 @@ export default function App() {
     if (s < step) setStep(s);
   };
 
+  // ── Plan selection ───────────────────────────────────────────────────────────
+  // Public /api/data carries plan summaries only (no lots/products), so the
+  // full catalog for the chosen building is fetched here and merged into
+  // `data` BEFORE selPlan is set — every downstream effect and component then
+  // sees a complete plan, exactly as when the whole catalog was preloaded.
+  // Admin sessions (and freshly saved plans) already have `lots` in memory and
+  // skip the fetch.
+  const [planFetching, setPlanFetching] = useState(null); // plan id being fetched
+  const selectPlan = async (p) => {
+    if (planFetching) return false;
+    setCart([]); setLotNumber("");
+    if (Array.isArray(p.lots)) { setSelPlan(p.id); return true; }
+    setPlanFetching(p.id);
+    try {
+      const r = await fetch(`/api/plans?id=${encodeURIComponent(p.id)}`);
+      if (!r.ok) throw new Error();
+      const { plan: full } = await r.json();
+      setData(prev => ({
+        ...prev,
+        strataPlans: (prev.strataPlans || []).map(sp => (sp.id === full.id ? full : sp)),
+      }));
+      setSelPlan(p.id);
+      return true;
+    } catch {
+      appToast({ type: "err", message: "Could not load building details. Please check your connection and try again." });
+      return false;
+    } finally {
+      setPlanFetching(null);
+    }
+  };
+
   // 5 wizard steps; step 6 = confirmation page, outside the wizard track
   const STEPS = ["Select Plan", "Products", "Review", "Contact", "Payment"];
 
   const handleDemoReset = async () => {
-    if (!window.confirm("Reset all demo data to the initial seed state? This will log you out and clear all orders.")) return;
+    if (!(await appConfirm({
+      title: "Reset demo data?",
+      message: "All orders will be cleared and the seed data restored. You will be logged out.",
+      confirmText: "Reset",
+      danger: true,
+    }))) return;
     try {
       await fetch("/api/demo/reset", { method: "POST" });
     } finally {
@@ -735,42 +1297,58 @@ export default function App() {
         </header>
 
         <main className="main">
-          {appLoading ? (
+          {/* The portal shell renders immediately — only the building-search
+              results depend on /api/data, and Portal shows its own inline
+              loading state for them (appLoading). Admin still gates on the
+              fetch because every tab needs the order/plan dataset. */}
+          {currentPath === "/privacy-policy" ? (
+            <ErrorBoundary label="PrivacyPolicy">
+              <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
+            </ErrorBoundary>
+          ) : currentView === "portal" ? (
+            <ErrorBoundary label="Portal">
+              <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
+                setSelPlan={setSelPlan} lotNumber={lotNumber} setLotNumber={setLotNumber} selectedOCs={selectedOCs} setSelectedOCs={setSelectedOCs} data={data}
+                cart={cart} setCart={setCart} total={total} addProd={addProd} inCart={inCart}
+                order={order} payMethod={payMethod} setPayMethod={setPayMethod}
+                placeOrder={placeOrder} reset={reset} contact={contact} setContact={setContact}
+                lotAuthFile={lotAuthFile} setLotAuthFile={setLotAuthFile} STEPS={STEPS}
+                pubConfig={pubConfig}
+                orderCategory={orderCategory} setOrderCategory={setOrderCategory}
+                selectedShipping={selectedShipping} setSelectedShipping={setSelectedShipping}
+                shippingCost={shippingCost}
+                stripeConfirming={stripeConfirming} stripeConfirmErr={stripeConfirmErr} stripeOrderId={stripeOrderId}
+                stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled}
+                selectPlan={selectPlan} planFetching={planFetching} appLoading={appLoading} />
+            </ErrorBoundary>
+          ) : !adminToken ? (
+            <ErrorBoundary label="AdminLogin">
+              <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />
+            </ErrorBoundary>
+          ) : appLoading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40vh", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+              <div aria-hidden="true" style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
               <p style={{ color: "var(--muted)", fontSize: "0.82rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>Loading…</p>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
-          ) : currentPath === "/privacy-policy" ? (
-            <PrivacyPolicy onBack={() => { setCurrentPath("/"); window.history.pushState({}, "", "/"); }} />
-          ) : currentView === "portal" ? (
-            <Portal step={step} setStep={setStep} goToStep={goToStep} plan={plan} selPlan={selPlan}
-              setSelPlan={setSelPlan} lotNumber={lotNumber} setLotNumber={setLotNumber} selectedOCs={selectedOCs} setSelectedOCs={setSelectedOCs} data={data}
-              cart={cart} setCart={setCart} total={total} addProd={addProd} inCart={inCart}
-              order={order} payMethod={payMethod} setPayMethod={setPayMethod}
-              placeOrder={placeOrder} reset={reset} contact={contact} setContact={setContact}
-              lotAuthFile={lotAuthFile} setLotAuthFile={setLotAuthFile} STEPS={STEPS}
-              pubConfig={pubConfig}
-              orderCategory={orderCategory} setOrderCategory={setOrderCategory}
-              selectedShipping={selectedShipping} setSelectedShipping={setSelectedShipping}
-              shippingCost={shippingCost}
-              stripeConfirming={stripeConfirming} stripeConfirmErr={stripeConfirmErr} stripeOrderId={stripeOrderId}
-              stripeCancelled={stripeCancelled} setStripeCancelled={setStripeCancelled} />
           ) : (
-            <Admin data={data} setData={setData} adminTab={adminTab} setAdminTab={setAdminTab}
-              adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
+            <ErrorBoundary label="Admin">
+              <Admin data={data} setData={setData} adminTab={adminTab} setAdminTab={setAdminTab}
+                adminToken={adminToken} setAdminToken={setAdminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} />
+            </ErrorBoundary>
           )}
         </main>
         <footer style={{ textAlign: "center", padding: "18px 16px 14px", fontSize: "0.7rem", color: "var(--muted)", borderTop: "1px solid var(--border)", letterSpacing: "0.02em" }}>
           Last updated {__BUILD_DATE__}
         </footer>
       </div>
+      <DialogHost />
     </>
   );
 }
 
 // ─── PORTAL ───────────────────────────────────────────────────────────────────
-function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled }) {
+function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber, setLotNumber, selectedOCs, setSelectedOCs, data, cart, setCart, total, addProd, inCart, order, payMethod, setPayMethod, placeOrder, reset, contact, setContact, lotAuthFile, setLotAuthFile, STEPS, pubConfig, orderCategory, setOrderCategory, selectedShipping, setSelectedShipping, shippingCost, stripeConfirming, stripeConfirmErr, stripeOrderId, stripeCancelled, setStripeCancelled, selectPlan, planFetching, appLoading }) {
   const [search, setSearch] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [extLinkTarget, setExtLinkTarget] = useState(null); // product with externalUrl awaiting confirm
@@ -805,10 +1383,49 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
     } catch { return null; }
   });
 
-  const filteredPlans = data.strataPlans.filter(p => {
+  const [trackRef, setTrackRef] = useState("");
+  const [trackResult, setTrackResult] = useState(null);
+  const [trackLoading, setTrackLoading] = useState(false);
+  const [trackError, setTrackError] = useState("");
+  // AbortController so a rapid second click cancels the in-flight request
+  // — without this the LAST-RESOLVED (not last-clicked) result would win,
+  // showing the wrong order if the user typed two refs in quick succession.
+  const trackAbortRef = useRef(null);
+  const handleTrackOrder = async () => {
+    const ref = trackRef.trim().toUpperCase();
+    if (!ref) return;
+    if (trackAbortRef.current) trackAbortRef.current.abort();
+    const ctrl = new AbortController();
+    trackAbortRef.current = ctrl;
+    setTrackLoading(true);
+    setTrackError("");
+    setTrackResult(null);
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(ref)}/track`, { signal: ctrl.signal });
+      if (ctrl.signal.aborted) return;
+      const data = await r.json();
+      if (ctrl.signal.aborted) return;
+      if (r.status === 429) setTrackError("Too many lookups — please wait a moment and try again.");
+      else if (!r.ok) setTrackError(data.error || "Order not found. Please check your reference number.");
+      else setTrackResult(data);
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+      setTrackError("Unable to connect. Please try again.");
+    }
+    finally {
+      if (trackAbortRef.current === ctrl) {
+        trackAbortRef.current = null;
+        setTrackLoading(false);
+      }
+    }
+  };
+
+  const filteredPlans = (data.strataPlans || []).filter(p => {
     if (!p.active) return false;
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
+    const trimmed = search.trim();
+    if (!trimmed) return true;
+    if (trimmed.length < 3) return false;
+    const q = trimmed.toLowerCase();
     return p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q);
   });
 
@@ -881,7 +1498,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
           <div className="s1-title">
             <div className="s1-eyebrow">Top Owners Corporation Solution</div>
             <h1 className="s1-h1">TOCS Order Portal</h1>
-            <p className="s1-sub">Order certificates, keys, fobs, swipes and more for your NSW strata property</p>
+            <p className="s1-sub">Order certificates, keys, fobs, swipes and more for your property</p>
             {/* Search bar — shows input when no building selected, summary when selected */}
             {!selPlan ? (
               <div className="s1-search-bar">
@@ -901,6 +1518,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <Ic n="check" s={16} style={{ color: "var(--sage)", flexShrink: 0 }}/>
                 <span className="s1-search-sel">{plan?.name}</span>
                 <button className="s1-search-btn" onClick={() => { setSelPlan(null); setLotNumber(""); setSelectedOCs([]); setCart([]); setOrderCategory(null); setSearch(""); }}>Change</button>
+              </div>
+            )}
+            {!selPlan && search.trim().length > 0 && search.trim().length < 3 && (
+              <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "6px", paddingLeft: "4px" }}>
+                Type at least 3 characters to search…
               </div>
             )}
           </div>
@@ -951,6 +1573,64 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             </div>
           </div>
 
+          {/* ── Order Tracking ── */}
+          <div className="track-section">
+            <div style={{ fontSize:"0.6rem", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:"var(--muted)", marginBottom:"10px" }}>Track Your Order</div>
+            <div className="track-row">
+              <input
+                className="track-input"
+                placeholder="Enter Order Reference Number (e.g. TOCS-XXXXXXXX-XXX)"
+                value={trackRef}
+                onChange={e => { setTrackRef(e.target.value); setTrackResult(null); setTrackError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleTrackOrder()}
+              />
+              <button className="track-btn" onClick={handleTrackOrder} disabled={!trackRef.trim() || trackLoading}>
+                {trackLoading ? "Searching…" : "Track"}
+              </button>
+            </div>
+            {trackError && <div className="track-error">{trackError}</div>}
+            {trackResult && (
+              <div className="track-result">
+                <div className="track-result-row" style={{ marginBottom:"10px" }}>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:"0.88rem", color:"var(--ink)", marginBottom:"2px" }}>
+                      {trackResult.planName || "—"}{trackResult.lotNumber ? ` · ${trackResult.lotNumber}` : ""}
+                    </div>
+                    <div style={{ fontSize:"0.7rem", color:"var(--muted)" }}>
+                      {trackResult.id} &nbsp;·&nbsp; {new Date(trackResult.date).toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })}
+                    </div>
+                  </div>
+                  <span className="track-status-badge" style={({
+                    "Pending Payment":        { background:"#fef3c7", color:"#92400e" },
+                    "Processing":             { background:"#dbeafe", color:"#1e40af" },
+                    "Issued":                 { background:"#dcfce7", color:"#166534" },
+                    "Cancelled":              { background:"#fee2e2", color:"#991b1b" },
+                    "On Hold":                { background:"#ffedd5", color:"#9a3412" },
+                    "Awaiting Documents":     { background:"#fef3c7", color:"#92400e" },
+                    "Invoice to be issued":   { background:"#ede9fe", color:"#5b21b6" },
+                  }[trackResult.status] || { background:"#f3f4f6", color:"#374151" })}>
+                    {trackResult.status}
+                  </span>
+                </div>
+                <div style={{ borderTop:"1px solid var(--border)", paddingTop:"10px", display:"flex", flexDirection:"column", gap:"6px" }}>
+                  {(trackResult.items || []).map((item, i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px" }}>
+                      <div>
+                        <div style={{ fontSize:"0.82rem", color:"var(--ink)", fontWeight:500 }}>{item.productName || "—"}</div>
+                        {item.ocName && <div style={{ fontSize:"0.68rem", color:"var(--muted)" }}>{item.ocName}{item.qty > 1 ? ` × ${item.qty}` : ""}</div>}
+                      </div>
+                      <div style={{ fontSize:"0.82rem", color:"var(--ink)", fontWeight:600, whiteSpace:"nowrap" }}>{fmt(item.price)}</div>
+                    </div>
+                  ))}
+                  <div style={{ borderTop:"1px solid var(--border)", paddingTop:"7px", display:"flex", justifyContent:"space-between", fontSize:"0.82rem" }}>
+                    <span style={{ color:"var(--muted)", fontWeight:600 }}>Total</span>
+                    <span style={{ color:"var(--ink)", fontWeight:700 }}>{fmt(trackResult.total)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Building search results (no plan selected) ── */}
           {!selPlan && (
             !search.trim() ? (
@@ -958,6 +1638,17 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🏢</div>
                 <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Start typing to find your building.</p>
                 <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Search by address, building name, or Strata Plan number (e.g. SP12345).</p>
+              </div>
+            ) : search.trim().length < 3 ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</div>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Keep typing…</p>
+                <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Type at least 3 characters to search buildings.</p>
+              </div>
+            ) : appLoading ? (
+              <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
+                <div aria-hidden="true" style={{ width: 24, height: 24, margin: "0 auto 0.75rem", borderRadius: "50%", border: "3px solid rgba(28,51,38,0.12)", borderTop: "3px solid var(--forest)", animation: "spin 0.8s linear infinite" }}/>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400, color: "var(--forest)" }}>Loading buildings…</p>
               </div>
             ) : filteredPlans.length === 0 ? (
               <div className="empty" style={{ background: "rgba(255,255,255,0.5)", border: "1.5px dashed rgba(28,51,38,0.15)", borderRadius: "10px" }}>
@@ -968,11 +1659,16 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
             ) : (
               <div className="plan-grid" style={{ marginBottom: "14px" }}>
                 {filteredPlans.map(p => (
-                  <div key={p.id} className="plan-card" onClick={() => { setCart([]); setLotNumber(""); setSelPlan(p.id); setSearch(""); }}>
+                  <div key={p.id} className="plan-card" style={planFetching && planFetching !== p.id ? { opacity: 0.55, pointerEvents: "none" } : undefined}
+                    onClick={() => { selectPlan(p).then(ok => { if (ok) setSearch(""); }); }}>
                     <div className="pc-id">{p.id}</div>
                     <div className="pc-name">{p.name}</div>
                     <div className="pc-addr">{p.address}</div>
-                    <div className="pc-meta">{p.lots.length} lots &nbsp;·&nbsp; {Object.keys(p.ownerCorps).length} Owner Corporations</div>
+                    <div className="pc-meta">
+                      {planFetching === p.id
+                        ? <><span aria-hidden="true" style={{display:"inline-block",verticalAlign:"-2px",animation:"spin 0.8s linear infinite",border:"2px solid rgba(28,51,38,0.15)",borderTop:"2px solid var(--forest)",borderRadius:"50%",width:12,height:12,marginRight:6}}/>Loading building…</>
+                        : <>{p.lotCount ?? (p.lots || []).length} lots &nbsp;·&nbsp; {p.ocCount ?? Object.keys(p.ownerCorps || {}).length} Owner Corporations</>}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -996,11 +1692,11 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 <div className="bsel-addr">📍 {plan.address}</div>
                 <div className="bsel-stats">
                   <div className="bsel-stat">
-                    <div className="bsel-stat-val">{plan.lots.length}</div>
+                    <div className="bsel-stat-val">{(plan.lots || []).length}</div>
                     <div className="bsel-stat-lbl">Total Lots</div>
                   </div>
                   <div className="bsel-stat">
-                    <div className="bsel-stat-val">{Object.keys(plan.ownerCorps).length}</div>
+                    <div className="bsel-stat-val">{Object.keys(plan.ownerCorps || {}).length}</div>
                     <div className="bsel-stat-lbl">Owner Corporations</div>
                   </div>
                 </div>
@@ -1071,7 +1767,13 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                   else if (!lotNum) setSelectedOCs([]);
                 };
                 const filtered = lotInputText.trim()
-                  ? plan.lots.filter(l => l.number.toLowerCase().includes(lotInputText.trim().toLowerCase()))
+                  ? plan.lots.filter(l => {
+                      const q = lotInputText.trim().toLowerCase();
+                      return l.number.toLowerCase().includes(q) ||
+                        (l.unitNumber  && l.unitNumber.toLowerCase().includes(q)) ||
+                        (l.streetNumber && l.streetNumber.toLowerCase().includes(q)) ||
+                        (l.streetName  && l.streetName.toLowerCase().includes(q));
+                    })
                   : plan.lots;
                 return (
                   <div style={{ position: "relative" }}>
@@ -1097,7 +1799,10 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     />
                     {lotDropdownOpen && filtered.length > 0 && (
                       <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid var(--border)", borderRadius: "4px", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 50, maxHeight: "220px", overflowY: "auto", marginTop: "2px" }}>
-                        {filtered.map(l => (
+                        {/* Cap rendered rows — large buildings can have 1000+ lots and the
+                            dropdown re-renders per keystroke; only ~8 rows are visible in
+                            the 220px scroll area anyway. Typing narrows the match set. */}
+                        {filtered.slice(0, 50).map(l => (
                           <div
                             key={l.id}
                             onMouseDown={() => selectLot(l.number)}
@@ -1105,12 +1810,22 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                             onMouseEnter={e => e.currentTarget.style.background = "var(--sage-tint)"}
                             onMouseLeave={e => e.currentTarget.style.background = lotNumber === l.number ? "var(--sage-tint)" : "white"}
                           >
-                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>{l.number}</span>
+                            <span style={{ fontWeight: 600, color: "var(--forest)" }}>
+                              {l.number}
+                              {l.unitNumber ? <span style={{ fontWeight: 400, color: "var(--muted)", marginLeft: "6px" }}>Unit {l.unitNumber}</span> : null}
+                            </span>
                             <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                              {[l.level, l.type].filter(Boolean).join(" · ")}
+                              {(l.streetNumber || l.streetName)
+                                ? [l.streetNumber, l.streetName].filter(Boolean).join(" ")
+                                : (l.type || "")}
                             </span>
                           </div>
                         ))}
+                        {filtered.length > 50 && (
+                          <div style={{ padding: "8px 14px", fontSize: "0.75rem", color: "var(--muted)", background: "var(--sage-tint)" }}>
+                            Showing first 50 of {filtered.length} — keep typing to narrow down
+                          </div>
+                        )}
                       </div>
                     )}
                     {lotInputText && !lotNumber && filtered.length === 0 && (
@@ -1134,6 +1849,25 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                 />
               )}
             </div>
+
+            {lotNumber && (() => {
+              const lotObj = plan?.lots?.find(l => l.number === lotNumber);
+              if (!lotObj) return null;
+              const details = [
+                { label: "Lot No.",    value: lotObj.number },
+                lotObj.unitNumber   ? { label: "Unit No.",    value: lotObj.unitNumber   } : null,
+                lotObj.streetNumber ? { label: "Street No.",  value: lotObj.streetNumber } : null,
+                lotObj.streetName   ? { label: "Street Name", value: lotObj.streetName   } : null,
+              ].filter(Boolean);
+              if (details.length <= 1) return null;
+              return (
+                <div style={{ marginTop: "6px", padding: "8px 12px", background: "var(--sage-tint)", border: "1px solid var(--sage)", borderRadius: "6px", fontSize: "0.78rem", display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
+                  {details.map(d => (
+                    <span key={d.label}><span style={{ color: "var(--muted)" }}>{d.label}</span>{" "}<strong style={{ color: "var(--forest)" }}>{d.value}</strong></span>
+                  ))}
+                </div>
+              );
+            })()}
 
             {orderCategory === "oc" && lotNumber && selectedOCs.length > 0 && (
               <div style={{ marginTop: "1rem" }}>
@@ -1481,7 +2215,24 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
                     </div>
                   </div>
                   <div className="ci-price">{fmt(item.price)}</div>
-                  <button className="ci-rm" onClick={() => setCart(p => p.filter(i => i.key !== item.key))}><Ic n="trash" s={15}/></button>
+                  <button className="ci-rm" onClick={() => setCart(p => {
+                    const filtered = p.filter(i => i.key !== item.key);
+                    // Removing a per-OC line shifts the volume discount: the
+                    // server charges the first remaining OC line of a product at
+                    // the primary rate and the rest at secondary, so re-derive
+                    // the remaining lines here to keep the displayed/submitted
+                    // total in sync (otherwise the order is rejected as an
+                    // invalid total — e.g. removing the only primary-rate OC).
+                    if (item.ocId == null) return filtered;
+                    const prod = (plan?.products || []).find(pr => pr.id === item.productId);
+                    if (!prod || !prod.perOC) return filtered;
+                    let seen = 0;
+                    return filtered.map(i => {
+                      if (i.productId !== item.productId || i.ocId == null) return i;
+                      const isSec = seen++ > 0;
+                      return { ...i, isSecondaryOC: isSec, price: isSec ? (prod.secondaryPrice ?? prod.price) : prod.price };
+                    });
+                  })}><Ic n="trash" s={15}/></button>
                 </div>
               ))}
               {/* ── Applicant Summary (OC orders only) ── */}
@@ -1722,7 +2473,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
       {/* ── STEP 6: CONFIRMATION ── */}
       {step === 6 && stripeConfirming && (
         <div style={{ textAlign: "center", padding: "4rem 0" }}>
-          <div style={{ display:"inline-block", animation:"spin 1s linear infinite", border:"3px solid rgba(28,51,38,0.15)", borderTop:"3px solid var(--forest)", borderRadius:"50%", width:48, height:48, marginBottom:"1.5rem" }}/>
+          <div aria-hidden="true" style={{ display:"inline-block", animation:"spin 1s linear infinite", border:"3px solid rgba(28,51,38,0.15)", borderTop:"3px solid var(--forest)", borderRadius:"50%", width:48, height:48, marginBottom:"1.5rem" }}/>
           <p style={{ color:"var(--forest)", fontFamily:"'Cormorant Garamond',serif", fontSize:"1.4rem" }}>Confirming your payment…</p>
           <p style={{ color:"var(--muted)", fontSize:"0.85rem" }}>Please wait while we verify your payment with Stripe.</p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -1746,6 +2497,7 @@ function Portal({ step, setStep, goToStep, plan, selPlan, setSelPlan, lotNumber,
         <div style={{ textAlign:"center", padding:"2rem 0 0.5rem", marginTop:"3rem", borderTop:"1px solid var(--border)", fontSize:"0.75rem", color:"var(--muted)" }}>
           <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color:"var(--muted)", textDecoration:"underline" }}>Privacy Policy</a>
           {" · "}Top Owners Corporation Solution
+          {" · "}Last updated {typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : ""}
         </div>
       )}
 
@@ -1882,7 +2634,7 @@ function PaymentStep({ cart, total, contact, payMethod, setPayMethod, onBack, pl
           onClick={handleConfirm}
         >
           {placing
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Processing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Processing…</>
             : <>Confirm Order <Ic n="arrow" s={14}/></>
           }
         </button>
@@ -2116,7 +2868,7 @@ function PrivacyPolicy({ onBack }) {  // pubConfig not needed — logo is in the
     },
     {
       heading: "Privacy Policy Complaints and Enquiries",
-      body: `If you have any queries or complaints about our Privacy Policy please contact us at:\n\nTop Owners Corporation Solution\nSydney, NSW, Australia\nEmail: info@tocs.co`,
+      body: `If you have any queries or complaints about our Privacy Policy please contact us at:\n\nTop Owners Corporation Solution\nEmail: info@tocs.co`,
     },
   ];
 
@@ -2155,13 +2907,409 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const [editTarget, setEditTarget] = useState(null);
   const [planSaveErr, setPlanSaveErr] = useState(null);
   const [planId, setPlanId] = useState(data.strataPlans[0]?.id || "");
+  const [lotOcErr, setLotOcErr] = useState("");
   const [form, setForm] = useState({});
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [orderFilter, setOrderFilter] = useState({ text: "", status: "", category: "", plan: "", lot: "" });
+  const [checkingAllPiq, setCheckingAllPiq] = useState(false);
+  const [piqPollStatus, setPiqPollStatus] = useState(null); // { cronSecretConfigured, schedule, lastRun }
   const [sendCertModal, setSendCertModal] = useState(null); // { orderId, order }
   const [sendInvoiceModal, setSendInvoiceModal] = useState(null); // { orderId, order }
   const [cancelOrderModal, setCancelOrderModal] = useState(null); // { orderId, order }
+  const [amendOrderModal, setAmendOrderModal] = useState(null);   // { orderId, order }
+  const [piqSyncModal, setPiqSyncModal] = useState(null); // { planId, loading, result, error }
+  const [piqSyncAllModal, setPiqSyncAllModal] = useState(null); // { phase, templatePlanId, rows, warning, error, saveErr }
+  const [piqFillModal, setPiqFillModal] = useState(null);       // { phase, updated, error, saveErr }
+  const [planSort, setPlanSort] = useState({ col: null, dir: "asc" });
+  const [selectedPlanIds, setSelectedPlanIds] = useState(new Set());
   const [adminToast, setAdminToast] = useState(null);
+  // Order list: column sort (date desc by default) + page size
+  const [orderSort, setOrderSort] = useState({ col: "date", dir: "desc" });
+  const [orderPage, setOrderPage] = useState(1);
+  const ORDERS_PAGE_SIZE = 50;
+  // Notify customer modal — composed inline so we don't add another file
+  const [notifyModal, setNotifyModal] = useState(null); // { order, subject, message, sending, err }
+  const [moreMenuOrder, setMoreMenuOrder] = useState(null); // order id of open More menu
+
+  useEffect(() => {
+    if (!moreMenuOrder) return;
+    const close = () => setMoreMenuOrder(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [moreMenuOrder]);
+
+  // Fetch the most recent poll-piq run summary whenever the Orders tab opens,
+  // so admins can see at a glance whether the daily auto-poll is healthy.
+  const fetchPiqPollStatus = async () => {
+    try {
+      const r = await fetch("/api/orders?action=poll-piq-status", { headers: { "Authorization": "Bearer " + adminToken } });
+      // Surface session-expiry through the global auth-fail event so the
+      // login screen kicks in (matches every other admin fetcher).
+      if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} setPiqPollStatus(null); return; }
+      if (!r.ok) { setPiqPollStatus(null); return; }
+      setPiqPollStatus(await r.json());
+    } catch { setPiqPollStatus(null); }
+  };
+  useEffect(() => {
+    if (adminTab !== "orders" || !adminToken) return;
+    fetchPiqPollStatus();
+  }, [adminTab, adminToken]);
+
+  // Global Escape handler for the inline `modal` state (Add Plan / Edit Lot
+  // / etc.) which doesn't use the dedicated modal components' useFocusTrap.
+  // Dedicated modals (CancelOrderModal, SendCertificateModal, etc.) handle
+  // their own Escape via useFocusTrap and aren't affected.
+  useEffect(() => {
+    if (!modal && !notifyModal) return;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (notifyModal && !notifyModal.sending) setNotifyModal(null);
+      else if (modal) { setModal(null); setEditTarget(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modal, notifyModal]);
+
+  // ── PIQ Sync: fetch preview data from PIQ for a given plan ──────────────────
+  const openPiqSync = async (planId) => {
+    setPiqSyncModal({ planId, loading: true, result: null, error: null });
+    try {
+      const r = await fetch(`/api/config/settings?action=sync-piq`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ planId }),
+      });
+      if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} setPiqSyncModal(null); return; }
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setPiqSyncModal({ planId, loading: false, result: null, error: d.error || "PIQ sync failed." });
+      } else {
+        setPiqSyncModal({ planId, loading: false, result: d, error: null });
+      }
+    } catch (e) {
+      setPiqSyncModal({ planId, loading: false, result: null, error: "Unable to connect to server." });
+    }
+  };
+
+  // ── PIQ Sync: confirm import — merge PIQ data into existing plan ─────────────
+  const confirmPiqSync = async () => {
+    const { planId, result } = piqSyncModal || {};
+    if (!result) return;
+    try {
+      // Find existing plan
+      const plan = data.strataPlans.find(p => p.id === planId);
+      if (!plan) return;
+
+      // Update piqBuildingId on plan
+      plan.piqBuildingId = result.piqBuildingId;
+
+      // Merge schedules → ownerCorps (non-destructive: existing OCs preserved)
+      const existingOCs = plan.ownerCorps || {};
+      for (const s of (result.schedules || [])) {
+        // Find existing OC by piqScheduleId or name match
+        const existingKey = Object.keys(existingOCs).find(k =>
+          existingOCs[k].piqScheduleId === s.piqScheduleId ||
+          existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase()
+        );
+        if (existingKey) {
+          existingOCs[existingKey].piqScheduleId = s.piqScheduleId;
+        } else {
+          // Add new OC
+          const newKey = `OC-${s.piqScheduleId}`;
+          existingOCs[newKey] = { name: s.name, levy: 0, piqScheduleId: s.piqScheduleId };
+        }
+      }
+      plan.ownerCorps = existingOCs;
+
+      // If exactly one OC/schedule exists, auto-assign all lots to it.
+      // PIQ lot objects don't carry a scheduleId field, so assignment must be inferred.
+      const ocKeys = Object.keys(existingOCs);
+      const autoAssignOC = ocKeys.length === 1 ? ocKeys : null; // [key] or null
+
+      // Merge lots (non-destructive: existing lots preserved; piqLotId + unitNumber added)
+      // Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
+      const normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
+      const existingLots = plan.lots || [];
+      for (const l of (result.lots || [])) {
+        const existingIdx = existingLots.findIndex(el =>
+          el.piqLotId === l.piqLotId ||
+          normLot(el.number) === normLot(l.lotNumber)
+        );
+        if (existingIdx >= 0) {
+          existingLots[existingIdx].piqLotId     = l.piqLotId;
+          existingLots[existingIdx].id            = `piq-${l.piqLotId}`;
+          existingLots[existingIdx].unitNumber    = l.unitNumber    || existingLots[existingIdx].unitNumber    || "";
+          existingLots[existingIdx].streetNumber  = l.streetNumber  || existingLots[existingIdx].streetNumber  || "";
+          existingLots[existingIdx].streetName    = l.streetName    || existingLots[existingIdx].streetName    || "";
+          // Auto-assign OC if the lot currently has none and there is only one OC
+          if (autoAssignOC && (!existingLots[existingIdx].ownerCorps || existingLots[existingIdx].ownerCorps.length === 0)) {
+            existingLots[existingIdx].ownerCorps = autoAssignOC;
+          }
+        } else {
+          existingLots.push({
+            id:           `piq-${l.piqLotId}`,
+            number:       l.lotNumber,
+            unitNumber:   l.unitNumber   || "",
+            streetNumber: l.streetNumber || "",
+            streetName:   l.streetName   || "",
+            type:         "",
+            ownerCorps:   autoAssignOC || [],
+            piqLotId:     l.piqLotId,
+          });
+        }
+      }
+      plan.lots = existingLots;
+
+      // Save via existing POST /api/plans
+      const r = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ plans: data.strataPlans }),
+      });
+      if (r.ok) {
+        setData(p => ({ ...p, strataPlans: data.strataPlans }));
+        setPiqSyncModal(null);
+        setAdminToast({ msg: `PIQ sync complete: ${result.schedules?.length || 0} OC(s), ${result.lots?.length || 0} lot(s) imported.`, ok: true });
+        setTimeout(() => setAdminToast(null), 4000);
+      } else {
+        const d = await r.json();
+        setPiqSyncModal(s => ({ ...s, error: d.error || "Save failed." }));
+      }
+    } catch (e) {
+      setPiqSyncModal(s => ({ ...s, error: "Unable to save: " + e.message }));
+    }
+  };
+
+  // ── PIQ Sync All: open the template-selection modal ──────────────────────────
+  const syncAllFromPiq = () => {
+    setPiqSyncAllModal({ phase: "select", templatePlanId: null, skipExisting: false, rows: [], warning: null, error: null, saveErr: null });
+  };
+
+  // ── PIQ Sync All: run sync after admin selects template + clicks Start ────────
+  const startSyncAllFromPiq = async () => {
+    const templatePlanId = piqSyncAllModal?.templatePlanId;
+    const templatePlan   = (data.strataPlans || []).find(p => p.id === templatePlanId) || {};
+
+    // Phase: syncing
+    setPiqSyncAllModal(m => ({ ...m, phase: "syncing", rows: [] }));
+
+    // Step 1: Discover all PIQ buildings
+    let allBuildings = [], discoveryWarning = null;
+    try {
+      const r = await fetch("/api/config/settings?action=list-piq-buildings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || "Building discovery failed.");
+      allBuildings     = d.buildings || [];
+      discoveryWarning = d.warning   || null;
+    } catch (err) {
+      setPiqSyncAllModal(m => ({ ...m, phase: "done", error: err.message }));
+      return;
+    }
+
+    // Step 2: Diff — find buildings not yet in strataPlans
+    const existingPlans = data.strataPlans || [];
+    const matchBuilding = (plan, b) =>
+      (plan.piqBuildingId != null && plan.piqBuildingId === b.piqBuildingId) ||
+      (b.splan && plan.id.toLowerCase() === b.splan.trim().toLowerCase());
+
+    const newBuildings = allBuildings.filter(b => !existingPlans.some(p => matchBuilding(p, b)));
+
+    // Step 3: Build stubs for new buildings
+    const assignId = (candidate, piqBuildingId, taken) => {
+      if (!taken.has(candidate)) return candidate;
+      const fallback = `piq-${piqBuildingId}`;
+      if (!taken.has(fallback)) return fallback;
+      return `${fallback}-dup`;
+    };
+    const takenIds = new Set(existingPlans.map(p => p.id));
+    const stubs = newBuildings.map(b => {
+      const candidate = b.splan?.trim() || `piq-${b.piqBuildingId}`;
+      const id = assignId(candidate, b.piqBuildingId, takenIds);
+      takenIds.add(id);
+      return {
+        id,
+        name:            b.name,
+        piqBuildingId:   b.piqBuildingId,
+        active:          true,
+        address:         b.address || "",
+        ownerCorps:      {},
+        lots:            [],
+        products:        JSON.parse(JSON.stringify(templatePlan.products        || [])),
+        shippingOptions: JSON.parse(JSON.stringify(templatePlan.shippingOptions || [])),
+        keysShipping:    JSON.parse(JSON.stringify(templatePlan.keysShipping    || { deliveryCost: 0, expressCost: 0 })),
+      };
+    });
+
+    // Step 4: Build updatedPlans and rows (existing first, then stubs)
+    const skipExisting = piqSyncAllModal?.skipExisting === true;
+    const plansToSync  = skipExisting ? stubs : [...existingPlans.map(p => ({ ...p })), ...stubs];
+    const updatedPlans = plansToSync;
+    const rows = plansToSync.map((p, i) => ({
+      planId:        p.id,
+      planName:      p.name,
+      piqBuildingId: p.piqBuildingId || null,
+      isNew:         skipExisting ? true : i >= existingPlans.length,
+      status:        "pending",
+      ocs:           0,
+      lots:          0,
+      err:           null,
+    }));
+    setPiqSyncAllModal(m => ({ ...m, rows, warning: discoveryWarning }));
+
+    // Step 5: Sync loop
+    const norm = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
+    for (let i = 0; i < updatedPlans.length; i++) {
+      const row = rows[i];
+      setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "running" } : r) }));
+      try {
+        const body = row.isNew && row.piqBuildingId != null
+          ? { piqBuildingId: row.piqBuildingId }
+          : { planId: updatedPlans[i].id };
+        const r = await fetch("/api/config/settings?action=sync-piq", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) throw new Error(d.error || "PIQ sync failed");
+
+        // Merge OCs
+        const plan = updatedPlans[i];
+        plan.piqBuildingId = d.piqBuildingId;
+        if (d.address) plan.address = d.address;
+        const existingOCs = plan.ownerCorps || {};
+        for (const s of (d.schedules || [])) {
+          const key = Object.keys(existingOCs).find(k =>
+            existingOCs[k].piqScheduleId === s.piqScheduleId ||
+            existingOCs[k].name?.toLowerCase() === s.name?.toLowerCase()
+          );
+          if (key) { existingOCs[key].piqScheduleId = s.piqScheduleId; }
+          else { existingOCs[`OC-${s.piqScheduleId}`] = { name: s.name, levy: 0, piqScheduleId: s.piqScheduleId }; }
+        }
+        plan.ownerCorps = existingOCs;
+        const ocKeys = Object.keys(existingOCs);
+        const autoOC = ocKeys.length === 1 ? ocKeys : null;
+
+        // Merge lots
+        const existingLots = plan.lots || [];
+        for (const l of (d.lots || [])) {
+          const ei = existingLots.findIndex(el =>
+            el.piqLotId === l.piqLotId || norm(el.number) === norm(l.lotNumber)
+          );
+          if (ei >= 0) {
+            existingLots[ei].piqLotId     = l.piqLotId;
+            existingLots[ei].id           = `piq-${l.piqLotId}`;
+            existingLots[ei].unitNumber   = l.unitNumber   || existingLots[ei].unitNumber   || "";
+            existingLots[ei].streetNumber = l.streetNumber || existingLots[ei].streetNumber || "";
+            existingLots[ei].streetName   = l.streetName   || existingLots[ei].streetName   || "";
+            if (autoOC && (!existingLots[ei].ownerCorps || existingLots[ei].ownerCorps.length === 0))
+              existingLots[ei].ownerCorps = autoOC;
+          } else {
+            existingLots.push({ id: `piq-${l.piqLotId}`, number: l.lotNumber, unitNumber: l.unitNumber || "", streetNumber: l.streetNumber || "", streetName: l.streetName || "", type: "", ownerCorps: autoOC || [], piqLotId: l.piqLotId });
+          }
+        }
+        plan.lots = existingLots;
+        updatedPlans[i] = plan;
+
+        setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "ok", ocs: d.schedules?.length || 0, lots: d.lots?.length || 0 } : r) }));
+      } catch (err) {
+        setPiqSyncAllModal(m => ({ ...m, rows: m.rows.map((r, ri) => ri === i ? { ...r, status: "err", err: err.message } : r) }));
+      }
+    }
+
+    // Step 6: Save
+    // When skipExisting, merge new plans on top of the untouched existing plans
+    const finalPlans = skipExisting ? [...existingPlans, ...updatedPlans] : updatedPlans;
+    try {
+      const sr = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ plans: finalPlans }),
+      });
+      if (sr.ok) {
+        setData(p => ({ ...p, strataPlans: finalPlans }));
+        setPiqSyncAllModal(m => ({ ...m, phase: "done" }));
+      } else {
+        const e = await sr.json().catch(() => ({}));
+        setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.error || "Save failed." }));
+      }
+    } catch (e) {
+      setPiqSyncAllModal(m => ({ ...m, phase: "done", saveErr: e.message }));
+    }
+  };
+
+  // ── Update missing building info: fetch address per-building from PIQ detail endpoint ─
+  const fillMissingBuildingInfo = async () => {
+    const plansToFill = (data.strataPlans || []).filter(p => !p.address);
+    if (plansToFill.length === 0) {
+      setPiqFillModal({ phase: "done", current: 0, total: 0, updated: [], skipped: 0, error: null, saveErr: null });
+      return;
+    }
+
+    setPiqFillModal({ phase: "running", current: 0, total: plansToFill.length, updated: [], skipped: 0, error: null, saveErr: null });
+
+    const plans = (data.strataPlans || []).map(p => ({ ...p }));
+    const updated = [];
+    let skipped = 0;
+    let firstSkippedDebug = null;
+
+    for (let i = 0; i < plansToFill.length; i++) {
+      const plan = plansToFill[i];
+      setPiqFillModal(m => ({ ...m, current: i + 1 }));
+      try {
+        // piqBuildingId enables a direct /buildings/{id} lookup (no splan search needed)
+        const body = plan.piqBuildingId != null
+          ? { piqBuildingId: plan.piqBuildingId }
+          : { planId: plan.id };
+        const r = await fetch("/api/config/settings?action=fetch-piq-building-address", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (d.ok && d.address) {
+          const idx = plans.findIndex(p => p.id === plan.id);
+          if (idx >= 0) {
+            plans[idx].address = d.address;
+            if (d.piqBuildingId && !plans[idx].piqBuildingId) plans[idx].piqBuildingId = d.piqBuildingId;
+            updated.push({ id: plan.id, name: plan.name, address: d.address });
+          }
+        } else {
+          skipped++;
+          // Capture debug keys from first skipped building to show in modal
+          if (d._debugKeys && !firstSkippedDebug) firstSkippedDebug = { planId: plan.id, keys: d._debugKeys };
+        }
+      } catch {
+        skipped++;
+      }
+    }
+
+    if (updated.length === 0) {
+      setPiqFillModal(m => ({ ...m, phase: "done", skipped, debugInfo: firstSkippedDebug }));
+      return;
+    }
+
+    try {
+      const sr = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ plans }),
+      });
+      if (sr.ok) {
+        setData(p => ({ ...p, strataPlans: plans }));
+        setPiqFillModal(m => ({ ...m, phase: "done", updated, skipped }));
+      } else {
+        const e = await sr.json().catch(() => ({}));
+        setPiqFillModal(m => ({ ...m, phase: "done", updated, skipped, saveErr: e.error || "Save failed." }));
+      }
+    } catch (e) {
+      setPiqFillModal(m => ({ ...m, phase: "done", updated, skipped, saveErr: e.message }));
+    }
+  };
 
   const filteredOrders = useMemo(() => (data.orders || []).filter(o => {
     const statusOk = !orderFilter.status || o.status === orderFilter.status;
@@ -2180,13 +3328,48 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     return statusOk && categoryOk && planOk && lotOk && textOk;
   }), [data.orders, orderFilter]);
 
-  const handleAuth = (token, user) => {
-    setAdminToken(token);
-    try { sessionStorage.setItem("admin_token", token); sessionStorage.setItem("admin_user", user); } catch {}
-    // Re-fetch data with admin token to load orders (orders not returned to unauthenticated callers)
-    fetch("/api/data", { headers: { "Authorization": "Bearer " + token } })
-      .then(r => r.json()).then(d => setData(d)).catch(() => {});
+  // Sorted view of filtered orders. Sort happens after filter so the badge
+  // count still reflects matched-vs-total. Date is the default; clicking a
+  // header toggles direction or switches column.
+  const sortedOrders = useMemo(() => {
+    const arr = filteredOrders.slice();
+    const { col, dir } = orderSort;
+    const cmp = (a, b) => {
+      let av, bv;
+      switch (col) {
+        case "id":       av = a.id; bv = b.id; break;
+        case "category": av = a.orderCategory || ""; bv = b.orderCategory || ""; break;
+        case "building": av = a.items?.[0]?.planName || ""; bv = b.items?.[0]?.planName || ""; break;
+        case "name":     av = a.contactInfo?.name || ""; bv = b.contactInfo?.name || ""; break;
+        case "items":    av = (a.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0); bv = (b.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0); break;
+        case "total":    av = a.total || 0; bv = b.total || 0; break;
+        case "status":   av = a.status || ""; bv = b.status || ""; break;
+        case "date":
+        default:         av = new Date(a.date).getTime() || 0; bv = new Date(b.date).getTime() || 0; break;
+      }
+      if (typeof av === "string" && typeof bv === "string") return av.localeCompare(bv);
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    };
+    arr.sort((a, b) => dir === "asc" ? cmp(a, b) : -cmp(a, b));
+    return arr;
+  }, [filteredOrders, orderSort]);
+
+  const orderPageCount = Math.max(1, Math.ceil(sortedOrders.length / ORDERS_PAGE_SIZE));
+  const safeOrderPage = Math.min(orderPage, orderPageCount);
+  const pagedOrders = useMemo(() => {
+    const start = (safeOrderPage - 1) * ORDERS_PAGE_SIZE;
+    return sortedOrders.slice(start, start + ORDERS_PAGE_SIZE);
+  }, [sortedOrders, safeOrderPage]);
+
+  // Reset to page 1 whenever filters or sort change so users don't see "page 7"
+  // after narrowing to 3 results.
+  useEffect(() => { setOrderPage(1); }, [orderFilter, orderSort]);
+
+  const toggleOrderSort = (col) => {
+    setOrderSort(s => s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: col === "date" || col === "total" ? "desc" : "asc" });
   };
+  const sortIndicator = (col) => orderSort.col === col ? (orderSort.dir === "asc" ? " ▲" : " ▼") : "";
+
   const handleLogout = () => {
     const tok = adminToken;
     setAdminToken(null);
@@ -2194,11 +3377,24 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     if (tok) fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + tok }, body: JSON.stringify({ action: "logout" }) }).catch(() => {});
   };
 
-  if (!adminToken) return <AdminLogin onAuth={handleAuth} pubConfig={pubConfig} />;
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const plan = data.strataPlans.find(p => p.id === planId);
+  const sortedPlans = useMemo(() => {
+    const plans = data.strataPlans || [];
+    if (!planSort.col) return plans;
+    return [...plans].sort((a, b) => {
+      let va, vb;
+      if (planSort.col === "id")       { va = a.id || "";       vb = b.id || ""; }
+      else if (planSort.col === "name"){ va = a.name || "";     vb = b.name || ""; }
+      else if (planSort.col === "lots"){ va = (a.lots || []).length; vb = (b.lots || []).length; }
+      else                             { va = (a.products || []).length; vb = (b.products || []).length; }
+      if (typeof va === "string") return planSort.dir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      return planSort.dir === "asc" ? va - vb : vb - va;
+    });
+  }, [data.strataPlans, planSort]);
 
-  const TABS = ["plans", "products", "lots", "ownerCorps", "orders", "settings", "payment", "branding", "storage", "security"];
+  const plan = (data.strataPlans || []).find(p => p.id === planId);
+
+  const TABS = ADMIN_TABS; // module-scope — shared with the URL-hash restore in App
 
   // ── API helper ──────────────────────────────────────────────────────────────
   const savePlans = async (plans) => {
@@ -2226,12 +3422,15 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const addPlan = async () => {
     if (!form.id || !form.name) return;
     if (data.strataPlans.some(p => p.id === form.id.trim())) {
-      alert(`A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.`);
+      appToast({ type: "err", message: `A plan with ID "${form.id.trim()}" already exists. Please use a unique ID.` });
       return;
     }
     const plans = [...data.strataPlans, { id: form.id.trim(), name: form.name, address: form.address || "", lots: [], ownerCorps: {}, products: [], active: true }];
-    await savePlans(plans);
+    // savePlans applies the change optimistically (rollback + toast on
+    // failure), so close the modal immediately — leaving it open with no
+    // pending indicator invites a double-click that creates duplicates.
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const openEditPlan = (p) => {
@@ -2243,15 +3442,22 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   const savePlan = async () => {
     if (!form.name) return;
     const plans = data.strataPlans.map(p => p.id !== editTarget.id ? p : { ...p, name: form.name, address: form.address || "" });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
-  const deletePlan = async (id) => {
-    if (!window.confirm("Delete this strata plan and all its lots, products and Owner Corporations? This cannot be undone.")) return;
-    const plans = data.strataPlans.filter(p => p.id !== id);
+  const confirmDeletePlans = async (ids) => {
+    const idSet = new Set(ids);
+    let msg = `Delete ${ids.length} plan(s)? This cannot be undone.`;
+    const hasOrders = (data.orders || []).some(o =>
+      (o.items || []).some(item => idSet.has(item.planId))
+    );
+    if (hasOrders) msg += "\n\nOne or more of these plans have existing orders. Deleting will not remove orders but they will reference a plan that no longer exists.";
+    if (!(await appConfirm({ title: "Delete plans?", message: msg, confirmText: "Delete", danger: true }))) return;
+    const plans = (data.strataPlans || []).filter(p => !idSet.has(p.id));
     await savePlans(plans);
-    if (planId === id) setPlanId(plans[0]?.id || "");
+    setSelectedPlanIds(new Set());
+    if (idSet.has(planId)) setPlanId(plans[0]?.id || "");
   };
 
   // ── Product CRUD ────────────────────────────────────────────────────────────
@@ -2281,8 +3487,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ...(shippingCosts ? { shippingCosts } : {}),
       }]
     });
-    await savePlans(plans);
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const saveProduct = async () => {
@@ -2301,12 +3507,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ...(shippingCosts ? { shippingCosts } : { shippingCosts: undefined }),
       })
     });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const deleteProd = async (pid) => {
-    if (!window.confirm("Delete this product?")) return;
+    if (!(await appConfirm({ title: "Delete product?", confirmText: "Delete", danger: true }))) return;
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : { ...pl, products: pl.products.filter(pr => pr.id !== pid) });
     await savePlans(plans);
   };
@@ -2334,27 +3540,39 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
   // ── Lot CRUD ────────────────────────────────────────────────────────────────
   const addLot = async () => {
     if (!form.lotNum) return;
+    const ocList = form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [];
+    if (!ocList.length && Object.keys(plan?.ownerCorps || {}).length > 0) {
+      setLotOcErr("Owner Corporation is required. Please select at least one.");
+      return;
+    }
+    setLotOcErr("");
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
-      ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, level: form.level || "", type: form.lotType || "Residential", ownerCorps: form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [] }]
+      ...pl, lots: [...pl.lots, { id: "L" + Date.now(), number: form.lotNum, unitNumber: form.unitNumber || "", streetNumber: form.streetNumber || "", streetName: form.streetName || "", type: form.lotType || "Residential", ownerCorps: ocList }]
     });
-    await savePlans(plans);
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const saveLot = async () => {
     if (!form.lotNum) return;
+    const ocList = form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [];
+    if (!ocList.length && Object.keys(plan?.ownerCorps || {}).length > 0) {
+      setLotOcErr("Owner Corporation is required. Please select at least one.");
+      return;
+    }
+    setLotOcErr("");
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, lots: pl.lots.map(l => l.id !== editTarget.id ? l : {
-        ...l, number: form.lotNum, level: form.level || "", type: form.lotType || "Residential",
-        ownerCorps: form.ocIds ? form.ocIds.split(",").map(s => s.trim()).filter(Boolean) : [],
+        ...l, number: form.lotNum, unitNumber: form.unitNumber || "", streetNumber: form.streetNumber || "", streetName: form.streetName || "", type: form.lotType || "Residential",
+        ownerCorps: ocList,
       })
     });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const deleteLot = async (lid) => {
-    if (!window.confirm("Delete this lot?")) return;
+    if (!(await appConfirm({ title: "Delete lot?", confirmText: "Delete", danger: true }))) return;
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : { ...pl, lots: pl.lots.filter(l => l.id !== lid) });
     await savePlans(plans);
   };
@@ -2365,8 +3583,8 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, ownerCorps: { ...pl.ownerCorps, [form.ocId]: { name: form.ocName, levy: form.ocLevy ? parseFloat(form.ocLevy) : 0 } }
     });
-    await savePlans(plans);
     setModal(null); setForm({});
+    await savePlans(plans);
   };
 
   const saveOC = async () => {
@@ -2374,12 +3592,17 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     const plans = data.strataPlans.map(pl => pl.id !== planId ? pl : {
       ...pl, ownerCorps: { ...pl.ownerCorps, [editTarget.id]: { name: form.ocName, levy: form.ocLevy ? parseFloat(form.ocLevy) : 0 } }
     });
-    await savePlans(plans);
     setModal(null); setForm({}); setEditTarget(null);
+    await savePlans(plans);
   };
 
   const deleteOC = async (ocId) => {
-    if (!window.confirm(`Delete Owner Corporation "${ocId}"? Lots referencing it will keep the ID but lose the name.`)) return;
+    if (!(await appConfirm({
+      title: `Delete Owner Corporation "${ocId}"?`,
+      message: "Lots referencing it will keep the ID but lose the name.",
+      confirmText: "Delete",
+      danger: true,
+    }))) return;
     const plans = data.strataPlans.map(pl => {
       if (pl.id !== planId) return pl;
       const oc = { ...pl.ownerCorps };
@@ -2403,6 +3626,221 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     adminToastTimer.current = setTimeout(() => setAdminToast(null), 4000);
   };
 
+  // Send a one-off status / note email to the customer for an order.
+  const sendNotify = async () => {
+    if (!notifyModal) return;
+    const { order, subject, message } = notifyModal;
+    if (!message?.trim()) { setNotifyModal({ ...notifyModal, err: "A message is required." }); return; }
+    setNotifyModal({ ...notifyModal, sending: true, err: "" });
+    try {
+      const r = await fetch(`/api/orders/${order.id}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ subject: subject?.trim() || undefined, message }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setNotifyModal({ ...notifyModal, sending: false, err: d.error || "Failed to send email." });
+        return;
+      }
+      // Append audit entry locally so the row updates without a refetch
+      setData(p => ({ ...p, orders: p.orders.map(o => o.id !== order.id ? o : {
+        ...o,
+        auditLog: [...(o.auditLog || []), { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subject?.trim() || `Update on your TOCS order ${order.id}`}` }],
+      }) }));
+      setNotifyModal(null);
+      showAdminToast("ok", `Email sent to ${order.contactInfo?.email}.`);
+    } catch {
+      setNotifyModal({ ...notifyModal, sending: false, err: "Network error — please try again." });
+    }
+  };
+
+  // Opens an authority-document download via a short-lived signed URL so the
+  // long-lived admin session token never appears in the URL / browser history.
+  // Open a URL in a new tab via a synthesised anchor click. Important: this
+  // is gesture-exempt in Safari/Firefox where `window.open(url)` is blocked
+  // when the user-gesture context has already been consumed by an awaited
+  // fetch — i.e. exactly the path that loads the URL from a server response.
+  const openUrlInNewTab = (url) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  // Decide whether the doc endpoint returned a SharePoint redirect (JSON
+  // `{url}`) vs streamed bytes. We prefer the explicit `X-Doc-Source` header
+  // the server sets (sharepoint vs blob) over Content-Type sniffing, which
+  // breaks if the response is `text/json` or has a missing charset.
+  const isDocRedirectResponse = (r) => {
+    const source = r.headers.get("X-Doc-Source");
+    if (source === "sharepoint") return true;
+    if (source === "blob") return false;
+    // Fallback: sniff Content-Type for legacy servers without the header.
+    return /^application\/(?:json|.*\+json)\b/i.test(r.headers.get("Content-Type") || "");
+  };
+
+  // Parse a Content-Disposition filename. Handles the modern RFC 5987 form
+  // (`filename*=UTF-8''…`) which SharePoint and some Graph endpoints emit
+  // for non-ASCII filenames, and falls back to the legacy `filename="…"`.
+  //
+  // Both forms are sanitised before return: path separators (`/`, `\`) and
+  // leading dots are stripped so a malicious or malformed server response
+  // can't direct the download to a parent directory. Modern browsers also
+  // sanitise the `download` attribute, but mirroring the server-side
+  // sanitiseSegment policy keeps the chain consistent.
+  const sanitiseFilename = (name) => {
+    if (!name) return null;
+    let s = String(name).replace(/[\\/]/g, "_").replace(/^[.\s]+/, "").trim();
+    return s || null;
+  };
+  const parseContentDispositionFilename = (cd) => {
+    if (!cd) return null;
+    // Prefer filename*= when present — RFC 5987 says it overrides filename=.
+    const extMatch = /filename\*=(?:[\w-]+'')?([^;]+)/i.exec(cd);
+    if (extMatch?.[1]) {
+      try { return sanitiseFilename(decodeURIComponent(extMatch[1].trim().replace(/^"|"$/g, ""))); }
+      catch { /* fall through to legacy form */ }
+    }
+    // Anchor at the start of the header or after `;` so we don't grab a
+    // half-decoded `filename*=` token by accident when both directives are
+    // present and the RFC 5987 form is malformed.
+    const legacy = /(?:^|;)\s*filename="?([^";]+)"?/i.exec(cd);
+    return sanitiseFilename(legacy?.[1]);
+  };
+
+  // Stream a binary fetch response to disk via a temporary <a download>.
+  // The <a>.click() download is queued by the browser synchronously, so we
+  // can revoke the object URL on the next microtask via queueMicrotask —
+  // avoids the previous setTimeout(…, 1000) which fired regardless of
+  // component lifecycle, hanging onto the blob's memory while we wait.
+  const streamResponseAsDownload = async (r, fallbackBase) => {
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = parseContentDispositionFilename(r.headers.get("Content-Disposition")) || `${fallbackBase}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      // Revoke after a single macrotask so the browser has scheduled the
+      // download from the synthetic click before we drop the URL.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+  };
+
+  // Open the authority document. Server returns either:
+  //   - 200 JSON { url } → SharePoint copy; we navigate to it in a new tab.
+  //   - 200 binary       → stream the bytes from Redis / local uploads.
+  // Both servers accept Bearer header auth on GET /authority.
+  const openAuthorityDoc = async (orderId) => {
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(orderId)}/authority`, {
+        headers: { "Authorization": "Bearer " + adminToken },
+      });
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showAdminToast("err", d.error || "Could not open authority document.");
+        return;
+      }
+      if (isDocRedirectResponse(r)) {
+        const d = await r.json().catch(() => ({}));
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
+        return;
+      }
+      streamResponseAsDownload(r, `authority-${orderId}`);
+    } catch {
+      showAdminToast("err", "Network error opening authority document.");
+    }
+  };
+
+  // Retroactively upload the order summary (and payment receipt + authority
+  // doc, when available) to SharePoint. Used to repair orders whose SP folder
+  // was never created — historically Stripe webhook orders before May 13, or
+  // any order where the SP upload failed at creation/confirmation time.
+  const [savingToSp, setSavingToSp] = useState(null); // order.id currently saving
+  // order.id currently being deleted — used to disable the delete button on
+  // rapid double-click so we don't fire two DELETE requests for the same order.
+  const [deletingOrderId, setDeletingOrderId] = useState(null);
+  const saveOrderToSharePoint = async (order) => {
+    if (savingToSp) return;
+    setSavingToSp(order.id);
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(order.id)}/save-to-sharepoint`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + adminToken },
+      });
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (r.status === 429) { showAdminToast("err", "Too many SharePoint saves — please wait a moment and try again."); return; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        showAdminToast("err", d.error || "Save to SharePoint failed.");
+        return;
+      }
+      if (d.order) {
+        setData(p => ({ ...p, orders: p.orders.map(o => o.id !== d.order.id ? o : d.order) }));
+      }
+      if (d.alreadyPresent) {
+        const present = [
+          d.summaryUrl && "order summary",
+          d.authUrl && "authority doc",
+          d.receiptUrl && "payment receipt",
+        ].filter(Boolean);
+        showAdminToast("ok", present.length
+          ? `SharePoint already has ${present.join(", ")} for this order — no re-upload needed.`
+          : "Nothing to upload — no authority doc on file and SharePoint is already up to date.");
+        return;
+      }
+      const parts = [];
+      if (d.summaryUrl) parts.push("order summary");
+      if (d.authUrl) parts.push("authority doc");
+      if (d.receiptUrl) parts.push("payment receipt");
+      showAdminToast("ok", parts.length ? `Saved to SharePoint: ${parts.join(", ")}.` : "SharePoint save completed but nothing was uploaded — check the audit log.");
+    } catch {
+      showAdminToast("err", "Network error saving to SharePoint.");
+    } finally {
+      setSavingToSp(null);
+    }
+  };
+
+  // Re-download the OC certificate that was previously emailed to the
+  // applicant. The server returns either:
+  //   - 200 JSON { url }  → SharePoint copy; we open it in a new tab so the
+  //     browser handles the cross-origin auth dance natively.
+  //   - 200 binary        → stream the bytes (KV/local fallback) and trigger
+  //     a download via a temporary <a> + URL.createObjectURL.
+  // Orders issued before this feature shipped (no certificateUrl, no
+  // certificateFile) return 404 — admin must re-send the certificate.
+  const downloadCertificate = async (order) => {
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(order.id)}/certificate`, {
+        headers: { "Authorization": "Bearer " + adminToken },
+      });
+      if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showAdminToast("err", d.error || (r.status === 404 ? "No stored certificate. Re-send the certificate to enable re-download." : "Could not download certificate."));
+        return;
+      }
+      if (isDocRedirectResponse(r)) {
+        const d = await r.json().catch(() => ({}));
+        if (d.url) { openUrlInNewTab(d.url); return; }
+        showAdminToast("err", "Server did not return a download URL.");
+        return;
+      }
+      streamResponseAsDownload(r, `certificate-${order.id}`);
+    } catch {
+      showAdminToast("err", "Network error downloading certificate.");
+    }
+  };
+
   const updateOrderStatus = async (oid, status) => {
     // Capture previous status for rollback
     const prev = data.orders.find(o => o.id === oid)?.status;
@@ -2415,9 +3853,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         body: JSON.stringify({ status }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
         // Revert optimistic update
         setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: prev }) }));
+        if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+        const d = await r.json().catch(() => ({}));
         showAdminToast("err", d.error || `Failed to update status to "${status}".`);
       }
     } catch {
@@ -2426,10 +3865,21 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       showAdminToast("err", "Network error — status update was not saved.");
     }
   };
-  const markPaid      = (oid) => { if (window.confirm(`Mark order ${oid} as Paid?`)) updateOrderStatus(oid, "Paid"); };
+  const markPaid        = (oid) => {
+    appConfirm({ title: `Mark order ${oid} as Paid?`, confirmText: "Mark paid" })
+      .then(ok => { if (ok) updateOrderStatus(oid, "Paid"); });
+  };
+  const markPending     = (oid) => {
+    appConfirm({
+      title: `Mark order ${oid} as Pending Payment?`,
+      message: "Use this when the invoice has been issued externally (e.g. via PropertyIQ) and you are awaiting the customer's payment. The order status will update to Paid automatically once payment is detected in PIQ, or you can use Mark Paid manually.",
+      confirmText: "Mark pending",
+    }).then(ok => { if (ok) updateOrderStatus(oid, "Pending Payment"); });
+  };
   const openEditLot = (lot) => {
     setEditTarget({ type: "lot", id: lot.id });
-    setForm({ lotNum: lot.number, level: lot.level, lotType: lot.type, ocIds: lot.ownerCorps.join(", ") });
+    setLotOcErr("");
+    setForm({ lotNum: lot.number, lotType: lot.type, ocIds: lot.ownerCorps.join(", "), unitNumber: lot.unitNumber || "", streetNumber: lot.streetNumber || "", streetName: lot.streetName || "" });
     setModal("editLot");
   };
 
@@ -2443,6 +3893,21 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
     setModal("editProduct");
   };
 
+  // ── Download sample lots Excel ──────────────────────────────────────────────
+  const downloadSampleLotsExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = [
+      { "Lot Number": "1", "Unit Number": "1", "Street No": "31", "Street Name": "Faraday Road", "Type": "Residential", "Owner Corp IDs": "OC-1" },
+      { "Lot Number": "2", "Unit Number": "2", "Street No": "31", "Street Name": "Faraday Road", "Type": "Residential", "Owner Corp IDs": "OC-1" },
+      { "Lot Number": "3", "Unit Number": "3", "Street No": "31", "Street Name": "Faraday Road", "Type": "Commercial", "Owner Corp IDs": "OC-1, OC-2" },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Lots");
+    XLSX.writeFile(wb, "lots-sample.xlsx");
+  };
+
   // ── Excel / CSV import for lots ─────────────────────────────────────────────
   const importLotsFromFile = async (e, targetPlanId) => {
     const file = e.target.files?.[0];
@@ -2452,43 +3917,184 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-      if (!rows.length) { alert("The file appears to be empty."); return; }
 
       // Map columns flexibly (case-insensitive, spaces allowed)
       const norm = s => String(s).toLowerCase().replace(/[\s_\-]/g, "");
-      const lots = rows.map((row, idx) => {
-        const keys = Object.keys(row);
-        const get = (...names) => {
-          const k = keys.find(k => names.some(n => norm(k) === norm(n)));
-          return k ? String(row[k]).trim() : "";
-        };
-        const number  = get("Lot Number", "Lot No", "Lot", "Number");
-        const level   = get("Level", "Floor");
-        const type    = get("Type", "Lot Type", "Use");
-        const ocRaw   = get("Owner Corp IDs", "Owner Corp", "OC IDs", "OC", "Owner Corporation");
-        const ocIds   = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
-        return { id: "L" + Date.now() + idx, number: number || `Row ${idx + 2}`, level, type: type || "Residential", ownerCorps: ocIds };
-      }).filter(l => l.number);
+      const idBase = Date.now();
+      const parseSheetLots = (ws, fixedOcId, baseIdx) => {
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const parsed = [];
+        rows.forEach((row, idx) => {
+          const keys = Object.keys(row);
+          const get = (...names) => {
+            const k = keys.find(k => names.some(n => norm(k) === norm(n)));
+            return k ? String(row[k]).trim() : "";
+          };
+          const number       = get("Lot Number", "Lot No", "Lot", "Number");
+          const type         = get("Type", "Lot Type", "Use");
+          const unitNumber   = get("Unit Number", "Unit No", "Unit");
+          const streetNumber = get("Street No", "Street Number", "Street No.", "StreetNo");
+          const streetName   = get("Street Name", "Street", "StreetName");
+          if (!number) return;
+          let ownerCorps;
+          if (fixedOcId) {
+            ownerCorps = [fixedOcId];
+          } else {
+            const ocRaw = get("Owner Corp IDs", "Owner Corp", "OC IDs", "OC", "Owner Corporation");
+            ownerCorps = ocRaw ? ocRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean) : [];
+          }
+          const VALID_LOT_TYPES = ["Residential", "Commercial", "Parking"];
+          parsed.push({ id: "L" + idBase + (baseIdx + idx), number, unitNumber, streetNumber, streetName, type: VALID_LOT_TYPES.includes(type) ? type : "Residential", ownerCorps });
+        });
+        return parsed;
+      };
 
-      const confirmed = window.confirm(`Import ${lots.length} lots into ${targetPlanId}?\n\nThis will REPLACE all existing lots for this plan.`);
+      let lots = [];
+      let newOwnerCorps = null;
+      let ocMapping = null; // [{ sheet, ocId, status:"existing"|"new" }] — shown in the confirm dialog
+
+      // Existing OCs on the target building, indexed by normalised name so an
+      // import can be REUSED onto them instead of minting fresh OC-N ids. This
+      // is what stops a per-sheet import from creating duplicate OCs: e.g. a
+      // PropertyIQ building already carries OC-159 "Owners Corporation 1", so a
+      // sheet named "Owners Corporation 1" must map onto OC-159, not a new OC-1.
+      const targetPlan = (data.strataPlans || []).find(p => p.id === targetPlanId);
+      const existingOCs = targetPlan?.ownerCorps || {};
+      const normName = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const existingByName = new Map(
+        Object.entries(existingOCs).map(([id, oc]) => [normName(oc?.name), id])
+      );
+      // Lowest unused OC-N id, considering existing OCs and ones minted this import.
+      const freshOcId = (created) => {
+        let n = 1;
+        while (existingOCs[`OC-${n}`] || created[`OC-${n}`]) n++;
+        return `OC-${n}`;
+      };
+      // Resolve a sheet/section name to an OC id: reuse an existing OC with the
+      // same name (case-insensitive), otherwise mint a fresh non-colliding id.
+      const resolveOcId = (rawName, created, mapping) => {
+        const name = String(rawName || "").trim();
+        const match = name ? existingByName.get(normName(name)) : null;
+        if (match) { mapping.push({ sheet: name, ocId: match, status: "existing" }); return match; }
+        const id = freshOcId(created);
+        created[id] = { name, levy: 0 };
+        existingByName.set(normName(name), id); // a repeated sheet name reuses this id
+        mapping.push({ sheet: name, ocId: id, status: "new" });
+        return id;
+      };
+
+      if (wb.SheetNames.length > 1) {
+        // Multi-sheet: each sheet = one Owner Corporation. Match by name first.
+        newOwnerCorps = {};
+        ocMapping = [];
+        let lotIdx = 0;
+        wb.SheetNames.forEach((sheetName) => {
+          const ocId = resolveOcId(sheetName, newOwnerCorps, ocMapping);
+          const ws = wb.Sheets[sheetName];
+          const sheetLots = parseSheetLots(ws, ocId, lotIdx);
+          lotIdx += sheetLots.length;
+          lots = lots.concat(sheetLots);
+        });
+        // Consolidate lots that appear in multiple sheets: merge ownerCorps arrays
+        const byNumber = new Map();
+        lots.forEach(lot => {
+          const key = lot.number.trim().toLowerCase();
+          if (byNumber.has(key)) {
+            const existing = byNumber.get(key);
+            lot.ownerCorps.forEach(oc => { if (!existing.ownerCorps.includes(oc)) existing.ownerCorps.push(oc); });
+          } else {
+            byNumber.set(key, { ...lot });
+          }
+        });
+        lots = [...byNumber.values()];
+      } else {
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const ocIds = Object.keys(existingOCs);
+        if (ocIds.length === 1) {
+          // One OC already defined — auto-assign it to all lots
+          lots = parseSheetLots(ws, ocIds[0], 0);
+        } else if (ocIds.length === 0) {
+          // No OCs yet — create one from the sheet name (mirrors multi-sheet behaviour)
+          newOwnerCorps = {};
+          ocMapping = [];
+          const ocId = resolveOcId(wb.SheetNames[0], newOwnerCorps, ocMapping);
+          lots = parseSheetLots(ws, ocId, 0);
+        } else {
+          // Multiple OCs — read OC assignment from the Excel column
+          lots = parseSheetLots(ws, null, 0);
+        }
+      }
+
+      // If every sheet matched an existing OC, there is nothing new to create.
+      if (newOwnerCorps && Object.keys(newOwnerCorps).length === 0) newOwnerCorps = null;
+
+      if (!lots.length) { appToast({ type: "err", message: "No lots found in the file. Check that the spreadsheet has a 'Lot Number' column." }); return; }
+
+      // Warn if any OC IDs from the Excel column don't exist in the plan
+      const planOcIds = new Set(Object.keys(
+        (data.strataPlans || []).find(p => p.id === targetPlanId)?.ownerCorps || {}
+      ).concat(Object.keys(newOwnerCorps || {})));
+      const unknownOcIds = [...new Set(lots.flatMap(l => l.ownerCorps).filter(id => id && !planOcIds.has(id)))];
+      if (unknownOcIds.length) {
+        const proceed = await appConfirm({
+          title: "Unknown OC IDs",
+          message: `The following OC IDs in the file don't match any Owner Corporation in this plan:\n\n${unknownOcIds.join(", ")}\n\nThose lots will show "No OC assigned". Continue anyway?`,
+          confirmText: "Continue",
+        });
+        if (!proceed) return;
+      }
+
+      let ocMsg = "";
+      if (ocMapping && ocMapping.length) {
+        const matched = ocMapping.filter(m => m.status === "existing");
+        const created = ocMapping.filter(m => m.status === "new");
+        if (matched.length) {
+          ocMsg += "\n\nMatched to existing Owner Corporations:\n" +
+            matched.map(m => `• "${m.sheet}" → ${m.ocId} (${existingOCs[m.ocId]?.name || m.ocId})`).join("\n");
+        }
+        if (created.length) {
+          ocMsg += "\n\nNEW Owner Corporations to be created:\n" +
+            created.map(m => `• ${m.ocId}: ${m.sheet}`).join("\n");
+        }
+      } else if (newOwnerCorps) {
+        ocMsg = "\n\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) will also be created:\n" +
+          Object.entries(newOwnerCorps).map(([id, oc]) => "• " + id + ": " + oc.name).join("\n");
+      }
+      const confirmed = await appConfirm({
+        title: `Import ${lots.length} lots into ${targetPlanId}?`,
+        message: `Existing lots will be updated (matched by lot number). New lots will be added. No lots will be deleted.${ocMsg}`,
+        confirmText: "Import",
+      });
       if (!confirmed) return;
+
+      const payload = { action: "import-lots", planId: targetPlanId, lots };
+      if (newOwnerCorps) payload.ownerCorps = newOwnerCorps;
 
       const r = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ action: "import-lots", planId: targetPlanId, lots }),
+        body: JSON.stringify(payload),
       });
+      if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} return; }
       if (r.ok) {
-        setData(p => ({ ...p, strataPlans: p.strataPlans.map(pl => pl.id !== targetPlanId ? pl : { ...pl, lots }) }));
-        alert(`✅ ${lots.length} lots imported successfully.`);
+        const rj = await r.json();
+        // Reload fresh data — failure here is non-fatal; stale state is better than crashing
+        try {
+          const fresh = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } }).then(x => x.json());
+          if (fresh?.strataPlans) setData(p => ({ ...p, strataPlans: fresh.strataPlans }));
+        } catch { /* UI will reflect server state on next load */ }
+        const ocSuccessMsg = newOwnerCorps ? "\n" + Object.keys(newOwnerCorps).length + " Owner Corporation(s) created/updated." : "";
+        const summary = rj.added != null ? ` (${rj.added} new, ${rj.updated} updated)` : "";
+        appToast({
+          type: rj.warning ? "err" : "ok",
+          message: `Import complete: ${rj.count} lots${summary}.${ocSuccessMsg}` + (rj.warning ? `\n\n⚠ ${rj.warning}` : ""),
+        });
       } else {
-        const d = await r.json();
-        alert("Import failed: " + (d.error || "Unknown error"));
+        const d = await r.json().catch(() => ({}));
+        appToast({ type: "err", message: "Import failed: " + (d.error || "Unknown error") });
       }
     } catch (err) {
-      alert("Failed to read file: " + err.message);
+      appToast({ type: "err", message: "Failed to read file: " + err.message });
     }
   };
 
@@ -2519,36 +4125,92 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         ))}
       </div>
 
+      {planSaveErr && (
+        <div className="alert alert-err" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <span>{planSaveErr}</span>
+          <button onClick={() => setPlanSaveErr(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "inherit", marginLeft: "12px" }}>×</button>
+        </div>
+      )}
+
       {/* ── PLANS ── */}
       {adminTab === "plans" && (
         <div className="panel">
-          {planSaveErr && (
-            <div className="alert alert-err" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <span>{planSaveErr}</span>
-              <button onClick={() => setPlanSaveErr(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "inherit", marginLeft: "12px" }}>×</button>
-            </div>
-          )}
           <div className="section-hd">
             <h2 className="section-tt">Strata Plans</h2>
-            <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
-              <Ic n="plus" s={13}/> Add Plan
-            </button>
+            <div style={{ display:"flex", gap:"8px" }}>
+              <button className="btn btn-out" style={{ padding:"8px 16px", fontSize:"0.72rem", background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={syncAllFromPiq}>
+                <Ic n="cloud" s={13}/> Sync All from PIQ
+              </button>
+              <button className="btn btn-out" style={{ padding:"8px 16px", fontSize:"0.72rem", background:"#f0f9ff", color:"#0369a1", border:"1px solid #7dd3fc" }} onClick={fillMissingBuildingInfo}>
+                <Ic n="building" s={13}/> Update missing building info
+              </button>
+              <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("plan"); }}>
+                <Ic n="plus" s={13}/> Add Plan
+              </button>
+            </div>
           </div>
+          {selectedPlanIds.size > 0 && (
+            <div style={{ marginBottom: "8px" }}>
+              <button className="btn" style={{ padding:"7px 14px", fontSize:"0.75rem", background:"#fef2f2", color:"#dc2626", border:"1px solid #fca5a5" }}
+                onClick={() => confirmDeletePlans([...selectedPlanIds])}>
+                <Ic n="trash" s={13}/> Delete Selected ({selectedPlanIds.size})
+              </button>
+            </div>
+          )}
           <table className="tbl">
-            <thead><tr><th>Plan ID</th><th>Name</th><th>Address</th><th>Lots</th><th>Products</th><th>Shipping</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 32 }}>
+                  <input type="checkbox"
+                    ref={el => { if (el) { const some = sortedPlans.some(p => selectedPlanIds.has(p.id)); const all = sortedPlans.length > 0 && sortedPlans.every(p => selectedPlanIds.has(p.id)); el.indeterminate = some && !all; el.checked = all; } }}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedPlanIds(new Set(sortedPlans.map(p => p.id)));
+                      else setSelectedPlanIds(new Set());
+                    }}
+                  />
+                </th>
+                {[["id","Plan ID"],["name","Name"]].map(([col, label]) => (
+                  <th key={col} style={{ cursor:"pointer", userSelect:"none" }}
+                    onClick={() => setPlanSort(s => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }))}>
+                    {label} {planSort.col === col ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                ))}
+                <th>Address</th>
+                <th style={{ cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setPlanSort(s => ({ col:"lots", dir: s.col === "lots" && s.dir === "asc" ? "desc" : "asc" }))}>
+                  Lots {planSort.col === "lots" ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th style={{ cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setPlanSort(s => ({ col:"products", dir: s.col === "products" && s.dir === "asc" ? "desc" : "asc" }))}>
+                  Products {planSort.col === "products" ? (planSort.dir === "asc" ? "▲" : "▼") : ""}
+                </th>
+                <th>Shipping</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {data.strataPlans.map(p => (
+              {sortedPlans.map(p => (
                 <tr key={p.id}>
+                  <td>
+                    <input type="checkbox" checked={selectedPlanIds.has(p.id)}
+                      onChange={e => setSelectedPlanIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p.id); else next.delete(p.id);
+                        return next;
+                      })}
+                    />
+                  </td>
                   <td><strong style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{p.id}</strong></td>
                   <td>{p.name}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)", maxWidth: 180 }}>{p.address}</td>
-                  <td>{p.lots.length}</td>
-                  <td>{p.products.length}</td>
+                  <td>{(p.lots || []).length}</td>
+                  <td>{(p.products || []).length}</td>
                   <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{(p.shippingOptions || []).length} option{(p.shippingOptions || []).length !== 1 ? "s" : ""}</td>
-                  <td style={{ display: "flex", gap: "6px" }}>
+                  <td style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     <button className="tbl-act-btn" onClick={() => openEditPlan(p)}><Ic n="edit" s={13}/> Edit</button>
                     <button className="tbl-act-btn" onClick={() => openManageShipping(p)}><Ic n="truck" s={13}/> Shipping</button>
-                    <button className="tbl-act-btn danger" onClick={() => deletePlan(p.id)}><Ic n="trash" s={13}/> Delete</button>
+                    <button className="tbl-act-btn" style={{ background:"#e8f4ff", color:"#1a5fa8", border:"1px solid #b0d4f5" }} onClick={() => openPiqSync(p.id)}><Ic n="cloud" s={13}/> Sync from PIQ</button>
+                    <button className="tbl-act-btn danger" onClick={() => confirmDeletePlans([p.id])}><Ic n="trash" s={13}/> Delete</button>
                   </td>
                 </tr>
               ))}
@@ -2616,24 +4278,34 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               <div className="section-hd">
                 <h2 className="section-tt">Lots — {plan.name}</h2>
                 <div style={{ display: "flex", gap: "8px" }}>
+                  <button className="btn btn-out" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={downloadSampleLotsExcel}>
+                    <Ic n="download" s={13}/> Sample Excel
+                  </button>
                   <label className="btn btn-out" style={{ padding: "8px 16px", fontSize: "0.72rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                     <Ic n="upload" s={13}/> Import Excel
                     <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => importLotsFromFile(e, planId)}/>
                   </label>
-                  <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setModal("lot"); }}>
+                  <button className="btn btn-blk" style={{ padding: "8px 16px", fontSize: "0.72rem" }} onClick={() => { setForm({}); setLotOcErr(""); setModal("lot"); }}>
                     <Ic n="plus" s={13}/> Add Lot
                   </button>
                 </div>
               </div>
               <table className="tbl">
-                <thead><tr><th>Lot</th><th>Level</th><th>Type</th><th>Owner Corporations</th><th></th></tr></thead>
+                <thead><tr><th>Lot</th><th>Unit</th><th>Street No</th><th>Street Name</th><th>Type</th><th>Owner Corporations</th><th></th></tr></thead>
                 <tbody>
                   {plan.lots.map(l => (
-                    <tr key={l.id}>
+                    <tr key={l.id} style={(!l.ownerCorps || l.ownerCorps.length === 0) ? { background:"#fffbeb", borderLeft:"3px solid #f59e0b" } : {}}>
                       <td><strong>{l.number}</strong></td>
-                      <td>{l.level}</td>
+                      <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{l.unitNumber || "—"}</td>
+                      <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{l.streetNumber || "—"}</td>
+                      <td style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{l.streetName || "—"}</td>
                       <td><span className={`badge ${l.type==="Residential"?"bg-b":l.type==="Commercial"?"bg-gold":"bg-gray"}`}>{l.type}</span></td>
-                      <td style={{ fontSize: "0.78rem" }}>{l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")}</td>
+                      <td style={{ fontSize: "0.78rem" }}>
+                        {(!l.ownerCorps || l.ownerCorps.length === 0)
+                          ? <span style={{ color:"#b45309", fontWeight:600, fontSize:"0.75rem" }}>⚠ No OC assigned</span>
+                          : l.ownerCorps.map(id => plan.ownerCorps[id]?.name || id).join(", ")
+                        }
+                      </td>
                       <td style={{ display: "flex", gap: "6px" }}>
                         <button className="tbl-act-btn" aria-label="Edit lot" onClick={() => openEditLot(l)}><Ic n="edit" s={13}/></button>
                         <button className="tbl-act-btn danger" aria-label="Delete lot" onClick={() => deleteLot(l.id)}><Ic n="trash" s={13}/></button>
@@ -2693,7 +4365,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       {/* ── ORDERS ── */}
       {adminTab === "orders" && (() => {
         return (
-        <div className="panel">
+        <div className="panel" style={{ width: "min(1400px, calc(100vw - 48px))", marginLeft: "50%", transform: "translateX(-50%)" }}>
           {adminToast && (
             <div className={`alert ${adminToast.type === "err" ? "alert-err" : "alert-ok"}`}
               style={{ marginBottom: "1rem" }}>{adminToast.msg}</div>
@@ -2702,6 +4374,32 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <h2 className="section-tt">Orders</h2>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <span className="badge bg-b">{filteredOrders.length}/{data.orders.length}</span>
+              <button className="btn btn-out" style={{ padding: "6px 12px", fontSize: "0.72rem" }}
+                disabled={checkingAllPiq}
+                onClick={async () => {
+                  setCheckingAllPiq(true);
+                  try {
+                    const r = await fetch("/api/orders?action=poll-piq", { headers: { "Authorization": "Bearer " + adminToken } });
+                    const d = await r.json();
+                    if (!r.ok) { showAdminToast("err", d.error || "PIQ check failed."); return; }
+                    const msg = d.confirmed > 0
+                      ? `PIQ check done: ${d.checked} order(s) checked, ${d.confirmed} payment(s) confirmed.`
+                      : d.checked > 0
+                        ? `PIQ check done: ${d.checked} order(s) checked, no new payments.`
+                        : "No pending PIQ orders to check.";
+                    showAdminToast("ok", msg);
+                    if (d.checked > 0 || d.confirmed > 0) {
+                      const rd = await fetch("/api/data", { headers: { "Authorization": "Bearer " + adminToken } });
+                      if (rd.ok) { const fresh = await rd.json(); setData(fresh); }
+                    }
+                  } catch { showAdminToast("err", "PIQ check failed — network error."); }
+                  finally { setCheckingAllPiq(false); fetchPiqPollStatus(); }
+                }}>
+                {checkingAllPiq
+                  ? <><span aria-hidden="true" style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
+                  : <><Ic n="refresh" s={13}/> Check PIQ</>
+                }
+              </button>
               {data.orders.length > 0 && (
                 <button className="btn btn-out" style={{ padding: "6px 12px", fontSize: "0.72rem" }}
                   onClick={async () => {
@@ -2719,6 +4417,61 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
               )}
             </div>
           </div>
+          {/* PIQ auto-poll health line. Staleness is judged ONLY against the
+              cron slot — a recent manual "Check PIQ" must not mask a broken
+              Vercel cron. Cron runs daily at 02:30 UTC; >28 h since last
+              successful cron run, or CRON_SECRET unset, flags red. */}
+          {piqPollStatus && (() => {
+            const cronOk   = piqPollStatus.cronSecretConfigured;
+            const cronRun  = piqPollStatus.lastCronRun;
+            const manRun   = piqPollStatus.lastManualRun;
+            const fmtAge   = ms => ms < 3600e3 ? `${Math.round(ms/60000)} min` : `${Math.round(ms/3600000)} h`;
+            const fmtWhen  = ts => new Date(ts).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+
+            let msg, bad = false;
+            if (!cronOk) {
+              msg = "CRON_SECRET is not configured — automatic PIQ polling is disabled. Set CRON_SECRET in Vercel env vars.";
+              bad = true;
+            } else if (!cronRun) {
+              msg = "No automatic PIQ poll has run yet. Daily schedule: 02:30 UTC.";
+              bad = true;
+            } else {
+              const ageMs = Date.now() - new Date(cronRun.ts).getTime();
+              const stale = ageMs > 28 * 3600 * 1000;
+              if (!cronRun.ok) {
+                // Two failure shapes: a thrown exception (cronRun.error set,
+                // whole run aborted) or per-order failures (errorCount > 0,
+                // those orders were not actually checked).
+                if (cronRun.error) {
+                  msg = `Last auto-poll FAILED ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}): ${cronRun.error}`;
+                } else {
+                  // checked is already the *successful* count — failures only
+                  // increment errorCount on the backend, never checked. Don't
+                  // subtract or the count goes negative in a full-outage run.
+                  msg = `Last auto PIQ poll ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) had ${cronRun.errorCount} error(s) — ${cronRun.checked || 0} ok, ${cronRun.errorCount} failed${cronRun.firstError ? ` (first: ${cronRun.firstError})` : ""}. PIQ may be down or credentials wrong.`;
+                }
+                bad = true;
+              } else {
+                msg = `Last auto PIQ poll: ${fmtAge(ageMs)} ago (${fmtWhen(cronRun.ts)}) — ${cronRun.checked || 0} checked, ${cronRun.confirmed || 0} confirmed${cronRun.linked ? `, ${cronRun.linked} linked` : ""}.`;
+                if (stale) { msg = "⚠ " + msg + " Auto-poll appears stale — check Vercel cron config."; bad = true; }
+              }
+            }
+            // Append a hint about the most recent manual run so admins can see
+            // when someone last clicked "Check PIQ" — informational only, never
+            // affects the bad/good colour.
+            if (manRun) {
+              const manAge = Date.now() - new Date(manRun.ts).getTime();
+              msg += ` Last manual check: ${fmtAge(manAge)} ago.`;
+            }
+            return (
+              <div style={{
+                fontSize: "0.72rem", padding: "6px 10px", marginBottom: "8px", borderRadius: "4px",
+                background: bad ? "#fdecec" : "#f0f5f1",
+                color:      bad ? "#a02020" : "#1c3326",
+                border:     `1px solid ${bad ? "#e0a0a0" : "#cfdcd2"}`,
+              }}>{msg}</div>
+            );
+          })()}
           {/* Category toggle + Search / filter bar */}
           <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
             {[["", "All Orders"], ["oc", "OC Certificates"], ["keys", "Keys / Fobs"]].map(([val, label]) => (
@@ -2763,19 +4516,42 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             <div className="empty"><div style={{ fontSize: "2rem", marginBottom: "0.8rem" }}>📋</div><p>{data.orders.length === 0 ? "No orders yet." : "No orders match your filter."}</p></div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-            <table className="tbl">
-              <thead><tr><th>Order ID</th><th>Date</th><th>Building / Lot</th><th>Applicant</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr></thead>
+            <table className="tbl tbl-stack" style={{ minWidth: "1100px", width: "100%", tableLayout: "auto" }}>
+              <thead>
+                <tr>
+                  {[
+                    { key: "id", label: "Order ID" },
+                    { key: "date", label: "Date" },
+                    { key: "category", label: "Type" },
+                    { key: "building", label: "Building / Lot" },
+                    { key: "name", label: "Applicant" },
+                    { key: "items", label: "Items" },
+                    { key: "total", label: "Total" },
+                    { key: "status", label: "Status" },
+                  ].map(h => (
+                    <th key={h.key} style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleOrderSort(h.key)} title={`Sort by ${h.label}`}>
+                      {h.label}{sortIndicator(h.key)}
+                    </th>
+                  ))}
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>
-                {filteredOrders.map(o => {
+                {pagedOrders.map(o => {
                   const building = o.items?.[0]?.planName || "—";
                   const lotNum = o.items?.[0]?.lotNumber || "—";
                   return (
                   <Fragment key={o.id}>
                     <tr style={{ cursor: "pointer" }} onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)}>
-                      <td><strong style={{ fontFamily: "monospace", fontSize: "0.76rem" }}>{o.id}</strong></td>
-                      <td style={{ fontSize: "0.78rem" }}>{new Date(o.date).toLocaleDateString("en-AU")}</td>
-                      <td style={{ fontSize: "0.78rem" }}><strong>{building}</strong><br/><span style={{ color: "var(--muted)" }}>{lotNum}</span></td>
-                      <td style={{ fontSize: "0.78rem" }}>
+                      <td data-label="Order ID"><strong style={{ fontFamily: "monospace", fontSize: "0.76rem" }}>{o.id}</strong></td>
+                      <td data-label="Date" style={{ fontSize: "0.78rem" }}>{new Date(o.date).toLocaleDateString("en-AU")}</td>
+                      <td data-label="Type" style={{ fontSize: "0.78rem" }}>
+                        <span className={`badge ${o.orderCategory === "keys" ? "bg-teal" : "bg-gray"}`}>
+                          {o.orderCategory === "keys" ? "Keys / Fobs" : "OC Cert"}
+                        </span>
+                      </td>
+                      <td data-label="Building / Lot" style={{ fontSize: "0.78rem" }}><strong>{building}</strong><br/><span style={{ color: "var(--muted)" }}>{lotNum}</span></td>
+                      <td data-label="Customer" style={{ fontSize: "0.78rem" }}>
                         {o.contactInfo?.name || "—"}
                         {(() => {
                           const ci = o.contactInfo;
@@ -2787,10 +4563,10 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         })()}
                         <br/><span style={{ color: "var(--muted)" }}>{o.contactInfo?.email}</span>
                       </td>
-                      <td>{(o.items || []).length}</td>
-                      <td><strong>{fmt(o.total)}</strong></td>
-                      <td><span className={`badge ${
-                        o.status==="Issued"?"bg-b":
+                      <td data-label="Items" title={`${(o.items || []).length} line item${(o.items || []).length === 1 ? "" : "s"}`}>{(o.items || []).reduce((s, i) => s + Math.max(1, Math.floor(Number(i.qty) || 1)), 0)}</td>
+                      <td data-label="Total"><strong>{fmt(o.total)}</strong></td>
+                      <td data-label="Status"><span className={`badge ${
+                        o.status==="Issued"?"bg-issued":
                         o.status==="Paid"?"bg-g":
                         o.status==="Cancelled"?"bg-r":
                         o.status==="Processing"?"bg-teal":
@@ -2801,49 +4577,98 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                         o.status==="Awaiting Stripe Payment"?"bg-slate":
                         "bg-gray"
                       }`}>{o.status}</span></td>
-                      <td style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
-                        {o.status === "Invoice to be issued" && (
-                          <button className="tbl-act-btn" style={{ background:"#e0f5f2",color:"#0d6e62",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
-                        )}
-                        {o.status === "Pending Payment" && (
-                          <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
-                        )}
-                        {(o.status === "Processing" || o.status === "Paid" || o.status === "Issued") && o.orderCategory !== "keys" && (
-                          <button className="tbl-act-btn" style={{ background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
-                        )}
-                        {o.status !== "Issued" && o.status !== "Cancelled" && (
-                          <button className="tbl-act-btn danger" onClick={e => { e.stopPropagation(); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
-                        )}
-                        {o.status === "Cancelled" && (
-                          <button className="tbl-act-btn danger"
-                            title="Permanently delete this cancelled order"
-                            onClick={e => {
-                              e.stopPropagation();
-                              if (!window.confirm(`Permanently delete order ${o.id}? This cannot be undone.`)) return;
-                              fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
-                                .then(r => r.json())
-                                .then(d => {
-                                  if (d.ok) {
-                                    setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
-                                    showAdminToast("ok", `Order ${o.id} deleted.`);
-                                  } else {
-                                    showAdminToast("err", d.error || "Delete failed.");
-                                  }
-                                })
-                                .catch(() => showAdminToast("err", "Delete failed."));
-                            }}>Delete</button>
-                        )}
-                        {(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl) && (
-                          o.lotAuthorityUrl
-                            ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="tbl-act-btn" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
-                            : <a href={`/api/orders/${o.id}/authority?token=${adminToken}`} className="tbl-act-btn" style={{ textDecoration:"none" }} download onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
-                        )}
+                      <td className="tbl-actions" style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "nowrap", minWidth: "240px", width: "240px" }}>
+                        {/* Issued = terminal state, no buttons at all */}
+                        {o.status !== "Issued" && (() => {
+                          const hasAmendInMore = ["Invoice to be issued", "Pending Payment"].includes(o.status);
+                          const hasMarkPending = o.status === "Invoice to be issued" && o.orderCategory === "keys";
+                          const hasCancel = o.status !== "Cancelled";
+                          const hasNotify = !!o.contactInfo?.email;
+                          const hasAuthDoc = !!(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl);
+                          return <>
+                            {/* Primary action — next workflow step */}
+                            {o.status === "Invoice to be issued" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Send Invoice</button>
+                            )}
+                            {o.status === "Pending Payment" && o.payment === "invoice" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--teal-tint)",color:"var(--teal)",border:"1px solid #a0d8d2" }} title="Re-issue the invoice (e.g. after amending the order)" onClick={e => { e.stopPropagation(); setSendInvoiceModal({ orderId: o.id, order: o }); }}>Resend Invoice</button>
+                            )}
+                            {(o.status === "Pending Payment" || o.status === "Awaiting Stripe Payment") && (
+                              <button className="tbl-act-btn success" onClick={e => { e.stopPropagation(); markPaid(o.id); }}>Mark Paid</button>
+                            )}
+                            {(o.status === "Processing" || o.status === "Paid") && o.orderCategory !== "keys" && (
+                              <button className="tbl-act-btn" style={{ background:"var(--green-tint)",color:"var(--green)",border:"1px solid #86efac" }} onClick={e => { e.stopPropagation(); setSendCertModal({ orderId: o.id, order: o }); }}>Send Cert</button>
+                            )}
+                            {["On Hold", "Awaiting Documents"].includes(o.status) && (
+                              <button className="tbl-act-btn" style={{ background:"var(--yellow-tint)",color:"#854d0e",border:"1px solid #fde68a" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                            )}
+                            {o.status === "Cancelled" && (
+                              <button className="tbl-act-btn danger"
+                                title={deletingOrderId === o.id ? "Deleting…" : "Permanently delete this cancelled order"}
+                                disabled={deletingOrderId === o.id}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (deletingOrderId === o.id) return;
+                                  appConfirm({
+                                    title: `Permanently delete order ${o.id}?`,
+                                    message: "This cannot be undone.",
+                                    confirmText: "Delete",
+                                    danger: true,
+                                  }).then(ok => {
+                                    if (!ok) return;
+                                    setDeletingOrderId(o.id);
+                                    fetch(`/api/orders/${o.id}/delete`, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
+                                      .then(async r => {
+                                        if (r.status === 401) { showAdminToast("err", "Session expired — please log in again."); return; }
+                                        const d = await r.json().catch(() => ({}));
+                                        if (r.ok && d.ok) {
+                                          setData(p => ({ ...p, orders: p.orders.filter(x => x.id !== o.id) }));
+                                          showAdminToast("ok", `Order ${o.id} deleted.`);
+                                        } else {
+                                          showAdminToast("err", d.error || "Delete failed.");
+                                        }
+                                      })
+                                      .catch(() => showAdminToast("err", "Delete failed."))
+                                      .finally(() => setDeletingOrderId(null));
+                                  });
+                                }}>{deletingOrderId === o.id ? "Deleting…" : "Delete"}</button>
+                            )}
+                            {/* More ▾ overflow menu */}
+                            {(hasAmendInMore || hasMarkPending || hasCancel || hasNotify || hasAuthDoc) && (
+                              <div style={{ position: "relative" }}>
+                                <button className="tbl-act-btn" onClick={e => { e.stopPropagation(); setMoreMenuOrder(moreMenuOrder === o.id ? null : o.id); }}>More ▾</button>
+                                {moreMenuOrder === o.id && (
+                                  <div className="order-more-menu" onClick={e => e.stopPropagation()}>
+                                    {hasMarkPending && (
+                                      <button className="order-more-item" style={{ color:"var(--amber)" }} title="Invoice issued externally (e.g. via PIQ) — mark as Pending Payment awaiting receipt" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); markPending(o.id); }}>Mark Pending Payment</button>
+                                    )}
+                                    {hasAmendInMore && (
+                                      <button className="order-more-item" style={{ color:"#854d0e" }} title="Edit items / quantities and recalculate the total" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setAmendOrderModal({ orderId: o.id, order: o }); }}>Amend</button>
+                                    )}
+                                    {hasCancel && (
+                                      <button className="order-more-item danger" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setCancelOrderModal({ orderId: o.id, order: o }); }}>Cancel</button>
+                                    )}
+                                    {hasNotify && (
+                                      <button className="order-more-item" style={{ color:"#1d4ed8" }} title={`Email ${o.contactInfo.email} a status update`} onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); setNotifyModal({ order: o, subject: `Update on your TOCS order ${o.id}`, message: `Hi ${o.contactInfo?.name || ""},\n\nYour order ${o.id} is currently: ${o.status}.\n\nKind regards,\nTOCS Team`, sending: false, err: "" }); }}>✉ Notify</button>
+                                    )}
+                                    {hasAuthDoc && (
+                                      o.lotAuthorityUrl
+                                        ? <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="order-more-item" style={{ textDecoration:"none" }} onClick={e => e.stopPropagation()}>📎 Auth Doc</a>
+                                        : <button className="order-more-item" onClick={e => { e.stopPropagation(); setMoreMenuOrder(null); openAuthorityDoc(o.id); }}>📎 Auth Doc</button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>;
+                        })()}
+
                         <Ic n={expandedOrder === o.id ? "arrowL" : "arrow"} s={12}/>
                       </td>
                     </tr>
                     {expandedOrder === o.id && (
                       <tr>
-                        <td colSpan={8} style={{ background: "var(--cream)", padding: "0.8rem 1rem" }}>
+                        <td colSpan={9} style={{ background: "var(--cream)", padding: "0.8rem 1rem" }}>
                           {/* Order Items */}
                           <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Order Items</div>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", marginBottom: "1rem" }}>
@@ -2899,8 +4724,31 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                               </div>
                             );
                           })()}
-                          {/* Documents section — order summary, authority doc, certificate, invoice */}
-                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.invoiceUrl) && (
+                          {/* Cancellation + refund summary — only when cancelled */}
+                          {o.status === "Cancelled" && (o.cancelReason || o.refund) && (
+                            <div style={{ marginBottom: "1rem" }}>
+                              <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Cancellation</div>
+                              <table style={{ fontSize: "0.8rem", borderCollapse: "collapse" }}>
+                                <tbody>
+                                  {o.cancelReason && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Reason</td><td style={{ paddingBottom:"4px" }}>{o.cancelReason}</td></tr>}
+                                  {o.refund && (
+                                    <>
+                                      <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Refund method</td><td style={{ paddingBottom:"4px" }}>{o.refund.method}</td></tr>
+                                      <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Refund amount</td><td style={{ paddingBottom:"4px" }}>{fmt(o.refund.amount || 0)}</td></tr>
+                                      {o.refund.reference && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Reference</td><td style={{ paddingBottom:"4px", fontFamily:"monospace", fontSize:"0.78rem" }}>{o.refund.reference}</td></tr>}
+                                      {o.refund.ts && <tr><td style={{ color:"var(--muted)", paddingRight:"16px", paddingBottom:"4px" }}>Recorded</td><td style={{ paddingBottom:"4px" }}>{new Date(o.refund.ts).toLocaleString("en-AU")}{o.refund.by ? ` by ${o.refund.by}` : ""}</td></tr>}
+                                    </>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                          {/* Documents section — order summary, authority doc, certificate, invoice.
+                              Also rendered whenever Save-to-SharePoint applies (Paid / Issued orders
+                              missing an SP summary or, for Stripe, missing the receipt) so admin can
+                              repair pre-May-13 webhook orders. */}
+                          {(o.summaryUrl || o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl || o.certificateUrl || o.certificateFile || o.invoiceUrl
+                            || (pubConfig?.sharepointEnabled && ["Paid", "Issued", "Processing"].includes(o.status) && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)))) && (
                             <div style={{ marginBottom: "1rem" }}>
                               <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: "8px" }}>Documents</div>
                               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -2911,27 +4759,55 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                                 )}
                                 {(o.lotAuthFileName || o.lotAuthorityFile || o.lotAuthorityUrl) && (
                                   o.lotAuthorityUrl ? (
-                                    <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                                    <a href={o.lotAuthorityUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
                                     </a>
                                   ) : (
-                                    <a href={`/api/orders/${o.id}/authority?token=${adminToken}`} className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} download>
+                                    <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }} onClick={() => openAuthorityDoc(o.id)} aria-label={`Open authority document for order ${o.id}`}>
                                       <Ic n="shield" s={13}/> Authority Doc
-                                    </a>
+                                    </button>
                                   )
                                 )}
-                                {o.certificateUrl && (
-                                  <a href={o.certificateUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
-                                    <Ic n="doc" s={13}/> Certificate
-                                  </a>
+                                {/* Hide unless we actually have a stored copy. Legacy Issued orders with no
+                                    certificateUrl / certificateFile would hit a 404 — re-send the cert first. */}
+                                {(o.certificateUrl || o.certificateFile) && (
+                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                                    title={o.certificateUrl ? "Open the certificate from SharePoint" : "Download the stored copy of the certificate"}
+                                    aria-label={`Download certificate for order ${o.id}`}
+                                    onClick={() => downloadCertificate(o)}>
+                                    <Ic n="doc" s={13}/> Download Certificate
+                                  </button>
                                 )}
                                 {o.invoiceUrl && (
-                                  <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                                  <a href={o.invoiceUrl} target="_blank" rel="noreferrer" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", textDecoration: "none", display: "inline-flex", alignItems: "center" }} aria-label={`Open invoice for order ${o.id}`}>
                                     <Ic n="invoice" s={13}/> Invoice
                                   </a>
                                 )}
+                                {/* Retroactive SharePoint repair — surface only when SP is configured AND the folder is missing/partial.
+                                    Disable on ALL rows while any save is in flight so a second click doesn't silently no-op. */}
+                                {pubConfig?.sharepointEnabled && (!o.summaryUrl || (o.payment === "stripe" && o.status === "Paid" && !o.receiptUrl)) && (
+                                  <button type="button" className="btn btn-out" style={{ fontSize: "0.78rem", gap: "6px", display: "inline-flex", alignItems: "center", cursor: !!savingToSp ? "not-allowed" : "pointer", borderColor: "var(--amber)", color: "var(--amber)", opacity: !!savingToSp && savingToSp !== o.id ? 0.5 : 1 }}
+                                    disabled={!!savingToSp}
+                                    aria-busy={savingToSp === o.id}
+                                    aria-label={`Save order ${o.id} documents to SharePoint`}
+                                    title={savingToSp && savingToSp !== o.id
+                                      ? "Another SharePoint save is in progress — please wait."
+                                      : "Regenerate the order summary (and payment receipt for paid Stripe orders) and upload to SharePoint. Use this to repair orders whose SP folder was never created."}
+                                    onClick={() => saveOrderToSharePoint(o)}>
+                                    {savingToSp === o.id
+                                      ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid var(--amber)",borderRadius:"50%",width:11,height:11}}/> Saving…</>
+                                      : <>↑ Save to SharePoint</>
+                                    }
+                                  </button>
+                                )}
                               </div>
                             </div>
+                          )}
+                          {/* PIQ Payment Tracking — keys orders only */}
+                          {o.orderCategory === "keys" && o.payment === "invoice" && (
+                            <PiqPaymentPanel order={o} adminToken={adminToken} strataPlans={data.strataPlans} onPaid={(updatedOrder) => {
+                              setData(p => ({ ...p, orders: p.orders.map(ord => ord.id !== updatedOrder.id ? ord : updatedOrder) }));
+                            }}/>
                           )}
                           {/* Audit Log */}
                           {o.auditLog && o.auditLog.length > 0 && (
@@ -2960,9 +4836,340 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
             </table>
             </div>
           )}
+          {/* Pagination — only render when more than one page */}
+          {sortedOrders.length > ORDERS_PAGE_SIZE && (
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", fontSize:"0.82rem", color:"var(--muted)" }}>
+              <span>
+                Showing {(safeOrderPage - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(safeOrderPage * ORDERS_PAGE_SIZE, sortedOrders.length)} of {sortedOrders.length}
+              </span>
+              <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+                <button className="btn btn-out" style={{ padding:"4px 10px", fontSize:"0.78rem" }} disabled={safeOrderPage <= 1} onClick={() => setOrderPage(p => Math.max(1, p - 1))}>← Prev</button>
+                <span>Page {safeOrderPage} / {orderPageCount}</span>
+                <button className="btn btn-out" style={{ padding:"4px 10px", fontSize:"0.78rem" }} disabled={safeOrderPage >= orderPageCount} onClick={() => setOrderPage(p => Math.min(orderPageCount, p + 1))}>Next →</button>
+              </div>
+            </div>
+          )}
         </div>
         );
       })()}
+
+      {/* PIQ Sync All Modal */}
+      {piqSyncAllModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"580px", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ background:"#1a5fa8", borderRadius:"10px 10px 0 0", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Sync All Buildings from PropertyIQ</span>
+              {piqSyncAllModal.phase !== "syncing" && (
+                <button onClick={() => setPiqSyncAllModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>
+              )}
+            </div>
+            <div style={{ padding:"20px" }}>
+
+              {/* ── Phase: select ── */}
+              {piqSyncAllModal.phase === "select" && (
+                <div>
+                  <p style={{ fontSize:"0.85rem", color:"var(--muted)", marginBottom:"16px" }}>
+                    PIQ will be queried for all buildings. New buildings (not already in Plans) will be imported as plan stubs using the products from the template plan you select below.
+                  </p>
+                  <label className="f-label">Template plan <span style={{ color:"#dc2626" }}>*</span></label>
+                  <select className="f-select" style={{ marginBottom:"12px" }}
+                    value={piqSyncAllModal.templatePlanId || ""}
+                    onChange={e => setPiqSyncAllModal(m => ({ ...m, templatePlanId: e.target.value || null }))}>
+                    <option value="">— select a template —</option>
+                    {[...(data.strataPlans || [])].sort((a,b) => (a.name||"").localeCompare(b.name||"")).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}{(!p.products || p.products.length === 0) ? " (no products)" : ""}</option>
+                    ))}
+                  </select>
+                  <label style={{ display:"flex", alignItems:"center", gap:"8px", fontSize:"0.85rem", color:"var(--muted)", marginBottom:"16px", cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!piqSyncAllModal.skipExisting}
+                      onChange={e => setPiqSyncAllModal(m => ({ ...m, skipExisting: e.target.checked }))}
+                      style={{ width:"15px", height:"15px", accentColor:"#1a5fa8", cursor:"pointer" }} />
+                    Skip existing buildings — only import buildings not yet in the portal
+                  </label>
+                  <div style={{ display:"flex", gap:"8px", justifyContent:"flex-end" }}>
+                    <button className="btn btn-out" onClick={() => setPiqSyncAllModal(null)}>Cancel</button>
+                    <button className="btn btn-blk" disabled={!piqSyncAllModal.templatePlanId} onClick={startSyncAllFromPiq}>
+                      Start Sync
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Phase: syncing / done ── */}
+              {(piqSyncAllModal.phase === "syncing" || piqSyncAllModal.phase === "done") && (
+                <div>
+                  {piqSyncAllModal.warning && (
+                    <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"8px 12px", fontSize:"0.8rem", color:"#92400e", marginBottom:"12px" }}>
+                      ⚠ {piqSyncAllModal.warning}
+                    </div>
+                  )}
+                  {piqSyncAllModal.error && (
+                    <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#dc2626", marginBottom:"12px" }}>
+                      ✗ Discovery failed: {piqSyncAllModal.error}
+                    </div>
+                  )}
+                  {(piqSyncAllModal.rows || []).length > 0 && (
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                      <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
+                        <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
+                        <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>OCs</th>
+                        <th style={{ textAlign:"center", padding:"6px 8px", color:"var(--muted)" }}>Lots</th>
+                        <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Status</th>
+                      </tr></thead>
+                      <tbody>
+                        {(piqSyncAllModal.rows || []).map(row => (
+                          <tr key={row.planId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                            <td style={{ padding:"7px 8px" }}>
+                              <strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{row.planId}</strong>
+                              {row.isNew && <span style={{ marginLeft:"6px", fontSize:"0.68rem", background:"#dbeafe", color:"#1d4ed8", borderRadius:"3px", padding:"1px 5px" }}>New</span>}
+                              <br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{row.planName}</span>
+                            </td>
+                            <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.ocs : "—"}</td>
+                            <td style={{ textAlign:"center", padding:"7px 8px" }}>{row.status === "ok" ? row.lots : "—"}</td>
+                            <td style={{ padding:"7px 8px" }}>
+                              {row.status === "pending" && <span style={{ color:"var(--muted)" }}>Waiting…</span>}
+                              {row.status === "running" && <span style={{ color:"#1a5fa8" }}>⟳ Syncing…</span>}
+                              {row.status === "ok"      && <span style={{ color:"#16a34a", fontWeight:600 }}>✓ Done</span>}
+                              {row.status === "err"     && <span style={{ color:"#dc2626", fontSize:"0.75rem" }} title={row.err}>✗ {row.err?.substring(0,60)}{row.err?.length > 60 ? "…" : ""}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {piqSyncAllModal.saveErr && (
+                    <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqSyncAllModal.saveErr}</div>
+                  )}
+                  {piqSyncAllModal.phase === "done" && !piqSyncAllModal.error && !piqSyncAllModal.saveErr && (
+                    <div style={{ marginTop:"14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>
+                      ✓ Sync complete. New plans are visible in the Plans tab — assign Plan IDs and verify products before going live.
+                    </div>
+                  )}
+                  {piqSyncAllModal.phase === "done" && (
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
+                      <button className="btn btn-blk" onClick={() => setPiqSyncAllModal(null)}>Close</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIQ Fill Missing Building Info Modal */}
+      {piqFillModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", width:"100%", maxWidth:"520px", maxHeight:"80vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ background:"#1a5fa8", borderRadius:"10px 10px 0 0", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Update Missing Building Info</span>
+              {piqFillModal.phase === "done" && (
+                <button onClick={() => setPiqFillModal(null)} style={{ background:"none", border:"none", color:"#fff", fontSize:"1.3rem", cursor:"pointer", lineHeight:1 }}>×</button>
+              )}
+            </div>
+            <div style={{ padding:"20px" }}>
+              {piqFillModal.phase === "running" && (
+                <div style={{ textAlign:"center", color:"var(--muted)", padding:"24px 0" }}>
+                  <div style={{ marginBottom:"8px" }}>Fetching address from PIQ…</div>
+                  <div style={{ fontSize:"0.9rem", fontWeight:600, color:"#1a5fa8" }}>
+                    {piqFillModal.current} / {piqFillModal.total} buildings checked
+                  </div>
+                </div>
+              )}
+              {piqFillModal.phase === "done" && (
+                <div>
+                  {piqFillModal.error && (
+                    <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#dc2626", marginBottom:"12px" }}>
+                      ✗ {piqFillModal.error}
+                    </div>
+                  )}
+                  {!piqFillModal.error && (piqFillModal.updated || []).length === 0 && (
+                    <div>
+                      <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#92400e", marginBottom: piqFillModal.debugInfo ? "10px" : 0 }}>
+                        {piqFillModal.total === 0
+                          ? "All buildings already have an address — nothing to update."
+                          : `No address data returned from PIQ for ${piqFillModal.skipped || 0} building(s) checked. PIQ may not store a separate address field, or these buildings have no PIQ match.`}
+                      </div>
+                      {piqFillModal.debugInfo && (
+                        <div style={{ background:"#f8fafc", border:"1px solid #cbd5e1", borderRadius:"6px", padding:"10px 14px", fontSize:"0.75rem", color:"#475569" }}>
+                          <strong style={{ display:"block", marginBottom:"4px" }}>PIQ fields returned for {piqFillModal.debugInfo.planId}:</strong>
+                          <code style={{ wordBreak:"break-all", whiteSpace:"pre-wrap" }}>{piqFillModal.debugInfo.keys || "(none)"}</code>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!piqFillModal.error && (piqFillModal.updated || []).length > 0 && (
+                    <div>
+                      <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:"6px", padding:"10px 14px", fontSize:"0.82rem", color:"#16a34a", fontWeight:600, marginBottom:"14px" }}>
+                        ✓ Updated address for {piqFillModal.updated.length} plan{piqFillModal.updated.length !== 1 ? "s" : ""}.
+                        {(piqFillModal.skipped || 0) > 0 && <span style={{ fontWeight:400, marginLeft:"8px", color:"#92400e" }}>{piqFillModal.skipped} could not be matched or had no address in PIQ.</span>}
+                      </div>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                        <thead><tr style={{ borderBottom:"1px solid var(--border)" }}>
+                          <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Plan</th>
+                          <th style={{ textAlign:"left", padding:"6px 8px", color:"var(--muted)" }}>Address filled in</th>
+                        </tr></thead>
+                        <tbody>
+                          {(piqFillModal.updated || []).map(u => (
+                            <tr key={u.id} style={{ borderBottom:"1px solid var(--border2)" }}>
+                              <td style={{ padding:"7px 8px" }}>
+                                <strong style={{ fontFamily:"monospace", fontSize:"0.78rem" }}>{u.id}</strong>
+                                <br/><span style={{ color:"var(--muted)", fontSize:"0.75rem" }}>{u.name}</span>
+                              </td>
+                              <td style={{ padding:"7px 8px", fontSize:"0.78rem" }}>{u.address}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {piqFillModal.saveErr && (
+                    <div style={{ color:"#dc2626", marginTop:"12px", fontSize:"0.8rem" }}>Save error: {piqFillModal.saveErr}</div>
+                  )}
+                  <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"16px" }}>
+                    <button className="btn btn-blk" onClick={() => setPiqFillModal(null)}>Close</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIQ Sync Preview Modal */}
+      {piqSyncModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ background:"#fff", borderRadius:"10px", maxWidth:"640px", width:"100%", maxHeight:"80vh", overflow:"auto", boxShadow:"0 8px 40px rgba(0,0,0,0.18)" }}>
+            <div style={{ background:"#1c3326", padding:"20px 24px", borderRadius:"10px 10px 0 0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ color:"#fff", fontWeight:700, fontSize:"1rem" }}>Sync from PropertyIQ — {piqSyncModal.planId}</span>
+              <button onClick={() => setPiqSyncModal(null)} style={{ background:"none", border:"none", color:"#a8c5b0", cursor:"pointer", fontSize:"1.2rem" }}>✕</button>
+            </div>
+            <div style={{ padding:"24px" }}>
+              {piqSyncModal.loading && (
+                <div style={{ textAlign:"center", padding:"2rem", color:"var(--muted)" }}>
+                  <div aria-hidden="true" style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"3px solid rgba(0,0,0,0.1)", borderTop:"3px solid #1c3326", borderRadius:"50%", width:28, height:28, marginBottom:"12px" }}/>
+                  <div>Fetching data from PropertyIQ…</div>
+                </div>
+              )}
+              {piqSyncModal.error && (
+                <div className="alert alert-err" style={{ marginBottom:"1rem" }}>{piqSyncModal.error}</div>
+              )}
+              {piqSyncModal.result && !piqSyncModal.loading && (
+                <>
+                  <div style={{ background:"#f0f7f3", border:"1px solid #b0d9c2", borderRadius:"6px", padding:"12px 16px", marginBottom:"16px", fontSize:"0.82rem" }}>
+                    <strong>Building found:</strong> {piqSyncModal.result.buildingName} (PIQ ID: {piqSyncModal.result.piqBuildingId})
+                  </div>
+                  <div style={{ marginBottom:"16px" }}>
+                    <div style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:"6px" }}>
+                      Owner Corporations / Schedules ({piqSyncModal.result.schedules?.length || 0})
+                    </div>
+                    {(piqSyncModal.result.schedules || []).length === 0
+                      ? <div style={{ fontSize:"0.82rem", color:"var(--muted)" }}>No schedules found.</div>
+                      : <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                          <thead><tr style={{ background:"var(--cream)" }}><th style={{ padding:"6px 10px", textAlign:"left" }}>PIQ Schedule ID</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Name</th></tr></thead>
+                          <tbody>{(piqSyncModal.result.schedules || []).map(s => (
+                            <tr key={s.piqScheduleId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                              <td style={{ padding:"5px 10px", fontFamily:"monospace", color:"var(--muted)" }}>{s.piqScheduleId}</td>
+                              <td style={{ padding:"5px 10px" }}>{s.name}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                    }
+                  </div>
+                  <div style={{ marginBottom:"20px" }}>
+                    <div style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:"6px" }}>
+                      Lots ({piqSyncModal.result.lots?.length || 0})
+                    </div>
+                    {(piqSyncModal.result.lots || []).length === 0
+                      ? <div style={{ fontSize:"0.82rem", color:"var(--muted)" }}>No lots found.</div>
+                      : <div style={{ maxHeight:"200px", overflow:"auto", border:"1px solid var(--border)", borderRadius:"4px" }}>
+                          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+                            <thead style={{ position:"sticky", top:0, background:"var(--cream)" }}>
+                              <tr><th style={{ padding:"6px 10px", textAlign:"left" }}>PIQ Lot ID</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Lot No.</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Unit</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Street No</th><th style={{ padding:"6px 10px", textAlign:"left" }}>Street Name</th></tr>
+                            </thead>
+                            <tbody>{(piqSyncModal.result.lots || []).map(l => (
+                              <tr key={l.piqLotId} style={{ borderBottom:"1px solid var(--border2)" }}>
+                                <td style={{ padding:"5px 10px", fontFamily:"monospace", color:"var(--muted)" }}>{l.piqLotId}</td>
+                                <td style={{ padding:"5px 10px" }}>{l.lotNumber}</td>
+                                <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.unitNumber || "—"}</td>
+                                <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.streetNumber || "—"}</td>
+                                <td style={{ padding:"5px 10px", color:"var(--muted)" }}>{l.streetName || "—"}</td>
+                              </tr>
+                            ))}</tbody>
+                          </table>
+                        </div>
+                    }
+                  </div>
+                  {piqSyncModal.result._debugRawLot && (
+                    <div style={{ marginBottom:"16px" }}>
+                      <div style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:"6px" }}>
+                        Raw PIQ lot fields (first lot — for field mapping verification)
+                      </div>
+                      <pre style={{ background:"#f8f8f8", border:"1px solid var(--border)", borderRadius:"4px", padding:"8px 10px", fontSize:"0.7rem", overflowX:"auto", maxHeight:"140px", overflowY:"auto", margin:0, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>
+                        {JSON.stringify(piqSyncModal.result._debugRawLot, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"6px", padding:"10px 14px", fontSize:"0.78rem", marginBottom:"16px" }}>
+                    ℹ️ Importing will add/update Owner Corporations and Lots in plan <strong>{piqSyncModal.planId}</strong>. Existing data will not be deleted.
+                    {(piqSyncModal.result.schedules?.length === 1)
+                      ? <> All lots will be <strong>automatically assigned</strong> to the single OC (<em>{piqSyncModal.result.schedules[0].name}</em>).</>
+                      : <> Lot-to-OC assignments can be set in the <strong>Lots tab</strong> after import (PIQ does not expose per-lot schedule membership).</>
+                    }
+                  </div>
+                  <div style={{ display:"flex", gap:"10px" }}>
+                    <button className="btn btn-blk" style={{ flex:1 }} onClick={confirmPiqSync}>
+                      <Ic n="check" s={15}/> Import {piqSyncModal.result.schedules?.length || 0} OC(s) + {piqSyncModal.result.lots?.length || 0} Lot(s)
+                    </button>
+                    <button className="btn btn-out" onClick={() => setPiqSyncModal(null)}>Cancel</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notify Customer Modal — minimal inline modal sending POST /api/orders/:id/notify */}
+      {notifyModal && (
+        <div className="overlay" onClick={() => !notifyModal.sending && setNotifyModal(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Notify Customer" style={{ maxWidth: 540, width: "100%" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"1rem" }}>
+              <h2 className="modal-tt" style={{ margin:0 }}>Email Customer</h2>
+              <button aria-label="Close" style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)" }} onClick={() => !notifyModal.sending && setNotifyModal(null)}><Ic n="x" s={20}/></button>
+            </div>
+            <div style={{ fontSize:"0.86rem", color:"var(--muted)", marginBottom:"1rem" }}>
+              Sending to <strong>{notifyModal.order.contactInfo?.email}</strong> · order <strong>{notifyModal.order.id}</strong> · status <strong>{notifyModal.order.status}</strong>
+            </div>
+            <div className="form-row">
+              <label className="f-label">Subject</label>
+              <input
+                className="f-input"
+                autoFocus
+                value={notifyModal.subject}
+                onChange={e => setNotifyModal(s => ({ ...s, subject: e.target.value, err: "" }))}
+              />
+            </div>
+            <div className="form-row">
+              <label className="f-label">Message *</label>
+              <textarea
+                className="f-input"
+                rows={7}
+                style={{ resize:"vertical", fontFamily:"inherit", lineHeight:1.5 }}
+                value={notifyModal.message}
+                onChange={e => setNotifyModal(s => ({ ...s, message: e.target.value, err: "" }))}
+              />
+            </div>
+            {notifyModal.err && <div className="alert alert-err" style={{ marginBottom:"1rem" }}>{notifyModal.err}</div>}
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button className="btn btn-out" style={{ flex:1 }} onClick={() => setNotifyModal(null)} disabled={notifyModal.sending}>Cancel</button>
+              <button className="btn btn-blk" style={{ flex:1, justifyContent:"center" }} onClick={sendNotify} disabled={notifyModal.sending}>
+                {notifyModal.sending ? "Sending…" : "Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Send Certificate Modal */}
       {sendCertModal && (
@@ -2990,14 +5197,37 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         />
       )}
 
+      {/* Amend Order Modal */}
+      {amendOrderModal && (
+        <AmendOrderModal
+          order={amendOrderModal.order}
+          adminToken={adminToken}
+          onClose={() => setAmendOrderModal(null)}
+          onAmended={(updatedOrder) => {
+            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== updatedOrder.id ? o : updatedOrder) }));
+            setAmendOrderModal(null);
+          }}
+        />
+      )}
+
       {/* Cancel Order Modal */}
       {cancelOrderModal && (
         <CancelOrderModal
           order={cancelOrderModal.order}
           adminToken={adminToken}
           onClose={() => setCancelOrderModal(null)}
-          onCancelled={(oid, reason) => {
-            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : { ...o, status: "Cancelled", cancelReason: reason, auditLog: [...(o.auditLog||[]), { ts: new Date().toISOString(), action: "Order cancelled", note: reason }] }) }));
+          onCancelled={(oid, reason, refund) => {
+            setData(p => ({ ...p, orders: p.orders.map(o => o.id !== oid ? o : {
+              ...o,
+              status: "Cancelled",
+              cancelReason: reason,
+              ...(refund ? { refund: { ...refund, ts: new Date().toISOString() } } : {}),
+              auditLog: [
+                ...(o.auditLog||[]),
+                { ts: new Date().toISOString(), action: "Order cancelled", note: reason },
+                ...(refund ? [{ ts: new Date().toISOString(), action: "Refund recorded", note: `${refund.method} $${(refund.amount||0).toFixed(2)}${refund.reference ? ` (ref: ${refund.reference})` : ""}` }] : []),
+              ],
+            }) }));
             setCancelOrderModal(null);
           }}
         />
@@ -3005,7 +5235,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
 
       {/* ── SECURITY ── */}
       {adminTab === "settings" && (
-        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} onAuthFail={handleLogout} />
+        <SettingsTab adminToken={adminToken} pubConfig={pubConfig} setPubConfig={setPubConfig} onAuthFail={handleLogout} />
       )}
 
       {adminTab === "payment" && (
@@ -3017,7 +5247,7 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
       )}
 
       {adminTab === "storage" && (
-        <StorageTab adminToken={adminToken} />
+        <StorageTab adminToken={adminToken} setPubConfig={setPubConfig} />
       )}
 
       {adminTab === "security" && (
@@ -3183,9 +5413,12 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
         <div className="overlay" onClick={() => { setModal(null); setEditTarget(null); }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2 className="modal-tt">{modal === "editLot" ? "Edit Lot" : "Add Lot"}</h2>
-            {[["lotNum","Lot Number (e.g. Lot 10)"],["level","Level (e.g. Level 3)"]].map(([k,ph]) => (
-              <div className="form-row" key={k}><label className="f-label">{ph}</label><input className="f-input" placeholder={ph} value={form[k]||""} onChange={e => upd(k,e.target.value)}/></div>
-            ))}
+            <div className="form-row"><label className="f-label">Lot Number (e.g. Lot 10)</label><input className="f-input" placeholder="Lot Number (e.g. Lot 10)" value={form.lotNum||""} onChange={e => upd("lotNum",e.target.value)}/></div>
+            <div style={{ display:"flex", gap:"12px" }}>
+              <div className="form-row" style={{ flex:1 }}><label className="f-label">Unit Number</label><input className="f-input" placeholder="e.g. 3" value={form.unitNumber||""} onChange={e => upd("unitNumber",e.target.value)}/></div>
+              <div className="form-row" style={{ flex:1 }}><label className="f-label">Street No</label><input className="f-input" placeholder="e.g. 31" value={form.streetNumber||""} onChange={e => upd("streetNumber",e.target.value)}/></div>
+            </div>
+            <div className="form-row"><label className="f-label">Street Name</label><input className="f-input" placeholder="e.g. Faraday Road" value={form.streetName||""} onChange={e => upd("streetName",e.target.value)}/></div>
             <div className="form-row"><label className="f-label">Type</label>
               <select className="f-select" value={form.lotType||"Residential"} onChange={e => upd("lotType",e.target.value)}>
                 {["Residential","Commercial","Parking","Storage","Mixed"].map(t => <option key={t}>{t}</option>)}
@@ -3219,8 +5452,9 @@ function Admin({ data, setData, adminTab, setAdminTab, adminToken, setAdminToken
                 <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "4px" }}>No Owner Corporations defined for this plan. Add OCs first.</div>
               )}
             </div>
+            {lotOcErr && <div style={{ color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"6px", padding:"8px 12px", fontSize:"0.78rem", marginTop:"4px" }}>{lotOcErr}</div>}
             <div style={{ display: "flex", gap: "8px", marginTop: "0.5rem" }}>
-              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); }}>Cancel</button>
+              <button className="btn btn-out" style={{ flex: 1 }} onClick={() => { setModal(null); setEditTarget(null); setLotOcErr(""); }}>Cancel</button>
               <button className="btn btn-blk" style={{ flex: 1 }} onClick={modal === "editLot" ? saveLot : addLot}>
                 {modal === "editLot" ? "Save Changes" : "Add Lot"}
               </button>
@@ -3282,7 +5516,7 @@ function AdminLogin({ onAuth, pubConfig }) {
       });
       const data = await r.json();
       if (r.ok) {
-        onAuth(data.token, data.user || user);
+        await onAuth(data.token, data.user || user);
       } else {
         setErr(data.error || "Incorrect username or password.");
         setPass("");
@@ -3322,7 +5556,7 @@ function AdminLogin({ onAuth, pubConfig }) {
 
         <button className="btn btn-blk btn-block" onClick={attempt} disabled={loading}>
           {loading
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Signing in…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Signing in…</>
             : <><Ic n="lock" s={15}/> Sign In</>
           }
         </button>
@@ -3373,16 +5607,26 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  // Refund metadata captured alongside the cancellation. Default amount to
+  // the full order total so the typical "issued + paid → refund full" path
+  // is one click; admin can override or set 0 to mark "no refund due".
+  const [refundAmount, setRefundAmount] = useState(typeof order.total === "number" ? String(order.total.toFixed(2)) : "0.00");
+  const [refundMethod, setRefundMethod] = useState("none");
+  const [refundReference, setRefundReference] = useState("");
 
   const handleCancel = async () => {
     if (!reason.trim()) { setErr("Please enter a reason for cancelling this order."); return; }
     if (!confirmed) { setErr("Please tick the confirmation checkbox before proceeding."); return; }
     setSaving(true); setErr("");
+    const amountNum = Number(refundAmount);
+    const refund = (refundMethod !== "none" || amountNum > 0)
+      ? { amount: Number.isFinite(amountNum) ? amountNum : 0, method: refundMethod, reference: refundReference.trim() }
+      : undefined;
     try {
       const r = await fetch(`/api/orders/${order.id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ status: "Cancelled", note: reason }),
+        body: JSON.stringify({ status: "Cancelled", note: reason, refund }),
       });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
@@ -3390,7 +5634,7 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
         setSaving(false);
         return;
       }
-      onCancelled(order.id, reason);
+      onCancelled(order.id, reason, refund);
     } catch {
       setErr("Network error — please try again.");
       setSaving(false);
@@ -3422,6 +5666,46 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
           />
         </div>
 
+        <fieldset style={{ border:"1px solid var(--border)", borderRadius:"6px", padding:"10px 12px 4px", marginBottom:"1.2rem" }}>
+          <legend style={{ padding:"0 6px", fontSize:"0.74rem", fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Refund (optional)</legend>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"6px" }}>
+            <div>
+              <label className="f-label" style={{ fontSize:"0.78rem" }}>Method</label>
+              <select className="f-input" value={refundMethod} onChange={e => setRefundMethod(e.target.value)}>
+                <option value="none">No refund due</option>
+                <option value="manual">Manual (record only)</option>
+                <option value="bank">Bank transfer</option>
+                <option value="payid">PayID</option>
+                <option value="stripe">Stripe</option>
+                <option value="card">Card</option>
+              </select>
+            </div>
+            <div>
+              <label className="f-label" style={{ fontSize:"0.78rem" }}>Amount (AUD)</label>
+              <input
+                className="f-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={refundAmount}
+                onChange={e => setRefundAmount(e.target.value)}
+                disabled={refundMethod === "none"}
+              />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom:"4px" }}>
+            <label className="f-label" style={{ fontSize:"0.78rem" }}>Reference (optional)</label>
+            <input
+              className="f-input"
+              maxLength={200}
+              placeholder="e.g. Stripe refund id, bank receipt no., internal note"
+              value={refundReference}
+              onChange={e => setRefundReference(e.target.value)}
+              disabled={refundMethod === "none"}
+            />
+          </div>
+        </fieldset>
+
         <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", fontSize: "0.84rem", marginBottom: "1.2rem" }}>
           <input
             type="checkbox"
@@ -3443,7 +5727,7 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
             disabled={saving}
           >
             {saving
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Cancelling…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Cancelling…</>
               : <><Ic n="trash" s={15}/> Cancel Order</>
             }
           </button>
@@ -3454,15 +5738,196 @@ function CancelOrderModal({ order, adminToken, onClose, onCancelled }) {
   );
 }
 
+// ─── AMEND ORDER MODAL ────────────────────────────────────────────────────────
+// Lets admins edit qty / remove line items on unpaid orders.  The order id
+// (reference number) is preserved.  If an invoice was already sent the admin
+// must click "Send Invoice" again afterwards to re-issue with the new total.
+function AmendOrderModal({ order, adminToken, onClose, onAmended }) {
+  const trapRef = useFocusTrap(onClose);
+  // _unit = unit price, derived once so qty edits can recompute the line total
+  // without losing precision from repeated divisions.
+  const initialItems = (order.items || []).map(it => {
+    const qty = Math.max(1, Number(it.qty) || 1);
+    return { ...it, qty, _unit: (Number(it.price) || 0) / qty };
+  });
+  const [items, setItems] = useState(initialItems);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const updateQty = (idx, value) => {
+    const q = Math.min(100, Math.max(1, Math.floor(Number(value) || 1)));
+    setItems(arr => arr.map((it, i) => i !== idx ? it : {
+      ...it, qty: q, price: Math.round(it._unit * q * 100) / 100,
+    }));
+  };
+  const removeItem = (idx) => {
+    setItems(arr => arr.filter((_, i) => i !== idx));
+  };
+
+  const shippingCost = order.orderCategory === "keys" ? (Number(order.selectedShipping?.cost ?? order.selectedShipping?.price) || 0) : 0;
+  const newTotal = items.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost;
+  const oldTotal = Number(order.total) || 0;
+  const totalChanged = Math.round(newTotal * 100) !== Math.round(oldTotal * 100);
+
+  const handleSave = async () => {
+    if (saving) return;
+    if (items.length === 0) { setErr("An order must have at least one item. Cancel the order instead."); return; }
+    setSaving(true); setErr("");
+    try {
+      const payload = {
+        items: items.map(({ _unit, ...rest }) => rest),
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(order.orderCategory === "keys" && order.selectedShipping ? { selectedShipping: order.selectedShipping } : {}),
+      };
+      const r = await fetch(`/api/orders/${order.id}/amend`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify(payload),
+      });
+      if (r.status === 401) { setErr("Session expired — please log in again."); setSaving(false); return; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(d.error || "Failed to amend order."); setSaving(false); return; }
+      onAmended(d.order);
+    } catch (e) {
+      setErr("Network error: " + e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Amend Order"
+        style={{ maxWidth: "640px", width: "100%" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <h2 className="modal-tt" style={{ marginBottom: 0 }}>Amend Order</h2>
+          <button aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }} onClick={onClose}><Ic n="x" s={20}/></button>
+        </div>
+        <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "0.8rem" }}>
+          Order <strong style={{ color: "var(--ink)", fontFamily: "monospace" }}>{order.id}</strong> · Status: <strong>{order.status}</strong>
+        </div>
+        <div className="alert alert-warn" style={{ marginBottom: "1rem", fontSize: "0.8rem" }}>
+          The order reference number stays the same. If an invoice was already sent, click <strong>Send Invoice</strong> again after saving to re-issue with the new total.
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem", marginBottom: "1rem" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th style={{ textAlign: "left",  padding: "6px 4px", fontWeight: 600 }}>Item</th>
+              <th style={{ textAlign: "right", padding: "6px 4px", fontWeight: 600 }}>Unit</th>
+              <th style={{ textAlign: "center",padding: "6px 4px", fontWeight: 600, width: "100px" }}>Qty</th>
+              <th style={{ textAlign: "right", padding: "6px 4px", fontWeight: 600 }}>Line</th>
+              <th style={{ width: "32px" }}/>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid var(--border2)" }}>
+                <td style={{ padding: "6px 4px" }}>
+                  <strong>{it.productName}</strong>
+                  {it.isSecondaryOC && <span style={{ fontSize: "0.68rem", color: "var(--sage)", marginLeft: "4px" }}>Additional OC</span>}
+                  <br/><span style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
+                    {it.lotNumber}{it.ocName ? ` · ${it.ocName}` : ""}
+                  </span>
+                </td>
+                <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--muted)" }}>
+                  ${(Number(it._unit) || 0).toFixed(2)}
+                </td>
+                <td style={{ padding: "6px 4px" }}>
+                  <input type="number" min="1" max="100" step="1" value={it.qty}
+                    onChange={e => updateQty(i, e.target.value)}
+                    className="f-input"
+                    style={{ width: "84px", textAlign: "center", padding: "4px 6px" }}/>
+                </td>
+                <td style={{ padding: "6px 4px", textAlign: "right" }}>
+                  <strong>${(Number(it.price) || 0).toFixed(2)}</strong>
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  <button title="Remove this item"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: "4px" }}
+                    onClick={() => removeItem(i)}><Ic n="trash" s={14}/></button>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: "12px 4px", textAlign: "center", color: "var(--muted)", fontStyle: "italic" }}>
+                No items. Cancel the order instead.
+              </td></tr>
+            )}
+          </tbody>
+          <tfoot>
+            {shippingCost > 0 && (
+              <tr>
+                <td colSpan={3} style={{ padding: "6px 4px", textAlign: "right", color: "var(--muted)", fontSize: "0.78rem" }}>
+                  Shipping{order.selectedShipping?.name ? ` (${order.selectedShipping.name})` : ""}
+                </td>
+                <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--muted)", fontSize: "0.82rem" }}>
+                  ${shippingCost.toFixed(2)}
+                </td>
+                <td/>
+              </tr>
+            )}
+            <tr>
+              <td colSpan={3} style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600 }}>New Total</td>
+              <td style={{ padding: "8px 4px", textAlign: "right", fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: totalChanged ? "var(--forest)" : "var(--ink)" }}>
+                ${newTotal.toFixed(2)}
+              </td>
+              <td/>
+            </tr>
+            {totalChanged && (
+              <tr>
+                <td colSpan={3} style={{ padding: "0 4px 4px", textAlign: "right", fontSize: "0.74rem", color: "var(--muted)" }}>was</td>
+                <td style={{ padding: "0 4px 4px", textAlign: "right", fontSize: "0.78rem", color: "var(--muted)", textDecoration: "line-through" }}>
+                  ${oldTotal.toFixed(2)}
+                </td>
+                <td/>
+              </tr>
+            )}
+          </tfoot>
+        </table>
+
+        <div className="form-row">
+          <label className="f-label">Reason / note (optional)</label>
+          <textarea className="f-input" rows={2} maxLength={200}
+            placeholder="e.g. Reduced fob qty per owner request"
+            style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+            value={note} onChange={e => setNote(e.target.value)}/>
+        </div>
+
+        {err && <div className="alert alert-err" style={{ marginBottom: "1rem" }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button className="btn btn-out" style={{ flex: 1 }} onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-blk btn-lg" style={{ flex: 1, justifyContent: "center" }}
+            onClick={handleSave}
+            disabled={saving || items.length === 0 || !totalChanged && items.length === (order.items || []).length}>
+            {saving
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+              : <>Save Amendment</>
+            }
+          </button>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    </div>
+  );
+}
+
 // ─── SEND CERTIFICATE MODAL ───────────────────────────────────────────────────
+const CERT_ATTACH_LIMIT_MB = 4.5;
+const CERT_ATTACH_LIMIT_BYTES = CERT_ATTACH_LIMIT_MB * 1024 * 1024;
+
 function SendCertificateModal({ order, adminToken, onClose, onSent }) {
   const trapRef = useFocusTrap(onClose);
   const [message, setMessage] = useState("");
-  const [certFile, setCertFile] = useState(null);
+  const [certFiles, setCertFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const contact = order.contactInfo || {};
   const lot = order.items?.[0];
+
+  const totalBytes = certFiles.reduce((sum, f) => sum + f.size, 0);
+  const oversized = totalBytes > CERT_ATTACH_LIMIT_BYTES;
 
   // Pre-fill default message
   useEffect(() => {
@@ -3479,30 +5944,35 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
       .catch(() => setMessage("Dear " + (contact.name || "Applicant") + ",\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team"));
   }, []);
 
+  const handleAddFiles = e => {
+    const incoming = Array.from(e.target.files);
+    setCertFiles(prev => {
+      const existing = new Set(prev.map(f => f.name));
+      return [...prev, ...incoming.filter(f => !existing.has(f.name))];
+    });
+    e.target.value = "";
+  };
+
+  const handleRemoveFile = idx => setCertFiles(prev => prev.filter((_, i) => i !== idx));
+
   const handleSend = async () => {
-    if (sending) return;
+    if (sending || oversized) return;
+    if (certFiles.length === 0) { setErr("Attach the certificate PDF before sending."); return; }
     setSending(true); setErr("");
     try {
-      let body = { message };
-      if (certFile) {
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(certFile);
-        });
-        body.attachment = { filename: certFile.name, contentType: certFile.type || "application/pdf", data: base64 };
-      }
+      const fd = new FormData();
+      fd.append("message", message);
+      for (const f of certFiles) fd.append("file", f, f.name);
       const r = await fetch(`/api/orders/${order.id}/send-certificate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify(body),
+        headers: { "Authorization": "Bearer " + adminToken },
+        body: fd,
       });
-      const d = await r.json();
+      const d = await safeReadResponse(r);
       if (r.ok) {
         onSent(order.id);
       } else {
-        setErr(d.error || "Failed to send email.");
+        setErr(d.error || (r.status === 413 ? `Attachments too large — total must be under ${CERT_ATTACH_LIMIT_MB} MB.` : "Failed to send email."));
         setSending(false);
       }
     } catch (e) {
@@ -3529,28 +5999,40 @@ function SendCertificateModal({ order, adminToken, onClose, onSent }) {
         </div>
 
         <div className="form-row" style={{ marginBottom: 0 }}>
-          <label className="f-label">Attach Certificate (PDF)</label>
-          {certFile ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)", fontSize: "0.82rem" }}>
-              <Ic n="doc" s={15}/>
-              <span style={{ flex: 1 }}>{certFile.name} ({(certFile.size/1024).toFixed(1)} KB)</span>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)" }} onClick={() => setCertFile(null)}><Ic n="x" s={14}/></button>
-            </div>
-          ) : (
+          <label className="f-label">Attachments (PDF, JPG, PNG) <span style={{ color: "var(--red)" }}>*</span></label>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {certFiles.map((f, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "3px", background: "var(--sage-tint)", fontSize: "0.82rem" }}>
+                <Ic n="doc" s={15}/>
+                <span style={{ flex: 1 }}>{f.name} <span style={{ color: "var(--muted)" }}>({(f.size / 1024).toFixed(1)} KB)</span></span>
+                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)" }} onClick={() => handleRemoveFile(i)} aria-label={`Remove ${f.name}`}><Ic n="x" s={14}/></button>
+              </div>
+            ))}
+            {certFiles.length > 0 && (
+              <div style={{ fontSize: "0.78rem", color: oversized ? "var(--red)" : "var(--muted)", marginTop: "2px" }}>
+                Total: {(totalBytes / 1024 / 1024).toFixed(2)} MB / {CERT_ATTACH_LIMIT_MB} MB{oversized ? ` — exceeds ${CERT_ATTACH_LIMIT_MB} MB limit` : ""}
+              </div>
+            )}
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", border: "2px dashed var(--border)", borderRadius: "4px", cursor: "pointer", fontSize: "0.82rem", color: "var(--forest)" }}>
-              <Ic n="upload" s={16}/> Click to attach PDF certificate (optional)
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setCertFile(e.target.files[0]); }}/>
+              <Ic n="upload" s={16}/> {certFiles.length > 0 ? "Add another file" : "Click to attach the certificate (required)"}
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple style={{ display: "none" }} onChange={handleAddFiles}/>
             </label>
-          )}
+          </div>
         </div>
 
-        {err && <div className="alert alert-err" style={{ marginTop: "1rem" }}>{err}</div>}
+        {oversized && (
+          <div className="alert alert-err" style={{ marginTop: "0.75rem" }}>
+            Total attachment size ({(totalBytes / 1024 / 1024).toFixed(2)} MB) exceeds the {CERT_ATTACH_LIMIT_MB} MB email limit. Remove some files before sending.
+          </div>
+        )}
+        {!oversized && err && <div className="alert alert-err" style={{ marginTop: "1rem" }}>{err}</div>}
+        {oversized && err && <div className="alert alert-err" style={{ marginTop: "0.5rem" }}>{err}</div>}
 
         <div style={{ display: "flex", gap: "10px", marginTop: "1.5rem" }}>
           <button className="btn btn-out" onClick={onClose}>Cancel</button>
-          <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending}>
+          <button className="btn btn-sage btn-lg" style={{ flex: 1, justifyContent: "center" }} onClick={handleSend} disabled={sending || oversized || certFiles.length === 0} title={certFiles.length === 0 ? "Attach the certificate PDF before sending" : ""}>
             {sending
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
               : <><Ic n="mail" s={15}/> Send Certificate</>
             }
           </button>
@@ -3574,8 +6056,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
       .then(r => r.json())
       .then(d => {
-        const pd = d.paymentDetails || {};
-        const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || "Top Owners Corporation"}\nBSB: ${pd.bsb || "033-065"}\nAccount Number: ${pd.accountNumber || "522011"}\nPayID: ${pd.payid || "accounts@tocs.com.au"}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
+        const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nKind regards,\nTOCS Team`;
         setMessage(defaultMsg);
       })
       .catch(() => setMessage(`Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for order #${order.id}.\n\nKind regards,\nTOCS Team`));
@@ -3585,26 +6066,19 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
     if (sending) return;
     setSending(true); setErr("");
     try {
-      let body = { message };
-      if (invoiceFile) {
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(invoiceFile);
-        });
-        body.attachment = { filename: invoiceFile.name, contentType: invoiceFile.type || "application/pdf", data: base64 };
-      }
+      const fd = new FormData();
+      fd.append("message", message);
+      if (invoiceFile) fd.append("file", invoiceFile, invoiceFile.name);
       const r = await fetch(`/api/orders/${order.id}/send-invoice`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify(body),
+        headers: { "Authorization": "Bearer " + adminToken },
+        body: fd,
       });
-      const d = await r.json();
+      const d = await safeReadResponse(r);
       if (r.ok) {
         onSent(order.id);
       } else {
-        setErr(d.error || "Failed to send invoice.");
+        setErr(d.error || (r.status === 413 ? "Attachment too large — please reduce the PDF size." : "Failed to send invoice."));
         setSending(false);
       }
     } catch (e) {
@@ -3652,7 +6126,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
           <button className="btn btn-out" onClick={onClose}>Cancel</button>
           <button className="btn btn-lg" style={{ flex: 1, justifyContent: "center", background: "#0d6e62", color: "#fff", border: "none", borderRadius: "28px" }} onClick={handleSend} disabled={sending}>
             {sending
-              ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
+              ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Sending…</>
               : <><Ic n="invoice" s={15}/> Send Invoice</>
             }
           </button>
@@ -3664,7 +6138,7 @@ function SendInvoiceModal({ order, adminToken, onClose, onSent }) {
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
+function SettingsTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const codeStyle = { background: "var(--cream)", padding: "1px 4px", borderRadius: "3px" };
   const DEF_SMTP = { host: "mail-au.smtp2go.com", port: 2525, user: "OCCAPP", pass: "" };
   const DEF_TPL = {
@@ -3673,16 +6147,19 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
     footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
     adminNotificationSubject: "New Order — {orderType} #{orderId}",
     adminNotificationIntro:   "A new order has been placed.",
+    keysOrderConfirmation:    "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.",
   };
 
   const [orderEmail, setOrderEmail] = useState("Orders@tocs.co");
   const [smtp, setSmtp] = useState(DEF_SMTP);
+  const [smtpPassPlaceholder, setSmtpPassPlaceholder] = useState(false);
   const [emailTpl, setEmailTpl] = useState(DEF_TPL);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
@@ -3690,24 +6167,30 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
       .then(r => r.json())
       .then(d => {
         setOrderEmail(d.orderEmail || "Orders@tocs.co");
-        setSmtp({ ...DEF_SMTP, ...(d.smtp || {}) });
+        const s = d.smtp || {};
+        const masked = s.pass === "••••••••";
+        setSmtpPassPlaceholder(masked);
+        setSmtp({ ...DEF_SMTP, ...s, pass: masked ? "" : (s.pass || "") });
         setEmailTpl({ ...DEF_TPL, ...(d.emailTemplate || {}) });
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  const updSmtp = (k, v) => { setSmtp(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
+  const updSmtp = (k, v) => { setSmtp(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); if (k === "pass") setSmtpPassPlaceholder(false); };
   const updTpl  = (k, v) => { setEmailTpl(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
 
   const save = async () => {
-    setSaveErr(""); setTestResult(null);
+    if (saving) return;
+    setSaving(true); setSaveErr(""); setTestResult(null);
     try {
+      const smtpPayload = { ...smtp };
+      if (!smtpPayload.pass && smtpPassPlaceholder) delete smtpPayload.pass;
       const r = await fetch("/api/config/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({
-          orderEmail, smtp,
+          orderEmail, smtp: smtpPayload,
           emailTemplate: {
             ...emailTpl,
             adminNotificationSubject: (emailTpl.adminNotificationSubject || "").trim(),
@@ -3716,9 +6199,22 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
         }),
       });
       if (r.status === 401) { if (onAuthFail) onAuthFail(); return; }
-      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
+      if (r.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 3500);
+        // Refresh /api/config/public so any field mirrored there (logo,
+        // sharepointEnabled, etc.) updates immediately rather than after a
+        // full page reload. Matches the StorageTab refresh pattern.
+        try {
+          const rr = await fetch("/api/config/public");
+          if (rr.ok) {
+            const pc = await rr.json();
+            setPubConfig?.(pc);
+          }
+        } catch (e) { console.warn("pubConfig refresh after settings save:", e?.message); }
+      }
       else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
     } catch { setSaveErr("Unable to connect to server."); }
+    setSaving(false);
   };
 
   const testEmail = async () => {
@@ -3783,7 +6279,8 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label className="f-label">Password</label>
           <div className="pw-wrap">
-            <input className="f-input" type={showPass ? "text" : "password"} placeholder="App password or account password"
+            <input className="f-input" type={showPass ? "text" : "password"}
+              placeholder={smtpPassPlaceholder ? "leave blank to keep saved password" : "App password or account password"}
               value={smtp.pass} onChange={e => updSmtp("pass", e.target.value)} style={{ paddingRight: "42px" }}/>
             <button className="pw-toggle" type="button" onClick={() => setShowPass(p => !p)}>
               <Ic n={showPass ? "eyeOff" : "eye"} s={16}/>
@@ -3825,6 +6322,18 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
             onChange={e => updTpl("adminNotificationIntro", e.target.value)}/>
         </div>
 
+        {/* Order Confirmation Email (Keys/Fobs) */}
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "20px" }}>Order Confirmation Email (Keys/Fobs)</h3>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
+          First paragraph sent to applicants when a Keys/Fobs order is placed. Use <code style={codeStyle}>{"{orderDesc}"}</code> to insert the building and lot (e.g. <em>for Building X - Lot Y</em>).
+        </p>
+        <div className="form-row">
+          <label className="f-label">Confirmation Paragraph</label>
+          <textarea className="f-input" rows={4} style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+            value={emailTpl.keysOrderConfirmation || ""}
+            onChange={e => updTpl("keysOrderConfirmation", e.target.value)}/>
+        </div>
+
         {/* Certificate Email */}
         <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--forest)", marginBottom: "12px", marginTop: "20px" }}>Certificate Email</h3>
         <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1rem" }}>
@@ -3854,12 +6363,15 @@ function SettingsTab({ adminToken, pubConfig, onAuthFail }) {
       {testResult?.ok  === false  && <div className="alert alert-err">{testResult.msg}</div>}
 
       <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save}>
-          <Ic n="check" s={15}/> Save Settings
+        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save} disabled={saving}>
+          {saving
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+            : <><Ic n="check" s={15}/> Save Settings</>
+          }
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testEmail} disabled={testing}>
           {testing
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Sending…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Sending…</>
             : <><Ic n="mail" s={15}/> Test Email</>
           }
         </button>
@@ -3882,6 +6394,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const [testingStripe,   setTestingStripe]   = useState(false);
   const [stripeTestResult, setStripeTestResult] = useState(null);
   const [saved,    setSaved]   = useState(false);
+  const [saving,   setSaving]  = useState(false);
   const [saveErr,  setSaveErr] = useState("");
   const [loading,  setLoading] = useState(true);
 
@@ -3902,7 +6415,8 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
   const updPay = (k, v) => { setPayDetails(p => ({ ...p, [k]: v })); setSaved(false); setSaveErr(""); };
 
   const save = async () => {
-    setSaveErr("");
+    if (saving) return;
+    setSaving(true); setSaveErr("");
     try {
       const r = await fetch("/api/config/settings", {
         method: "POST",
@@ -3919,6 +6433,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
         if (setPubConfig) setPubConfig(p => ({ ...p, bankEnabled, payidEnabled }));
       } else { const d = await r.json(); setSaveErr(d.error || "Save failed."); }
     } catch { setSaveErr("Unable to connect to server."); }
+    setSaving(false);
   };
 
   const testStripe = async () => {
@@ -4054,7 +6569,7 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
         {stripeTestResult?.ok === false && <div className="alert alert-err" style={{ marginBottom: "10px" }}>{stripeTestResult.msg}</div>}
         <button className="btn btn-out" onClick={testStripe} disabled={testingStripe || stripeSecretKey === "••••••••" || (!stripeSecretKey && !pubConfig?.stripeEnabled)}>
           {testingStripe
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
             : <><Ic n="check" s={15}/> Test Stripe Connection</>
           }
         </button>
@@ -4063,8 +6578,11 @@ function PaymentTab({ adminToken, pubConfig, setPubConfig, onAuthFail }) {
       {saveErr && <div className="alert alert-err">{saveErr}</div>}
       {saved   && <div className="alert alert-ok">Settings saved.</div>}
       <div>
-        <button className="btn btn-blk" style={{ width: "100%" }} onClick={save}>
-          <Ic n="check" s={15}/> Save Payment Settings
+        <button className="btn btn-blk" style={{ width: "100%" }} onClick={save} disabled={saving}>
+          {saving
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+            : <><Ic n="check" s={15}/> Save Payment Settings</>
+          }
         </button>
       </div>
     </div>
@@ -4144,7 +6662,7 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
 
       <button className="btn btn-blk" onClick={save} disabled={saving}>
         {saving
-          ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+          ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
           : <><Ic n="check" s={15}/> Save Logo</>
         }
       </button>
@@ -4153,17 +6671,201 @@ function BrandingTab({ adminToken, pubConfig, setPubConfig }) {
   );
 }
 
+// ─── PIQ PAYMENT PANEL ────────────────────────────────────────────────────────
+// Shown inside the expanded order row for keys/invoice orders.
+// Displays the PIQ levy status and allows admin to trigger a manual payment check.
+function PiqPaymentPanel({ order, adminToken, strataPlans, onPaid }) {
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState(null);
+  const [manualLotId, setManualLotId] = useState("");
+  const [linkErr, setLinkErr] = useState("");
+
+  // Merged options bag: `piqLotId` performs a manual lot-link before the
+  // payment check; `resetDate` clears a previously-locked `piqPaymentDate`.
+  const checkNow = async ({ piqLotId, resetDate } = {}) => {
+    setChecking(true); setCheckResult(null); setLinkErr("");
+    try {
+      const body = {};
+      if (piqLotId) body.piqLotId = piqLotId;
+      if (resetDate) body.resetPaymentDate = true;
+      const r = await fetch(`/api/orders/${order.id}/check-piq-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify(body),
+      });
+      // Mirror the 401/429 toast pattern used by other admin handlers so a
+      // stale session or rate-limited burst doesn't get buried inside the
+      // generic error string returned via checkResult.
+      if (r.status === 401) {
+        setCheckResult({ ok: false, error: "Session expired — please log in again." });
+        return;
+      }
+      if (r.status === 429) {
+        const retry = Number(r.headers.get("Retry-After")) || 60;
+        setCheckResult({ ok: false, error: `Too many PIQ checks — try again in ${retry}s.` });
+        return;
+      }
+      const d = await r.json().catch(() => ({}));
+      setCheckResult(d);
+      if (d.ok && onPaid) {
+        onPaid({ ...order, status: d.orderStatus || order.status, piqPaymentDate: d.paymentDate || order.piqPaymentDate, piqPaymentReference: d.paymentReference || order.piqPaymentReference, piqLevyFound: d.levyFound ?? order.piqLevyFound, piqLevyTotalNett: d.totalNett ?? order.piqLevyTotalNett });
+      }
+    } catch { setCheckResult({ ok: false, error: "Unable to connect." }); }
+    setChecking(false);
+  };
+
+  // Determine display state from order fields + latest check result.
+  // Fall back to looking up piqLotId from plan data for orders placed before
+  // the plan was synced from PIQ (order.piqLotId not yet persisted).
+  // Normalise: strip common prefixes ("Lot ", "Unit ", "Apt ") so "Lot 5" === "5".
+  const _normLot = s => String(s || "").trim().toLowerCase().replace(/^(lot|unit|apt|apartment|villa|shop|suite|level|block|stage|tower)\s+/i, "").trim();
+  const piqLotId = order.piqLotId ?? (() => {
+    const plan     = (strataPlans || []).find(p => p.id === order.items?.[0]?.planId);
+    const lots     = plan?.lots || [];
+    const lotNum   = order.items?.[0]?.lotNumber || "";
+    const lotId    = order.items?.[0]?.lotId     || "";
+    const matches  = (l) =>
+      (lotNum && _normLot(l.number) === _normLot(lotNum)) ||
+      (lotId  && l.id === lotId);
+    // Prefer a lot that already has piqLotId (avoids matching the un-linked duplicate)
+    return (lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches))?.piqLotId ?? null;
+  })();
+  const levyFound   = checkResult?.levyFound ?? order.piqLevyFound;
+  const paid        = checkResult?.paid ?? (order.status === "Paid" && order.piqPaymentDate);
+  const totalNett   = checkResult?.totalNett   ?? order.piqLevyTotalNett;
+  const totalDue    = checkResult?.totalDue    ?? order.piqLevyTotalDue;
+  const payDate     = checkResult?.paymentDate      ?? order.piqPaymentDate;
+  const payRef      = checkResult?.paymentReference ?? order.piqPaymentReference;
+  const lastPolled  = checkResult?.lastPolled ?? order.piqLastPolled;
+
+  const fmt = (n) => n != null ? `$${Number(n).toFixed(2)}` : "—";
+  const fmtDate = (d) => { try { return new Date(d).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" }); } catch { return d; } };
+  const timeAgo = (iso) => {
+    if (!iso) return null;
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.round(mins/60)}h ago`;
+  };
+
+  const panelStyle = { background:"#f8faff", border:"1px solid #c8ddf5", borderRadius:"6px", padding:"12px 16px", marginBottom:"1rem", fontSize:"0.82rem" };
+  const labelSt    = { color:"#666", minWidth:"120px", display:"inline-block" };
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ fontWeight:700, fontSize:"0.72rem", textTransform:"uppercase", letterSpacing:"0.1em", color:"#1a5fa8", marginBottom:"10px" }}>
+        PropertyIQ Payment Tracking
+      </div>
+      {!piqLotId ? (
+        <div>
+          <div style={{ color:"#b45309", fontSize:"0.82rem", marginBottom:"10px" }}>
+            ⚠ PIQ lot not linked. Enter the PIQ Lot ID from the PropertyIQ portal, or sync the plan first (Plans tab → Sync from PIQ).
+          </div>
+          <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+            <input
+              type="number" min="1" placeholder="PIQ Lot ID (e.g. 12345)"
+              value={manualLotId} onChange={e => { setManualLotId(e.target.value); setLinkErr(""); }}
+              style={{ flex:1, padding:"5px 8px", border:"1px solid var(--border)", borderRadius:"4px", fontSize:"0.82rem" }}
+            />
+            <button className="btn btn-out" style={{ fontSize:"0.78rem", whiteSpace:"nowrap" }}
+              disabled={!manualLotId || checking}
+              onClick={async () => {
+                const lid = parseInt(manualLotId, 10);
+                if (!lid) { setLinkErr("Enter a valid numeric PIQ Lot ID."); return; }
+                await checkNow({ piqLotId: lid });
+              }}>
+              {checking ? "Linking…" : "Link & Check PIQ"}
+            </button>
+          </div>
+          {linkErr && <div style={{ color:"var(--red)", fontSize:"0.78rem", marginTop:"4px" }}>{linkErr}</div>}
+          {checkResult && !checkResult.ok && <div style={{ color:"var(--red)", fontSize:"0.78rem", marginTop:"4px" }}>{checkResult.error}</div>}
+        </div>
+      ) : (
+        <>
+          <div style={{ marginBottom:"10px" }}>
+            <span style={labelSt}>PIQ Lot ID</span>
+            <span style={{ fontFamily:"monospace" }}>{piqLotId}</span>
+          </div>
+          <div style={{ background:"#e8f4ff", border:"1px solid #b0d4f5", borderRadius:"4px", padding:"10px 14px", marginBottom:"12px" }}>
+            <div style={{ fontSize:"0.78rem", color:"#1a5fa8", fontWeight:600, marginBottom:"6px" }}>
+              📋 When creating the Special Levy in PropertyIQ, include this order reference in the levy description:
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+              <code style={{ background:"#fff", border:"1px solid #b0d4f5", borderRadius:"4px", padding:"4px 10px", fontFamily:"monospace", fontSize:"0.88rem", fontWeight:700, color:"#1c3326", flex:1 }}>{order.id}</code>
+              <button className="tbl-act-btn" style={{ whiteSpace:"nowrap" }} onClick={() => navigator.clipboard?.writeText(order.id)}>Copy</button>
+            </div>
+          </div>
+
+          {/* Payment status */}
+          {paid ? (
+            <div style={{ background:"#e8f5ee", border:"1px solid #a0d4b2", borderRadius:"4px", padding:"10px 14px", marginBottom:"10px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" }}>
+                <span style={{ color:"#1c6e3f", fontWeight:700 }}>✅ Payment confirmed via PropertyIQ</span>
+                <button className="tbl-act-btn" style={{ fontSize:"0.7rem", color:"#666" }} title="Reset payment date and re-confirm from PIQ" onClick={() => {
+                  appConfirm({ title: "Reset payment date?", message: "Reset the stored payment date so it can be re-confirmed on next check.", confirmText: "Reset" })
+                    .then(ok => { if (ok) checkNow({ resetDate: true }); });
+                }}>Reset date</button>
+              </div>
+              <table style={{ fontSize:"0.8rem", borderCollapse:"collapse" }}>
+                <tbody>
+                  <tr><td style={{ ...labelSt, paddingBottom:"3px" }}>Payment Date</td><td style={{ paddingBottom:"3px", fontWeight:600 }}>{payDate ? fmtDate(payDate) : "—"}</td></tr>
+                  <tr><td style={{ ...labelSt, paddingBottom:"3px" }}>PIQ Reference</td><td style={{ paddingBottom:"3px", fontFamily:"monospace", fontWeight:600 }}>{payRef || "—"}</td></tr>
+                  {totalDue != null && <tr><td style={labelSt}>Amount</td><td style={{ fontWeight:600, color:"#1c6e3f" }}>{fmt(totalDue)}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          ) : levyFound ? (
+            <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"4px", padding:"8px 14px", marginBottom:"10px", color:"#92400e" }}>
+              📋 Levy found — <strong>{fmt(totalNett)}</strong> outstanding{totalDue ? ` of ${fmt(totalDue)}` : ""}
+            </div>
+          ) : (
+            <div style={{ color:"var(--muted)", marginBottom:"10px", fontSize:"0.82rem" }}>
+              ⏳ Awaiting levy / payment — no matching levy found in PIQ yet
+            </div>
+          )}
+
+          {checkResult?.error && (
+            <div className="alert alert-err" style={{ marginBottom:"8px", fontSize:"0.78rem" }}>⚠ {checkResult.error}</div>
+          )}
+
+          <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+            <button className="btn btn-out" style={{ fontSize:"0.78rem" }} onClick={checkNow} disabled={checking}>
+              {checking
+                ? <><span aria-hidden="true" style={{ display:"inline-block", animation:"spin 0.8s linear infinite", border:"2px solid rgba(0,0,0,0.1)", borderTop:"2px solid #1c3326", borderRadius:"50%", width:11, height:11 }}/> Checking…</>
+                : <><Ic n="refresh" s={13}/> Check Now</>
+              }
+            </button>
+            {lastPolled && <span style={{ fontSize:"0.72rem", color:"var(--muted)" }}>Last checked: {timeAgo(lastPolled)}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── STORAGE TAB ──────────────────────────────────────────────────────────────
-function StorageTab({ adminToken }) {
-  const DEF_SP = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
+function StorageTab({ adminToken, setPubConfig }) {
+  const DEF_SP  = { tenantId: "", clientId: "", clientSecret: "", siteId: "", folderPath: "Top Owners Corporation Solution/ORDER DATABASE" };
+  const DEF_PIQ = { baseUrl: "https://tocs.propertyiq.com.au", clientId: "", clientSecret: "" };
+
   const [sp, setSp] = useState(DEF_SP);
   const [showSecret, setShowSecret] = useState(false);
   const [secretPlaceholder, setSecretPlaceholder] = useState(false); // true when server returned "••••••••"
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [spTesting, setSpTesting] = useState(false);
   const [spTestResult, setSpTestResult] = useState(null);
+
+  // PIQ integration state
+  const [piqCfg, setPiqCfg] = useState(DEF_PIQ);
+  const [piqSecretPlaceholder, setPiqSecretPlaceholder] = useState(false);
+  const [showPiqSecret, setShowPiqSecret] = useState(false);
+  const [piqSaved, setPiqSaved] = useState(false);
+  const [piqErr, setPiqErr] = useState("");
+  const [piqTesting, setPiqTesting] = useState(false);
+  const [piqTestResult, setPiqTestResult] = useState(null);
 
   useEffect(() => {
     fetch("/api/config/settings", { headers: { "Authorization": "Bearer " + adminToken } })
@@ -4173,10 +6875,45 @@ function StorageTab({ adminToken }) {
         const masked = s.clientSecret === "••••••••";
         setSecretPlaceholder(masked);
         setSp({ ...DEF_SP, ...s, clientSecret: masked ? "" : (s.clientSecret || "") });
+        // Load PIQ config
+        const p = d.piq || DEF_PIQ;
+        const piqMasked = p.clientSecret === "••••••••";
+        setPiqSecretPlaceholder(piqMasked);
+        setPiqCfg({ ...DEF_PIQ, ...p, clientSecret: piqMasked ? "" : (p.clientSecret || "") });
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const updPiq = (k, v) => { setPiqCfg(p => ({ ...p, [k]: v })); setPiqSaved(false); setPiqErr(""); if (k === "clientSecret") setPiqSecretPlaceholder(false); };
+
+  const savePiq = async () => {
+    setPiqErr(""); setPiqTestResult(null);
+    try {
+      const payload = { ...piqCfg };
+      if (!payload.clientSecret && piqSecretPlaceholder) delete payload.clientSecret;
+      const r = await fetch("/api/config/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+        body: JSON.stringify({ piq: payload }),
+      });
+      if (r.ok) { setPiqSaved(true); setTimeout(() => setPiqSaved(false), 3500); }
+      else { const d = await r.json(); setPiqErr(d.error || "Save failed."); }
+    } catch { setPiqErr("Unable to connect to server."); }
+  };
+
+  const testPiq = async () => {
+    setPiqTesting(true); setPiqTestResult(null);
+    try {
+      const r = await fetch("/api/config/settings?action=test-piq", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
+      });
+      const d = await r.json();
+      setPiqTestResult(d);
+    } catch { setPiqTestResult({ ok: false, error: "Unable to connect to server." }); }
+    setPiqTesting(false);
+  };
 
   const updSp = (k, v) => { setSp(p => ({ ...p, [k]: v })); setSaved(false); setErr(""); if (k === "clientSecret") setSecretPlaceholder(false); };
 
@@ -4194,7 +6931,8 @@ function StorageTab({ adminToken }) {
   };
 
   const save = async () => {
-    setErr("");
+    if (saving) return;
+    setSaving(true); setErr("");
     try {
       const payload = { ...sp };
       // If secret is blank and placeholder was shown, don't overwrite it
@@ -4204,9 +6942,25 @@ function StorageTab({ adminToken }) {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
         body: JSON.stringify({ sharepoint: payload }),
       });
-      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3500); }
+      if (r.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 3500);
+        // Refresh public config so the "Save to SharePoint" button in the
+        // Orders tab appears immediately after enabling SP, without requiring
+        // a full page reload. Guard against a 500 returning a JSON body that
+        // would otherwise clobber `pubConfig.sharepointEnabled` with undefined.
+        try {
+          const rr = await fetch("/api/config/public");
+          if (rr.ok) {
+            const pc = await rr.json();
+            setPubConfig?.(pc);
+          } else {
+            console.warn("pubConfig refresh failed:", rr.status);
+          }
+        } catch (e) { console.warn("pubConfig refresh error:", e?.message); }
+      }
       else { const d = await r.json(); setErr(d.error || "Save failed."); }
     } catch { setErr("Unable to connect to server."); }
+    setSaving(false);
   };
 
   if (loading) return <div className="panel" style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}>Loading…</div>;
@@ -4258,12 +7012,15 @@ function StorageTab({ adminToken }) {
       {saved && <div className="alert alert-ok">SharePoint settings saved.</div>}
 
       <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save}>
-          <Ic n="check" s={15}/> Save Storage Settings
+        <button className="btn btn-blk" style={{ flex: 1 }} onClick={save} disabled={saving}>
+          {saving
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid white",borderRadius:"50%",width:14,height:14}}/> Saving…</>
+            : <><Ic n="check" s={15}/> Save Storage Settings</>
+          }
         </button>
         <button className="btn btn-out" style={{ flex: 1 }} onClick={testSharePoint} disabled={spTesting}>
           {spTesting
-            ? <><span style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
             : <><Ic n="cloud" s={15}/> Test SharePoint</>}
         </button>
       </div>
@@ -4288,6 +7045,50 @@ function StorageTab({ adminToken }) {
           ))}
         </div>
       )}
+
+      {/* ── PropertyIQ Integration ── */}
+      <div className="panel" style={{ marginTop: "1.25rem" }}>
+        <h2 className="section-tt" style={{ marginBottom: "6px" }}>PropertyIQ Integration</h2>
+        <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "1.5rem" }}>
+          Connect to PropertyIQ to sync lots and Owner Corporations, and automatically detect Keys/Fob payment via special levy.
+          After saving credentials, use <strong>Sync from PIQ</strong> in the Plans tab to import data.
+        </p>
+        <div className="form-row">
+          <label className="f-label">Base URL</label>
+          <input className="f-input" type="text" placeholder="https://tocs.propertyiq.com.au" value={piqCfg.baseUrl} onChange={e => updPiq("baseUrl", e.target.value)}/>
+        </div>
+        <div className="form-row">
+          <label className="f-label">Client ID</label>
+          <input className="f-input" type="text" placeholder="29571834.yourcompany" value={piqCfg.clientId} onChange={e => updPiq("clientId", e.target.value)}/>
+        </div>
+        <div className="form-row" style={{ marginBottom: 0 }}>
+          <label className="f-label">Client Secret</label>
+          <div className="pw-wrap">
+            <input className="f-input" type={showPiqSecret ? "text" : "password"}
+              placeholder={piqSecretPlaceholder ? "Saved — enter new value to change" : "OAuth2 client secret"}
+              value={piqCfg.clientSecret} onChange={e => updPiq("clientSecret", e.target.value)} style={{ paddingRight: "42px" }}/>
+            <button className="pw-toggle" type="button" onClick={() => setShowPiqSecret(p => !p)}>
+              <Ic n={showPiqSecret ? "eyeOff" : "eye"} s={16}/>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {piqErr  && <div className="alert alert-err">{piqErr}</div>}
+      {piqSaved && <div className="alert alert-ok">PropertyIQ settings saved.</div>}
+      {piqTestResult?.ok === true  && <div className="alert alert-ok">{piqTestResult.message}</div>}
+      {piqTestResult?.ok === false && <div className="alert alert-err">PIQ connection failed: {piqTestResult.error}</div>}
+
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button className="btn btn-blk" style={{ flex: 1 }} onClick={savePiq}>
+          <Ic n="check" s={15}/> Save PIQ Settings
+        </button>
+        <button className="btn btn-out" style={{ flex: 1 }} onClick={testPiq} disabled={piqTesting || (!piqCfg.clientId && !piqSecretPlaceholder)}>
+          {piqTesting
+            ? <><span aria-hidden="true" style={{display:"inline-block",animation:"spin 0.8s linear infinite",border:"2px solid rgba(0,0,0,0.15)",borderTop:"2px solid #1c3326",borderRadius:"50%",width:13,height:13}}/> Testing…</>
+            : <><Ic n="cloud" s={15}/> Test PIQ Connection</>}
+        </button>
+      </div>
     </div>
   );
 }
@@ -4306,23 +7107,37 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
       body: JSON.stringify({ action: "list-admins" }),
     })
-      .then(r => r.json())
-      .then(d => { setAdmins(d.admins || []); setListLoading(false); })
+      .then(async r => {
+        if (r.status === 401) { try { window.dispatchEvent(new CustomEvent("tocs:auth-fail")); } catch {} setListLoading(false); return; }
+        const d = await r.json();
+        setAdmins(d.admins || []);
+        setListLoading(false);
+      })
       .catch(() => { setListErr("Could not load admin list."); setListLoading(false); });
   };
 
   useEffect(() => { loadAdmins(); }, []);
 
   const removeAdmin = async (id, username) => {
-    if (!window.confirm(`Remove admin "${username}"? They will no longer be able to log in.`)) return;
+    // Re-confirm the actor's current password before destructive admin actions
+    // so a stolen 8-h bearer alone isn't enough to mutate the admin pool.
+    const currentPass = await appConfirm({
+      title: `Remove admin "${username}"?`,
+      message: "They will no longer be able to log in.\n\nEnter your current password to confirm.",
+      confirmText: "Remove",
+      danger: true,
+      passwordPrompt: true,
+    });
+    if (!currentPass) return;
     const r = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-      body: JSON.stringify({ action: "remove-admin", id }),
+      body: JSON.stringify({ action: "remove-admin", id, currentPass }),
     });
-    const d = await r.json();
-    if (r.ok) loadAdmins();
-    else alert(d.error || "Could not remove admin.");
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401) { onLogout(); return; }
+    if (r.ok) { appToast({ type: "ok", message: `Admin "${username}" removed.` }); loadAdmins(); }
+    else appToast({ type: "err", message: d.error || "Could not remove admin." });
   };
 
   // ── Add admin form ──────────────────────────────────────────────────────────
@@ -4336,12 +7151,20 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
     if (!addForm.username.trim()) { setAddMsg({ type: "err", text: "Username is required." }); return; }
     if (!addForm.password) { setAddMsg({ type: "err", text: "Password is required." }); return; }
     if (addForm.password.length < 8) { setAddMsg({ type: "err", text: "Password must be at least 8 characters." }); return; }
+    // Re-confirm the actor's password before mutating the admin pool.
+    const currentPass = await appConfirm({
+      title: `Add admin "${addForm.username.trim()}"?`,
+      message: "Enter your current password to confirm.",
+      confirmText: "Add admin",
+      passwordPrompt: true,
+    });
+    if (!currentPass) return;
     setAddLoading(true); setAddMsg(null);
     try {
       const r = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ action: "add-admin", username: addForm.username.trim(), password: addForm.password, name: addForm.name.trim() || undefined }),
+        body: JSON.stringify({ action: "add-admin", username: addForm.username.trim(), password: addForm.password, name: addForm.name.trim() || undefined, currentPass }),
       });
       const d = await r.json();
       if (r.status === 401) { onLogout(); return; }
@@ -4368,12 +7191,23 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
   const submitReset = async () => {
     if (!resetPw) { setResetMsg({ type: "err", text: "Password is required." }); return; }
     if (resetPw.length < 8) { setResetMsg({ type: "err", text: "Must be at least 8 characters." }); return; }
+    // Re-confirm the actor's current password before resetting another admin's
+    // password — without this, a stolen 8-h bearer is enough to lock the
+    // other admin out and take over.
+    const currentPass = await appConfirm({
+      title: `Reset password for "${resetTarget.username}"?`,
+      message: "All sessions for all admins will be invalidated.\n\nEnter your current password to confirm.",
+      confirmText: "Reset password",
+      danger: true,
+      passwordPrompt: true,
+    });
+    if (!currentPass) return;
     setResetLoading(true); setResetMsg(null);
     try {
       const r = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminToken },
-        body: JSON.stringify({ action: "reset-admin-password", id: resetTarget.id, newPassword: resetPw }),
+        body: JSON.stringify({ action: "reset-admin-password", id: resetTarget.id, newPassword: resetPw, currentPass }),
       });
       const d = await r.json();
       if (r.status === 401) { onLogout(); return; }
@@ -4504,7 +7338,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
             <div style={{ display: "flex", gap: "10px", marginTop: "1.2rem" }}>
               <button className="btn btn-out" style={{ flex: 1 }} onClick={() => setResetTarget(null)}>Cancel</button>
               <button className="btn btn-blk" style={{ flex: 1 }} onClick={submitReset} disabled={resetLoading}>
-                {resetLoading ? <><span style={spinStyle}/> Saving…</> : "Reset Password"}
+                {resetLoading ? <><span aria-hidden="true" style={spinStyle}/> Saving…</> : "Reset Password"}
               </button>
             </div>
           </div>
@@ -4535,7 +7369,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
           </div>
         </div>
         <button className="btn btn-blk" style={{ marginTop: "0.5rem" }} onClick={submitAdd} disabled={addLoading}>
-          {addLoading ? <><span style={spinStyle}/> Adding…</> : <><Ic n="plus" s={14}/> Add Admin</>}
+          {addLoading ? <><span aria-hidden="true" style={spinStyle}/> Adding…</> : <><Ic n="plus" s={14}/> Add Admin</>}
         </button>
       </div>
 
@@ -4557,7 +7391,7 @@ function SecurityTab({ adminToken, currentUser, onLogout }) {
         <PwField label="Confirm New Password" k="confirm" fk="confirm"/>
 
         <button className="btn btn-blk btn-block" onClick={submit} disabled={loading}>
-          {loading ? <><span style={spinStyle}/> Saving…</> : <><Ic n="shield" s={15}/> Save Credentials</>}
+          {loading ? <><span aria-hidden="true" style={spinStyle}/> Saving…</> : <><Ic n="shield" s={15}/> Save Credentials</>}
         </button>
       </div>
     </div>

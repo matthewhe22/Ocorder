@@ -2,21 +2,34 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+// Shared with the Vercel handlers so the local dev server can't drift from
+// production on what counts as a valid order status.
+import { VALID_STATUSES } from "../api/_lib/constants.js";
+// Vercel handlers, mounted via callVercelHandler() so the local dev server
+// can exercise Stripe / SharePoint / PIQ flows end-to-end without duplicating
+// ~1500 lines of handler logic. Set LOCAL_KV_DIR (or REDIS_URL) so the
+// shared _lib/store.js persists state between calls.
+import orderActionHandler from "../api/orders/[id]/[action].js";
+import stripeWebhookHandler from "../api/stripe-webhook/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST        = path.join(__dirname, "dist");
 const DATA_FILE   = path.join(__dirname, process.env.DATA_FILE   || "data.json");
 const CONFIG_FILE = path.join(__dirname, process.env.CONFIG_FILE || "config.json");
 const UPLOADS_DIR = path.join(__dirname, process.env.UPLOADS_DIR || "uploads");
+const BACKUPS_DIR = path.join(__dirname, process.env.BACKUPS_DIR || "backups");
+const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
 const DEMO_MODE   = process.env.DEMO_MODE === "true";
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
-// Ensure uploads directory exists
+// Ensure uploads + backups directories exist
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
 // ── Default seed data ─────────────────────────────────────────────────────────
 const DEFAULT_DATA = {
@@ -138,15 +151,30 @@ const DEMO_DEFAULT_CONFIG = {
 };
 
 // ── Valid order statuses ───────────────────────────────────────────────────────
-const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Awaiting Stripe Payment","Paid"];
+// VALID_STATUSES imported from ../api/_lib/constants.js at the top of the file.
 
 // ── In-memory sessions  Map<token, { user, exp }> ─────────────────────────────
 const SESSIONS = new Map();
 // Purge expired sessions every 30 minutes to prevent unbounded growth
 setInterval(() => { const now = Date.now(); for (const [t, s] of SESSIONS) if (now > s.exp) SESSIONS.delete(t); }, 30 * 60 * 1000).unref();
 
+// ── Short-lived single-use download tokens  Map<token, { user, exp, orderId, kind }> ──
+// Used for file downloads triggered from <a href> links so the long-lived session
+// token never appears in URLs / browser history / referrer / server logs.
+const DOWNLOAD_TOKENS = new Map();
+const DOWNLOAD_TOKEN_TTL_MS = 60 * 1000; // 60 seconds, single-use
+setInterval(() => { const now = Date.now(); for (const [t, s] of DOWNLOAD_TOKENS) if (now > s.exp) DOWNLOAD_TOKENS.delete(t); }, 5 * 60 * 1000).unref();
+
 function genToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+// Constant-time string comparison via SHA-256 digests so different-length
+// inputs don't leak length, and equal-length digests are compared with
+// crypto.timingSafeEqual.
+function constantTimeStrEqual(a, b) {
+  const ah = crypto.createHash("sha256").update(String(a == null ? "" : a)).digest();
+  const bh = crypto.createHash("sha256").update(String(b == null ? "" : b)).digest();
+  return crypto.timingSafeEqual(ah, bh);
 }
 function validToken(token) {
   if (!token) return false;
@@ -159,6 +187,23 @@ function getSessionUser(token) {
   const s = SESSIONS.get(token);
   return (s && Date.now() <= s.exp) ? s.user : null;
 }
+function mintDownloadToken(user, orderId, kind) {
+  const t = genToken();
+  DOWNLOAD_TOKENS.set(t, { user, orderId, kind, exp: Date.now() + DOWNLOAD_TOKEN_TTL_MS });
+  return t;
+}
+// Consumes (single-use) and validates a download token. Returns the entry or null.
+function consumeDownloadToken(token, expectedKind, expectedOrderId) {
+  if (!token) return null;
+  const s = DOWNLOAD_TOKENS.get(token);
+  if (!s) return null;
+  // Always remove on lookup (single-use; expired/mismatched still gets removed)
+  DOWNLOAD_TOKENS.delete(token);
+  if (Date.now() > s.exp) return null;
+  if (expectedKind && s.kind !== expectedKind) return null;
+  if (expectedOrderId && s.orderId !== expectedOrderId) return null;
+  return s;
+}
 // Returns the admins array from cfg, migrating from legacy cfg.admin if needed.
 function getAdmins(cfg) {
   if (Array.isArray(cfg.admins) && cfg.admins.length > 0) return cfg.admins;
@@ -166,25 +211,115 @@ function getAdmins(cfg) {
 }
 
 // ── File helpers ──────────────────────────────────────────────────────────────
+// Atomic JSON write: write to a sibling temp file in the same directory,
+// fsync, then rename onto the target. POSIX `rename(2)` is atomic on the
+// same filesystem, so the target is never observed half-written even on
+// crash or power loss. We also fsync the directory entry so the rename
+// itself is durable.
+function atomicWriteJson(targetPath, obj) {
+  const dir = path.dirname(targetPath);
+  // Pre-flight: ensure dir exists (handles first-run + custom paths)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.${path.basename(targetPath)}.tmp.${process.pid}.${crypto.randomBytes(6).toString("hex")}`);
+  const payload = JSON.stringify(obj, null, 2);
+  let fd;
+  try {
+    fd = fs.openSync(tmp, "w", 0o600);
+    fs.writeSync(fd, payload);
+    fs.fsyncSync(fd);
+  } finally {
+    if (fd != null) { try { fs.closeSync(fd); } catch {} }
+  }
+  fs.renameSync(tmp, targetPath);
+  // Best-effort dir fsync — on some platforms (Windows) opening a directory
+  // for fsync is not supported and throws EISDIR/EPERM; ignore those.
+  try {
+    const dfd = fs.openSync(dir, "r");
+    try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
+  } catch { /* non-fatal */ }
+}
+
+// In-memory caches keyed on file mtime. readData/readConfig are called on
+// nearly every route; without the cache each call is a synchronous full-file
+// read + JSON.parse that blocks the event loop and grows with order count.
+// Readers receive a structuredClone snapshot, so the existing read-modify-write
+// semantics are preserved exactly — a mutated-but-never-written object can
+// never leak into another request. write* refreshes the cache from the object
+// just persisted.
+let dataCache = null;   // { mtimeMs, value }
+let configCache = null; // { mtimeMs, value }
+
 function readData() {
   try {
-    const d = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    if (Array.isArray(d.orders)) {
-      d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
+    const mtimeMs = fs.statSync(DATA_FILE).mtimeMs;
+    if (!dataCache || dataCache.mtimeMs !== mtimeMs) {
+      const raw = fs.readFileSync(DATA_FILE, "utf8");
+      // Reject empty / truncated files so we don't replace good in-memory state
+      // with a parseable-but-empty object on startup after a crashed write.
+      if (!raw.trim()) throw new Error("Data file is empty");
+      const d = JSON.parse(raw);
+      if (Array.isArray(d.orders)) {
+        d.orders = d.orders.map(o => o.status ? o : { ...o, status: "Pending Payment" });
+      }
+      dataCache = { mtimeMs, value: d };
     }
-    return d;
+    return structuredClone(dataCache.value);
   } catch { return structuredClone(DEMO_MODE ? DEMO_SEED_DATA : DEFAULT_DATA); }
 }
 function writeData(d) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
+  atomicWriteJson(DATA_FILE, d);
+  try { dataCache = { mtimeMs: fs.statSync(DATA_FILE).mtimeMs, value: structuredClone(d) }; }
+  catch { dataCache = null; }
+  // After every successful write, ensure today's snapshot exists. We only
+  // create one snapshot per UTC day so writeData stays cheap; recovery scope
+  // is "yesterday's data" worst case. Failures here must NOT propagate — the
+  // primary write already succeeded, backup is best-effort.
+  try { ensureDailyBackup(d); } catch (e) { console.warn("  ⚠️   Backup snapshot failed:", e.message); }
+}
+function todayUtcStamp() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+function ensureDailyBackup(d) {
+  const stamp = todayUtcStamp();
+  const target = path.join(BACKUPS_DIR, `data-${stamp}.json`);
+  if (fs.existsSync(target)) return; // already snapshotted today
+  atomicWriteJson(target, d);
+  // Prune snapshots older than BACKUP_RETENTION_DAYS — defensive cap to
+  // prevent unbounded growth in long-running deployments.
+  pruneOldBackups();
+}
+function pruneOldBackups() {
+  const cutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  let entries;
+  try { entries = fs.readdirSync(BACKUPS_DIR); } catch { return; }
+  for (const name of entries) {
+    if (!/^data-\d{4}-\d{2}-\d{2}\.json$/.test(name)) continue;
+    const p = path.join(BACKUPS_DIR, name);
+    try {
+      const st = fs.statSync(p);
+      if (st.mtimeMs < cutoff) fs.unlinkSync(p);
+    } catch { /* best-effort */ }
+  }
 }
 function readConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch {
+  try {
+    const mtimeMs = fs.statSync(CONFIG_FILE).mtimeMs;
+    if (!configCache || configCache.mtimeMs !== mtimeMs) {
+      const raw = fs.readFileSync(CONFIG_FILE, "utf8");
+      if (!raw.trim()) throw new Error("Config file is empty");
+      configCache = { mtimeMs, value: JSON.parse(raw) };
+    }
+    return structuredClone(configCache.value);
+  } catch {
     const seed = DEMO_MODE ? DEMO_DEFAULT_CONFIG : DEFAULT_CONFIG;
     writeConfig(seed); return structuredClone(seed);
   }
 }
-function writeConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
+function writeConfig(c) {
+  atomicWriteJson(CONFIG_FILE, c);
+  try { configCache = { mtimeMs: fs.statSync(CONFIG_FILE).mtimeMs, value: structuredClone(c) }; }
+  catch { configCache = null; }
+}
 
 // ── Demo-mode startup seeding ─────────────────────────────────────────────────
 // On first launch (or after manual deletion of data files), seed demo content.
@@ -365,13 +500,73 @@ function buildCertEmailHtml(order, message, cfg) {
 </body></html>`;
 }
 
+// ── Order-amended applicant email ────────────────────────────────────────────
+// Sent when an admin amends an unpaid order so the applicant sees the updated
+// total, items, and any note explaining the change.
+function buildAmendedCustomerEmailHtml(order, oldTotal, newTotal, note, cfg) {
+  const tpl = cfg.emailTemplate || {};
+  const contact = order.contactInfo || {};
+  const items = order.items || [];
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const itemRows = items.map(it => `
+    <tr>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;">${esc(it.productName) || "—"}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:center;">${Number(it.qty) || 1}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e8edf0;text-align:right;">$${(Number(it.price) || 0).toFixed(2)}</td>
+    </tr>`).join("");
+  const totalChanged = Math.round(Number(newTotal) * 100) !== Math.round(Number(oldTotal) * 100);
+  const totalsBlock = totalChanged
+    ? `<tr><td style="padding:6px 0;color:#666;width:38%;">Previous Total</td><td style="padding:6px 0;text-decoration:line-through;color:#999;">$${Number(oldTotal).toFixed(2)} AUD</td></tr>
+       <tr><td style="padding:6px 0;color:#666;">New Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${Number(newTotal).toFixed(2)} AUD</td></tr>`
+    : `<tr><td style="padding:6px 0;color:#666;width:38%;">Total</td><td style="padding:6px 0;font-weight:700;font-size:1.1rem;color:#1c3326;">$${Number(newTotal).toFixed(2)} AUD</td></tr>`;
+  const noteBlock = note
+    ? `<p style="margin:16px 0 0;padding:12px 16px;background:#f0f7f3;border-left:4px solid #2e6b42;border-radius:4px;font-size:0.88rem;"><strong>Note from TOCS:</strong> ${esc(note).replace(/\n/g, "<br>")}</p>`
+    : "";
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1c3326;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">TOCS Order Portal</h1>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order Updated</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin-top:0;">Dear ${esc(contact.name) || "Applicant"},</p>
+      <p>Your order <strong style="font-family:monospace;">${esc(order.id)}</strong> has been amended by our team. The order reference number stays the same; the updated details are shown below.</p>
+      ${noteBlock}
+      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Updated Order</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        ${totalsBlock}
+        <tr><td style="padding:6px 0;color:#666;">Status</td><td style="padding:6px 0;">${esc(order.status)}</td></tr>
+      </table>
+      <h3 style="color:#1c3326;border-bottom:2px solid #e8edf0;padding-bottom:8px;margin-top:28px;">Items</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <tr style="background:#f5f7f5;">
+          <th style="padding:8px 12px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#666;">Product</th>
+          <th style="padding:8px 12px;text-align:center;font-size:0.78rem;text-transform:uppercase;color:#666;">Qty</th>
+          <th style="padding:8px 12px;text-align:right;font-size:0.78rem;text-transform:uppercase;color:#666;">Price</th>
+        </tr>
+        ${itemRows}
+        ${order.selectedShipping?.name ? `<tr><td colspan="2" style="padding:8px 12px;color:#666;">Shipping — ${esc(order.selectedShipping.name)}</td><td style="padding:8px 12px;text-align:right;">$${(Number(order.selectedShipping.price) || 0).toFixed(2)}</td></tr>` : ""}
+        <tr style="background:#f5f7f5;"><td colspan="2" style="padding:8px 12px;font-weight:700;">Total</td><td style="padding:8px 12px;text-align:right;font-weight:700;">$${Number(newTotal).toFixed(2)} AUD</td></tr>
+      </table>
+      <p style="font-size:0.85rem;color:#555;">If an invoice was previously issued, an updated invoice reflecting the new total will be sent separately. Please use the same order reference for any payment.</p>
+      <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
+      <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
 // ── Shared SMTP transporter factory ──────────────────────────────────────────
+// Verify the SMTP server's TLS cert by default. Operators on self-hosted SMTP
+// with self-signed certs can opt out via SMTP_ALLOW_INSECURE_TLS=1.
 function createSmtpTransporter(smtp) {
+  const allowInsecure = process.env.SMTP_ALLOW_INSECURE_TLS === "1";
   return nodemailer.createTransport({
     host: smtp.host, port: Number(smtp.port) || 587,
     secure: Number(smtp.port) === 465,
     auth: { user: smtp.user, pass: smtp.pass },
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: !allowInsecure },
   });
 }
 
@@ -482,11 +677,18 @@ function readMultipart(req) {
         if (fileMatch) {
           const filename = fileMatch[1];
           const ctMatch = headers.match(/Content-Type:\s*(.+)/i);
-          files[nameMatch[1]] = {
+          const fileObj = {
             filename,
             contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
             data: Buffer.from(body, "binary"),
           };
+          const key = nameMatch[1];
+          if (files[key]) {
+            if (!Array.isArray(files[key])) files[key] = [files[key]];
+            files[key].push(fileObj);
+          } else {
+            files[key] = fileObj;
+          }
         } else {
           fields[nameMatch[1]] = body;
         }
@@ -497,15 +699,105 @@ function readMultipart(req) {
   });
 }
 
+// ── Vercel-handler adapter ────────────────────────────────────────────────────
+// Lets the local dev server route directly into the Vercel serverless
+// handlers (api/orders/[id]/[action].js, api/stripe-webhook/index.js, …) so
+// the same code path runs locally and on Vercel — and we don't have to
+// duplicate ~1500 lines of order/Stripe/PIQ/SP logic into server.js (which
+// caused drift in the past).
+//
+// The Vercel runtime exposes `res.status().json()` / `res.send()` /
+// `res.redirect()` and pre-parses `req.body` + `req.query` for filesystem-
+// routed dynamic segments. We mimic that shape here.
+//
+// `opts.query` carries the path-derived segments (`{ id, action }`) plus any
+// querystring params. `opts.parseBody` controls whether the JSON body is
+// pre-parsed (false for stripe-webhook, which reads the raw stream itself).
+async function callVercelHandler(handler, req, res, opts = {}) {
+  // Shim res.status / res.json / res.send / res.redirect on the Node res.
+  if (typeof res.status !== "function") {
+    res.status = (code) => { res.statusCode = code; return res; };
+  }
+  if (typeof res.json !== "function") {
+    res.json = (obj) => {
+      if (!res.headersSent) res.setHeader("Content-Type", "application/json");
+      const buf = Buffer.from(JSON.stringify(obj));
+      if (!res.getHeader("Content-Length")) res.setHeader("Content-Length", buf.length);
+      res.end(buf);
+      return res;
+    };
+  }
+  if (typeof res.send !== "function") {
+    res.send = (data) => {
+      if (Buffer.isBuffer(data) || typeof data === "string") res.end(data);
+      else res.end(JSON.stringify(data));
+      return res;
+    };
+  }
+  if (typeof res.redirect !== "function") {
+    res.redirect = (codeOrUrl, maybeUrl) => {
+      const code = typeof codeOrUrl === "number" ? codeOrUrl : 302;
+      const url  = typeof codeOrUrl === "number" ? maybeUrl : codeOrUrl;
+      res.writeHead(code, { Location: url });
+      res.end();
+      return res;
+    };
+  }
+  // Parse JSON body unless the caller opted out (stripe-webhook needs raw).
+  if (opts.parseBody !== false && (req.method === "POST" || req.method === "PUT" || req.method === "PATCH")) {
+    const ct = (req.headers["content-type"] || "").toLowerCase();
+    if (!ct.includes("multipart/form-data")) {
+      // readBody handles the size cap + parse-failure path.
+      req.body = await readBody(req, res);
+      if (res.headersSent) return; // body too large; already responded
+    }
+  }
+  // Compose req.query from URL search params + the path-derived segments.
+  const urlObj = new URL("http://x" + req.url);
+  const search = Object.fromEntries(urlObj.searchParams);
+  req.query = { ...search, ...(opts.query || {}) };
+  return handler(req, res);
+}
+
 // ── Response helpers ──────────────────────────────────────────────────────────
+function acceptsGzip(req) {
+  return /\bgzip\b/.test(req?.headers?.["accept-encoding"] || "");
+}
 function json(res, code, data) {
   const body = JSON.stringify(data);
+  // Gzip larger JSON responses (e.g. /api/data with all plans + orders is the
+  // app's startup-critical payload and compresses 3-5×). Small bodies skip it —
+  // the gzip header overhead outweighs the saving.
+  if (Buffer.byteLength(body) > 1024 && acceptsGzip(res.req)) {
+    const gz = zlib.gzipSync(body);
+    res.writeHead(code, { "Content-Type": "application/json", "Content-Encoding": "gzip", "Vary": "Accept-Encoding", "Content-Length": gz.length });
+    return res.end(gz);
+  }
   res.writeHead(code, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
   res.end(body);
 }
 function authHeader(req) {
   const h = req.headers["authorization"] || "";
   return h.startsWith("Bearer ") ? h.slice(7) : null;
+}
+
+// ── Public plan shapes ────────────────────────────────────────────────────────
+// Summary: what the portal's building-search step renders (cards show
+// name/address + lot/OC counts). Detail: the full plan for one selected
+// building with admin-only product fields stripped. Both must stay in sync
+// with api/data.js and api/plans.js (the Vercel handlers).
+function planSummary(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    address: p.address || "",
+    active: p.active !== false,
+    lotCount: (p.lots || []).length,
+    ocCount: Object.keys(p.ownerCorps || {}).length,
+  };
+}
+function publicPlanDetail(p) {
+  return { ...p, products: (p.products || []).map(({ managerAdminCharge, ...prod }) => prod) };
 }
 
 // ── MIME + Cache ──────────────────────────────────────────────────────────────
@@ -561,13 +853,23 @@ async function handler(req, res) {
     const d = readData();
     // Authenticated admins get full data (incl. orders); public callers get only plans.
     if (validToken(token)) return json(res, 200, d);
-    // Strip admin-only fields from products before returning to public callers
+    // Public callers get plan SUMMARIES only — the portal's search step needs
+    // id/name/address (+ counts for the card meta), and the full catalog for
+    // one building is fetched on selection via GET /api/plans?id=… . Shipping
+    // every lot/product of every building to every visitor made the
+    // startup-blocking payload grow linearly with the portfolio.
     return json(res, 200, {
-      strataPlans: d.strataPlans.filter(p => p.active !== false).map(plan => ({
-        ...plan,
-        products: (plan.products || []).map(({ managerAdminCharge, ...prod }) => prod),
-      })),
+      strataPlans: d.strataPlans.filter(p => p.active !== false).map(planSummary),
     });
+  }
+
+  // ── GET /api/plans?id=SP12345  (public — full catalog for ONE building) ────
+  if (urlPath === "/api/plans" && method === "GET") {
+    const id = new URL("http://x" + req.url).searchParams.get("id") || "";
+    const d = readData();
+    const plan = d.strataPlans.find(p => p.id === id && p.active !== false);
+    if (!plan) return json(res, 404, { error: "Building not found." });
+    return json(res, 200, { plan: publicPlanDetail(plan) });
   }
 
   // ── POST /api/auth  (unified auth endpoint) ───────────────────────────────
@@ -581,7 +883,17 @@ async function handler(req, res) {
       if (!user || !pass) return json(res, 400, { error: "Username and password are required." });
       const cfg = readConfig();
       const admins = getAdmins(cfg);
-      const match = admins.find(a => a.username.toLowerCase() === user.toLowerCase() && a.password === pass);
+      // Constant-time match: iterate every admin, compare both username and
+      // password through SHA-256 + timingSafeEqual, never short-circuit. This
+      // prevents response-time differences between "no such user" and "wrong
+      // password" / "wrong user, right password" branches.
+      let match = null;
+      const userLower = String(user).toLowerCase();
+      for (const a of admins) {
+        const userOk = constantTimeStrEqual(String(a.username || "").toLowerCase(), userLower);
+        const passOk = constantTimeStrEqual(a.password, pass);
+        if (userOk && passOk) match = a;
+      }
       if (match) {
         const token = genToken();
         SESSIONS.set(token, { user: match.username, exp: Date.now() + 8 * 60 * 60 * 1000 });
@@ -741,11 +1053,22 @@ async function handler(req, res) {
       lotId: raw.lotId,
       orderCategory: orderCategoryNorm,
       contactInfo: {
-        name:        stripCtrl(raw.contactInfo?.name  || ""),
-        email:       stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()),
-        phone:       stripCtrl(raw.contactInfo?.phone || ""),
-        companyName: stripCtrl(raw.contactInfo?.companyName || ""),
-        ocReference: stripCtrl(raw.contactInfo?.ocReference || ""),
+        name:          stripCtrl(raw.contactInfo?.name  || "").slice(0, 200),
+        email:         stripCtrl((raw.contactInfo?.email || "").trim().toLowerCase()).slice(0, 200),
+        phone:         stripCtrl(raw.contactInfo?.phone || "").slice(0, 50),
+        companyName:   stripCtrl(raw.contactInfo?.companyName || "").slice(0, 200),
+        ownerName:     stripCtrl(raw.contactInfo?.ownerName   || "").slice(0, 200),
+        ocReference:   stripCtrl(raw.contactInfo?.ocReference || "").slice(0, 100),
+        applicantType: ["agent", "owner"].includes(raw.contactInfo?.applicantType)
+                         ? raw.contactInfo.applicantType : "",
+        ...(raw.contactInfo?.shippingAddress && typeof raw.contactInfo.shippingAddress === "object" ? {
+          shippingAddress: {
+            street:   stripCtrl(String(raw.contactInfo.shippingAddress.street   || "")).slice(0, 200),
+            suburb:   stripCtrl(String(raw.contactInfo.shippingAddress.suburb   || "")).slice(0, 100),
+            state:    stripCtrl(String(raw.contactInfo.shippingAddress.state    || "")).slice(0, 50),
+            postcode: stripCtrl(String(raw.contactInfo.shippingAddress.postcode || "")).slice(0, 10),
+          },
+        } : {}),
       },
       status: raw.payment === "stripe" ? "Awaiting Stripe Payment"
             : raw.payment === "card" ? "Processing"
@@ -759,7 +1082,7 @@ async function handler(req, res) {
         planName:    "", // overridden from catalog below
         ocName:      stripCtrl(item.ocName      || ""),
         productName: stripCtrl(item.productName || ""), // overridden from catalog below
-        ocId:        null, // set from catalog for perOC products only; stripped for non-perOC
+        ocId:        stripCtrl(String(item.ocId || "")) || null,
         qty:         Math.min(100, Math.max(1, Math.floor(Number(item.qty) || 1))),
         // price and managerAdminCharge set below from server-side catalog
       })),
@@ -908,25 +1231,69 @@ async function handler(req, res) {
     writeData(d);
 
     const cfg = readConfig();
-    // Send emails — capture failures and append them to the order's auditLog
-    const emailResults = await Promise.allSettled([
-      sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
-      sendCustomerEmail(order, cfg),
-    ]);
-    const emailLabels = ["Admin notification", "Customer confirmation"];
-    let needsWrite = false;
-    emailResults.forEach((r, i) => {
-      if (r.status === "rejected") {
-        const entry = { ts: new Date().toISOString(), action: "Email send failed", note: `${emailLabels[i]}: ${r.reason?.message || r.reason}` };
-        const idx2 = d.orders.findIndex(o => o.id === order.id);
-        if (idx2 !== -1) { d.orders[idx2].auditLog = [...(d.orders[idx2].auditLog || []), entry]; needsWrite = true; }
+    // Send emails detached — the order is already durably persisted above, so
+    // SMTP (~6+ s with SMTP2GO) must not sit on the customer's critical path.
+    // Failures are captured after the fact: re-read data fresh (other requests
+    // may have written between the response and email settlement) and append
+    // to the order's auditLog so the admin UI can surface them.
+    const emailWork = (async () => {
+      const emailResults = await Promise.allSettled([
+        sendOrderEmail(order, cfg, authorityBuf, authorityFilename),
+        sendCustomerEmail(order, cfg),
+      ]);
+      const emailLabels = ["Admin notification", "Customer confirmation"];
+      const failures = [];
+      emailResults.forEach((r, i) => {
+        if (r.status === "rejected") {
+          failures.push({ label: emailLabels[i], reason: r.reason?.message || String(r.reason || "unknown") });
+        }
+      });
+      if (!failures.length) return;
+      console.error(`  ⚠️   Email failures for ${order.id}:`, failures.map(f => `${f.label} (${f.reason})`).join("; "));
+      try {
+        const fresh = readData();
+        const idx2 = fresh.orders.findIndex(o => o.id === order.id);
+        if (idx2 !== -1) {
+          const entries = failures.map(f => ({ ts: new Date().toISOString(), action: "Email send failed", note: `${f.label}: ${f.reason}` }));
+          fresh.orders[idx2].auditLog = [...(fresh.orders[idx2].auditLog || []), ...entries];
+          // Mark the order with an emailDeliveryStatus flag so admin UI can show
+          // a "needs follow-up" badge without grepping the audit log.
+          fresh.orders[idx2].emailDeliveryStatus = {
+            state: "failed",
+            failures: failures.map(f => f.label),
+            ts: new Date().toISOString(),
+          };
+          writeData(fresh);
+        }
+      } catch (e) {
+        console.error(`  ⚠️   Could not persist email failure audit for ${order.id}:`, e.message);
       }
-    });
-    if (needsWrite) writeData(d);
+    })();
+    emailWork.catch(e => console.error("Detached email work failed:", e.message));
 
     // Strip admin-only fields before returning to the customer
     const customerOrder = { ...order, items: order.items.map(({ managerAdminCharge, ...item }) => item) };
     return json(res, 201, { ok: true, order: customerOrder, emailSentTo: cfg.orderEmail || "Orders@tocs.co" });
+  }
+
+  // ── GET /api/orders/:id/track  (public — applicant order status lookup) ──────
+  const trackMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/track$/);
+  if (trackMatch && method === "GET") {
+    const d = readData();
+    const rawId = trackMatch[1];
+    const order = d.orders.find(o => o.id.toUpperCase() === rawId.toUpperCase());
+    if (!order) return json(res, 404, { error: "Order not found. Please check your reference number." });
+    const firstItem = order.items?.[0] || {};
+    return json(res, 200, {
+      id: order.id,
+      status: order.status,
+      date: order.date,
+      orderCategory: order.orderCategory,
+      planName: firstItem.planName || "",
+      lotNumber: firstItem.lotNumber || "",
+      total: order.total,
+      items: (order.items || []).map(({ productName, qty, price, ocName }) => ({ productName, qty, price, ocName })),
+    });
   }
 
   // ── DELETE /api/orders/:id/delete  (admin — permanently remove a cancelled order) ─
@@ -952,12 +1319,126 @@ async function handler(req, res) {
     return json(res, 200, { ok: true });
   }
 
+  // ── PUT /api/orders/:id/amend  (admin — edit items / shipping pre-payment) ─
+  // Body: { items: [...], selectedShipping?: {...}, note?: string }
+  // Allowed only for unpaid orders; recomputes total from items + shipping.
+  // The order id (reference number) is preserved.  If an invoice was already
+  // sent, the admin must click "Send Invoice" again after saving — this route
+  // does not auto-reissue.
+  const amendMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/amend$/);
+  if (amendMatch && method === "PUT") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const body = await readBody(req, res);
+    const { items, selectedShipping, note } = body || {};
+    const AMENDABLE_STATUSES = ["Invoice to be issued", "Pending Payment", "Awaiting Stripe Payment", "On Hold", "Awaiting Documents"];
+    if (!Array.isArray(items) || items.length === 0) return json(res, 400, { error: "items must be a non-empty array." });
+    if (items.length > 50) return json(res, 400, { error: "Too many items (max 50)." });
+    for (const it of items) {
+      if (!it?.productName || typeof it.price !== "number" || !Number.isFinite(it.price) || it.price < 0) {
+        return json(res, 400, { error: "Each item must have productName and a non-negative numeric price." });
+      }
+    }
+    const d = readData();
+    const idx = d.orders.findIndex(o => o.id === amendMatch[1]);
+    if (idx === -1) return json(res, 404, { error: "Order not found." });
+    const order = d.orders[idx];
+    if (!AMENDABLE_STATUSES.includes(order.status)) {
+      return json(res, 409, { error: `Order cannot be amended in status "${order.status}". Cancel and re-create instead.` });
+    }
+    if (order.payment === "stripe" && order.status === "Awaiting Stripe Payment") {
+      return json(res, 409, { error: "Stripe orders cannot be amended — the customer is mid-checkout. Cancel and re-create instead." });
+    }
+    const stripCtrl = v => typeof v === "string" ? v.replace(/[\x00-\x1f\x7f<>]/g, "") : v;
+    const cleanItems = items.map(it => ({
+      productId:   it.productId,
+      productName: stripCtrl(String(it.productName)).slice(0, 200),
+      price:       Math.max(0, Math.round(Number(it.price) * 100) / 100),
+      qty:         Math.min(100, Math.max(1, Math.floor(Number(it.qty) || 1))),
+      lotNumber:   stripCtrl(String(it.lotNumber || "")).slice(0, 50),
+      lotId:       it.lotId,
+      planId:      it.planId,
+      planName:    stripCtrl(String(it.planName || "")).slice(0, 200),
+      ocName:      stripCtrl(String(it.ocName   || "")).slice(0, 200),
+      ocId:        it.ocId || null,
+      ...(it.isSecondaryOC ? { isSecondaryOC: true } : {}),
+      ...(it.turnaround ? { turnaround: stripCtrl(String(it.turnaround)).slice(0, 100) } : {}),
+      ...(it.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, Number(it.managerAdminCharge) || 0) } : {}),
+      ...(it.key ? { key: stripCtrl(String(it.key)).slice(0, 200) } : {}),
+    }));
+    let cleanShipping = order.selectedShipping;
+    if (order.orderCategory === "keys" && selectedShipping && typeof selectedShipping === "object") {
+      cleanShipping = {
+        id:    stripCtrl(String(selectedShipping.id   || "")).slice(0, 50),
+        name:  stripCtrl(String(selectedShipping.name || "")).slice(0, 100),
+        type:  stripCtrl(String(selectedShipping.type || "")).slice(0, 50),
+        price: Math.max(0, Number(selectedShipping.price) || 0),
+      };
+    }
+    const shippingCost = (order.orderCategory === "keys" && cleanShipping)
+      ? Math.max(0, Number(cleanShipping.price) || 0) : 0;
+    const newTotal = Math.round((cleanItems.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost) * 100) / 100;
+    const oldTotal = Number(order.total) || 0;
+    const oldItemCount = (order.items || []).length;
+    const noteText = (typeof note === "string" && note.trim()) ? stripCtrl(note.trim()).slice(0, 200) : "";
+    const auditNote = `Total: $${oldTotal.toFixed(2)} → $${newTotal.toFixed(2)} | Items: ${oldItemCount} → ${cleanItems.length}${noteText ? ` | ${noteText}` : ""}`;
+    d.orders[idx].items = cleanItems;
+    d.orders[idx].total = newTotal;
+    if (cleanShipping) d.orders[idx].selectedShipping = cleanShipping;
+    d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), {
+      ts: new Date().toISOString(),
+      action: "Order amended",
+      note: auditNote,
+    }];
+    writeData(d);
+
+    // Notify the applicant by email that the order has been amended.
+    // Best-effort: SMTP failure is recorded in the audit log but does not
+    // fail the request — the amendment itself has already been persisted.
+    const cfgAmend = readConfig();
+    const smtpAmend = cfgAmend.smtp || {};
+    const recipientEmail = d.orders[idx].contactInfo?.email;
+    if (recipientEmail && smtpAmend.host && smtpAmend.user && smtpAmend.pass) {
+      try {
+        const transporter = createSmtpTransporter(smtpAmend);
+        const fromEmail = cfgAmend.orderEmail || "Orders@tocs.co";
+        await transporter.sendMail({
+          from: `"Top Owners Corporation Solution" <${fromEmail}>`,
+          to: recipientEmail,
+          subject: `Update to your TOCS order ${d.orders[idx].id}`,
+          html: buildAmendedCustomerEmailHtml(d.orders[idx], oldTotal, newTotal, noteText, cfgAmend),
+        });
+        d.orders[idx].auditLog.push({
+          ts: new Date().toISOString(),
+          action: "Amendment notification sent",
+          note: `Sent to: ${recipientEmail}`,
+        });
+        writeData(d);
+      } catch (err) {
+        d.orders[idx].auditLog.push({
+          ts: new Date().toISOString(),
+          action: "Amendment notification failed",
+          note: (err.message || "").substring(0, 200),
+        });
+        writeData(d);
+        console.error("  ❌  Amendment notification failed for", d.orders[idx].id, "—", err.message);
+      }
+    }
+
+    return json(res, 200, { ok: true, order: d.orders[idx] });
+  }
+
   // ── PUT /api/orders/:id/status  (admin) ───────────────────────────────────
+  // When status === "Cancelled" the payload may include a `refund` object:
+  //   { amount: number, method: "none"|"manual"|"stripe"|"bank", reference: string }
+  // captured alongside the cancellation note. Stored verbatim with timestamp
+  // so admins have a paper trail without inventing a second endpoint.
   const statusMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/status$/);
   if (statusMatch && method === "PUT") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { status, note } = await readBody(req, res);
+    const body = await readBody(req, res);
+    const { status, note, refund } = body || {};
     if (!status || typeof status !== "string" || !status.trim()) return json(res, 400, { error: "A non-empty status string is required." });
     if (!VALID_STATUSES.includes(status)) return json(res, 400, { error: `Invalid status. Allowed: ${VALID_STATUSES.join(", ")}.` });
     const d = readData();
@@ -968,17 +1449,115 @@ async function handler(req, res) {
     if (note) auditEntry.note = note;
     d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), auditEntry];
     if (status === "Cancelled" && note) d.orders[idx].cancelReason = note;
+    // Refund metadata: only accept on Cancelled, whitelist fields, sanity-check types
+    if (status === "Cancelled" && refund && typeof refund === "object") {
+      const ALLOWED_METHODS = ["none", "manual", "bank", "stripe", "payid", "card"];
+      const cleanedRefund = {
+        amount: typeof refund.amount === "number" && refund.amount >= 0 ? Math.round(refund.amount * 100) / 100 : 0,
+        method: ALLOWED_METHODS.includes(refund.method) ? refund.method : "none",
+        reference: typeof refund.reference === "string" ? refund.reference.slice(0, 200) : "",
+        ts: new Date().toISOString(),
+        by: getSessionUser(token) || "admin",
+      };
+      d.orders[idx].refund = cleanedRefund;
+      d.orders[idx].auditLog.push({
+        ts: cleanedRefund.ts,
+        action: "Refund recorded",
+        note: `${cleanedRefund.method} $${cleanedRefund.amount.toFixed(2)}${cleanedRefund.reference ? ` (ref: ${cleanedRefund.reference})` : ""}`,
+      });
+    }
     writeData(d);
     return json(res, 200, { ok: true });
   }
 
+  // ── POST /api/orders/:id/notify  (admin — email customer about order) ─────
+  // Generic customer-notification endpoint. Body: { subject?, message }.
+  // Sends to order.contactInfo.email if present. Failures are logged to the
+  // order's auditLog so the admin UI can show that delivery was attempted.
+  const notifyMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/notify$/);
+  if (notifyMatch && method === "POST") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const { subject, message } = await readBody(req, res);
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return json(res, 400, { error: "A non-empty message is required." });
+    }
+    const safeMessage = message.slice(0, 5000);
+    const safeSubject = (typeof subject === "string" && subject.trim())
+      ? subject.slice(0, 200)
+      : null;
+    const d = readData();
+    const idx = d.orders.findIndex(o => o.id === notifyMatch[1]);
+    if (idx === -1) return json(res, 404, { error: "Order not found." });
+    const order = d.orders[idx];
+    const recipientEmail = order.contactInfo?.email;
+    if (!recipientEmail) return json(res, 400, { error: "Order has no customer email address." });
+    const cfg = readConfig();
+    const smtp = cfg.smtp || {};
+    if (!smtp.host || !smtp.user || !smtp.pass) return json(res, 400, { error: "SMTP not configured." });
+    const subj = safeSubject || `Update on your TOCS order ${order.id}`;
+    // HTML-escape the user-provided message before injecting into the template.
+    const html = `
+      <div style="font-family:Arial,sans-serif;padding:24px;max-width:600px;color:#222;">
+        <h2 style="color:#1c3326;margin-top:0;">Order ${esc(order.id)} — status update</h2>
+        <p style="white-space:pre-wrap;line-height:1.5;">${esc(safeMessage).replace(/\n/g, "<br>")}</p>
+        <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0;">
+        <p style="font-size:0.78rem;color:#888;">${esc(cfg.emailTemplate?.footer || "TOCS — Top Owners Corporation Solution")}</p>
+      </div>`;
+    try {
+      const transporter = createSmtpTransporter(smtp);
+      await transporter.sendMail({
+        from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
+        to: recipientEmail,
+        subject: subj,
+        html,
+      });
+      d.orders[idx].auditLog = [
+        ...(d.orders[idx].auditLog || []),
+        { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subj}` },
+      ];
+      writeData(d);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      // Log the failure into the audit log too — failures should be visible
+      // to admins without grepping server logs.
+      d.orders[idx].auditLog = [
+        ...(d.orders[idx].auditLog || []),
+        { ts: new Date().toISOString(), action: "Customer notify failed", note: err.message },
+      ];
+      writeData(d);
+      console.error("  ❌  Customer notify failed for", order.id, "—", err.message);
+      return json(res, 500, { error: "Failed to send notification email." });
+    }
+  }
+
+  // ── POST /api/orders/:id/authority-link  (admin — mint short-lived download URL) ──
+  const authorityLinkMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/authority-link$/);
+  if (authorityLinkMatch && method === "POST") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const orderId = authorityLinkMatch[1];
+    const d = readData();
+    const order = d.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found." });
+    if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
+    const dl = mintDownloadToken(getSessionUser(token), orderId, "authority");
+    return json(res, 200, { url: `/api/orders/${encodeURIComponent(orderId)}/authority?dl=${dl}` });
+  }
+
   // ── GET /api/orders/:id/authority  (admin — download authority doc) ────────
+  // Auth: Bearer header OR ?dl=<short-lived single-use download token>.
+  // The ?token=<session> query-string fallback was removed (leaks via browser
+  // history / logs / referrer). Use POST /authority-link to obtain a ?dl= URL.
   const authorityMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/authority$/);
   if (authorityMatch && method === "GET") {
-    const token = new URL("http://x" + req.url).searchParams.get("token") || authHeader(req);
-    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const orderId = authorityMatch[1];
+    const dl = new URL("http://x" + req.url).searchParams.get("dl");
+    const headerToken = authHeader(req);
+    const dlEntry = dl ? consumeDownloadToken(dl, "authority", orderId) : null;
+    if (!validToken(headerToken) && !dlEntry) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
-    const order = d.orders.find(o => o.id === authorityMatch[1]);
+    const order = d.orders.find(o => o.id === orderId);
     if (!order) return json(res, 404, { error: "Order not found." });
     if (!order.lotAuthorityFile) return json(res, 404, { error: "No authority document for this order." });
     // Sanitise the stored filename: strip control chars (incl. CRLF) to prevent header injection
@@ -1007,6 +1586,44 @@ async function handler(req, res) {
     return;
   }
 
+  // ── GET /api/orders/:id/certificate  (admin — re-download issued cert) ────
+  const certificateMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/certificate$/);
+  if (certificateMatch && method === "GET") {
+    const orderId = certificateMatch[1];
+    // Bearer header only — query-string token would leak via logs/history.
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const d = readData();
+    const order = d.orders.find(o => o.id === orderId);
+    if (!order) return json(res, 404, { error: "Order not found." });
+    // Return JSON {url} for the SharePoint case so the admin client can open
+    // the cross-origin URL in a new tab — a 302 here would be opaque to fetch.
+    if (order.certificateUrl) return json(res, 200, { url: order.certificateUrl });
+    if (!order.certificateFile) return json(res, 404, { error: "No stored certificate for this order." });
+    const safeFilename = path.basename(order.certificateFile).replace(/[^\w.\-]/g, "_");
+    const filePath = path.resolve(UPLOADS_DIR, safeFilename);
+    if (!filePath.startsWith(UPLOADS_DIR + path.sep) && filePath !== UPLOADS_DIR) {
+      return json(res, 403, { error: "Forbidden." });
+    }
+    fs.readFile(filePath, (err, fileData) => {
+      if (err) return json(res, 404, { error: "Certificate file missing on server." });
+      const ext = path.extname(safeFilename).toLowerCase();
+      const mimeMap = { ".pdf":"application/pdf", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png" };
+      try {
+        res.writeHead(200, {
+          "Content-Type": order.certificateContentType || mimeMap[ext] || "application/octet-stream",
+          "Content-Disposition": `attachment; filename="${safeFilename}"`,
+          "Content-Length": fileData.length,
+        });
+        res.end(fileData);
+      } catch (headerErr) {
+        console.error("  ❌  Certificate download header error:", headerErr.message);
+        if (!res.headersSent) json(res, 500, { error: "Could not send file." });
+      }
+    });
+    return;
+  }
+
   // ── POST /api/orders/:id/send-certificate  &  send-invoice  (admin) ─────────
   const sendCertMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/send-certificate$/);
   const sendInvMatch  = urlPath.match(/^\/api\/orders\/([^/]+)\/send-invoice$/);
@@ -1015,7 +1632,32 @@ async function handler(req, res) {
     const orderId = (sendCertMatch || sendInvMatch)[1];
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { message, attachment } = await readBody(req, res);
+    // Accept multipart/form-data (preferred — avoids 33% base64 inflation)
+    // or legacy JSON ({ message, attachment: { filename, contentType, data: base64 } }).
+    const ct = (req.headers["content-type"] || "").toLowerCase();
+    let message = "";
+    const attachments = [];
+    if (ct.includes("multipart/form-data")) {
+      const { fields, files } = await readMultipart(req);
+      message = fields.message || "";
+      const fileField = files.file || files.attachment;
+      if (fileField) {
+        const fileList = Array.isArray(fileField) ? fileField : [fileField];
+        for (const f of fileList) attachments.push({ filename: f.filename, contentType: f.contentType, buffer: f.data });
+      }
+    } else {
+      const body = await readBody(req, res);
+      message = body.message || "";
+      if (body.attachment?.data) {
+        attachments.push({ filename: body.attachment.filename, contentType: body.attachment.contentType, buffer: Buffer.from(body.attachment.data, "base64") });
+      }
+    }
+    const ATTACH_LIMIT = 10 * 1024 * 1024;
+    const totalAttachSize = attachments.reduce((sum, a) => sum + a.buffer.length, 0);
+    if (totalAttachSize > ATTACH_LIMIT) return json(res, 413, { error: `Attachments too large — total must be under 10 MB.` });
+    // Refuse to send a "certificate" email with no attachment — the recipient
+    // would receive an empty notification and no copy would be filed away.
+    if (isCert && attachments.length === 0) return json(res, 400, { error: "Attach at least one certificate file before sending." });
     const d = readData();
     const idx = d.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return json(res, 404, { error: "Order not found." });
@@ -1038,11 +1680,31 @@ async function handler(req, res) {
         from: `"Top Owners Corporation Solution" <${cfg.orderEmail || "Orders@tocs.co"}>`,
         to: recipientEmail, subject: subj, html,
       };
-      if (attachment?.data) {
+      if (attachments.length > 0) {
         const defaultFilename = isCert ? "OC-Certificate.pdf" : "Invoice.pdf";
-        mailOpts.attachments = [{ filename: attachment.filename || defaultFilename, content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+        mailOpts.attachments = attachments.map((a, i) => ({
+          filename: a.filename || (i === 0 ? defaultFilename : `attachment-${i + 1}.pdf`),
+          content: a.buffer,
+          contentType: a.contentType || "application/pdf",
+        }));
       }
       await transporter.sendMail(mailOpts);
+      // Persist a local copy of the certificate for admin re-download. The
+      // file is saved beside lot-authority docs in the uploads/ folder and the
+      // filename + content-type are stored on the order so the new download
+      // endpoint can serve it back.
+      if (isCert && attachments.length > 0) {
+        try {
+          const first = attachments[0];
+          const rawExt = (path.extname(first.filename || "") || ".pdf").toLowerCase();
+          const safeExt = /^\.(pdf|jpg|jpeg|png)$/.test(rawExt) ? rawExt : ".pdf";
+          const certFilename = order.id + "-certificate" + safeExt;
+          fs.writeFileSync(path.join(UPLOADS_DIR, certFilename), first.buffer);
+          d.orders[idx].certificateFile = certFilename;
+          d.orders[idx].certificateContentType = first.contentType || "application/pdf";
+          d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate saved locally", note: certFilename }];
+        } catch (e) { console.error("  ❌  Failed to save certificate copy:", e.message); }
+      }
       d.orders[idx].status = isCert ? "Issued" : "Pending Payment";
       d.orders[idx].auditLog = [...(d.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: isCert ? "Certificate issued" : "Invoice sent", note: `To: ${recipientEmail}` }];
       writeData(d);
@@ -1053,8 +1715,10 @@ async function handler(req, res) {
   }
 
   // ── GET /api/orders/export  (admin — CSV download) ────────────────────────
+  // Bearer header only; query-string token fallback removed to prevent token
+  // leakage via browser history, server logs, referrer headers and CDN caches.
   if (urlPath === "/api/orders/export" && method === "GET") {
-    const token = authHeader(req) || new URL("http://x" + req.url).searchParams.get("token");
+    const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const d = readData();
     const rows = [["Order ID","Date","Name","Email","Phone","Building Name","Lot Number","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"]];
@@ -1095,13 +1759,25 @@ async function handler(req, res) {
   if (urlPath === "/api/lots/import" && method === "POST") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const { planId, lots } = await readBody(req, res);
+    const { planId, lots, ownerCorps } = await readBody(req, res);
     if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
     if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
     // Validate each lot has a non-empty id
     for (const lot of lots) {
       if (!lot || typeof lot !== "object" || !lot.id) {
         return json(res, 400, { error: "Each lot must have a non-empty id field." });
+      }
+    }
+    // Validate ownerCorps if provided
+    if (ownerCorps !== undefined) {
+      if (!ownerCorps || typeof ownerCorps !== "object" || Array.isArray(ownerCorps)) {
+        return json(res, 400, { error: "ownerCorps must be a plain object." });
+      }
+      for (const [ocId, oc] of Object.entries(ownerCorps)) {
+        if (!ocId || typeof ocId !== "string") return json(res, 400, { error: "Each ownerCorps key must be a non-empty string." });
+        if (!oc || typeof oc !== "object" || !oc.name || typeof oc.name !== "string") {
+          return json(res, 400, { error: `ownerCorps entry '${ocId}' must have a name string.` });
+        }
       }
     }
     // Deduplicate by lot id (last occurrence wins)
@@ -1115,12 +1791,14 @@ async function handler(req, res) {
     const prevCount = (d.strataPlans[idx].lots || []).length;
     d.strataPlans[idx].lots = [...seenLots.values()];
     const newCount = d.strataPlans[idx].lots.length;
+    if (ownerCorps) d.strataPlans[idx].ownerCorps = ownerCorps;
+    const ocNote = ownerCorps ? `, ${Object.keys(ownerCorps).length} OCs` : "";
     d.strataPlans[idx].lotsImportLog = [
       ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)), // keep last 50 entries
-      { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${newCount} lots` },
+      { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${newCount} lots${ocNote}` },
     ];
     writeData(d);
-    return json(res, 200, { ok: true, count: newCount });
+    return json(res, 200, { ok: true, count: newCount, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined });
   }
 
   // ── POST /api/plans  (admin — save full plans array) ──────────────────────
@@ -1130,20 +1808,68 @@ async function handler(req, res) {
     const body = await readBody(req, res);
     // Support import-lots action (mirrors Vercel api/plans.js sub-route)
     if (body.action === "import-lots") {
-      const { planId, lots } = body;
+      const { planId, lots, ownerCorps } = body;
       if (!planId || !Array.isArray(lots)) return json(res, 400, { error: "Invalid import data." });
       if (lots.length === 0) return json(res, 400, { error: "Lots array cannot be empty." });
+      // Validate ownerCorps if provided
+      if (ownerCorps !== undefined) {
+        if (!ownerCorps || typeof ownerCorps !== "object" || Array.isArray(ownerCorps)) {
+          return json(res, 400, { error: "ownerCorps must be a plain object." });
+        }
+        for (const [ocId, oc] of Object.entries(ownerCorps)) {
+          if (!ocId || typeof ocId !== "string") return json(res, 400, { error: "Each ownerCorps key must be a non-empty string." });
+          if (!oc || typeof oc !== "object" || !oc.name || typeof oc.name !== "string") {
+            return json(res, 400, { error: `ownerCorps entry '${ocId}' must have a name string.` });
+          }
+        }
+      }
       const d = readData();
       const idx = d.strataPlans.findIndex(p => p.id === planId);
       if (idx === -1) return json(res, 404, { error: "Plan not found." });
-      const prevCount = d.strataPlans[idx].lots?.length || 0;
-      d.strataPlans[idx].lots = lots;
+      // Backstop warning (non-blocking): minting brand-new OCs onto a building
+      // already linked to PropertyIQ is the signature of the duplicate-OC bug.
+      let ocWarning = null;
+      // Merge ownerCorps non-destructively (add new, keep existing)
+      if (ownerCorps) {
+        const existing = d.strataPlans[idx].ownerCorps || {};
+        const piqLinked = !!d.strataPlans[idx].piqBuildingId ||
+          Object.values(existing).some(oc => oc && oc.piqScheduleId != null);
+        const addedOcIds = [];
+        for (const [id, oc] of Object.entries(ownerCorps)) {
+          if (!existing[id]) { existing[id] = oc; addedOcIds.push(id); }
+        }
+        d.strataPlans[idx].ownerCorps = existing;
+        if (piqLinked && addedOcIds.length > 0) {
+          ocWarning = `Import added ${addedOcIds.length} new Owner Corporation(s) (${addedOcIds.join(", ")}) to a PropertyIQ-linked building. If these duplicate existing OCs, re-check the lot allocation.`;
+          console.warn(`[plans] import-lots WARNING: plan ${planId}: ${ocWarning}`);
+        }
+      }
+      // Merge lots by lot number (update existing, add new — never delete)
+      const VALID_TYPES = ["Residential", "Commercial", "Parking"];
+      const normNum = s => String(s || "").trim().toLowerCase();
+      const existingLots = d.strataPlans[idx].lots || [];
+      let added = 0, updated = 0;
+      for (const incoming of lots) {
+        if (!incoming.number) continue;
+        const type = VALID_TYPES.includes(incoming.type) ? incoming.type : (VALID_TYPES.includes(existingLots.find(l => normNum(l.number) === normNum(incoming.number))?.type) ? existingLots.find(l => normNum(l.number) === normNum(incoming.number)).type : "Residential");
+        const existIdx = existingLots.findIndex(l => normNum(l.number) === normNum(incoming.number));
+        if (existIdx >= 0) {
+          existingLots[existIdx].type = VALID_TYPES.includes(incoming.type) ? incoming.type : existingLots[existIdx].type;
+          if (incoming.ownerCorps?.length) existingLots[existIdx].ownerCorps = incoming.ownerCorps;
+          updated++;
+        } else {
+          existingLots.push({ ...incoming, type });
+          added++;
+        }
+      }
+      d.strataPlans[idx].lots = existingLots;
+      const ocNote = ownerCorps ? `, ${Object.keys(ownerCorps).length} OCs` : "";
       d.strataPlans[idx].lotsImportLog = [
         ...((d.strataPlans[idx].lotsImportLog || []).slice(-49)),
-        { ts: new Date().toISOString(), action: "Lots imported", note: `${prevCount} → ${lots.length} lots` },
+        { ts: new Date().toISOString(), action: "Lots imported", note: `+${added} new, ${updated} updated${ocNote}` },
       ];
       writeData(d);
-      return json(res, 200, { ok: true, count: lots.length });
+      return json(res, 200, { ok: true, count: existingLots.length, added, updated, ocCount: ownerCorps ? Object.keys(ownerCorps).length : undefined, ...(ocWarning ? { warning: ocWarning } : {}) });
     }
     const { plans } = body;
     if (!Array.isArray(plans)) return json(res, 400, { error: 'Invalid plans. Body must be {"plans": [...]}.' });
@@ -1193,6 +1919,40 @@ async function handler(req, res) {
     return json(res, 200, { ok: true });
   }
 
+  // ── GET /api/admin/backup  (admin — download current data.json snapshot) ─
+  // Returns the live data file as a JSON download. Bearer-only (no query token).
+  if (urlPath === "/api/admin/backup" && method === "GET") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    const d = readData();
+    const body = Buffer.from(JSON.stringify(d, null, 2), "utf8");
+    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="tocs-backup-${stamp}.json"`,
+      "Content-Length": body.length,
+    });
+    res.end(body);
+    return;
+  }
+
+  // ── GET /api/admin/backup/list  (admin — list on-disk daily snapshots) ────
+  if (urlPath === "/api/admin/backup/list" && method === "GET") {
+    const token = authHeader(req);
+    if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
+    let files = [];
+    try {
+      files = fs.readdirSync(BACKUPS_DIR)
+        .filter(f => /^data-\d{4}-\d{2}-\d{2}\.json$/.test(f))
+        .map(f => {
+          const st = fs.statSync(path.join(BACKUPS_DIR, f));
+          return { name: f, size: st.size, mtime: st.mtime.toISOString() };
+        })
+        .sort((a, b) => b.name.localeCompare(a.name));
+    } catch { /* no backups yet */ }
+    return json(res, 200, { backups: files, retentionDays: BACKUP_RETENTION_DAYS });
+  }
+
   // ── POST /api/config/test-email  (admin) ──────────────────────────────────
   if (urlPath === "/api/config/test-email" && method === "POST") {
     const token = authHeader(req);
@@ -1229,12 +1989,16 @@ async function handler(req, res) {
     const cfg = readConfig();
     const pd = cfg.paymentDetails || {};
     const pm = cfg.paymentMethods || {};
+    const sp = cfg.sharepoint || {};
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     return json(res, 200, {
       logo: cfg.logo || "",
       stripeEnabled: !!(cfg.stripe?.secretKey),
       bankEnabled:   pm.bankEnabled  !== false,
       payidEnabled:  pm.payidEnabled !== false,
+      // SharePoint archival enabled — boolean only, used by admin UI to gate
+      // the "↑ Save to SharePoint" button on deployments without SP creds.
+      sharepointEnabled: !!(sp.tenantId && sp.clientId && sp.clientSecret && sp.siteId),
       paymentDetails: {
         accountName: pd.accountName || "Top Owners Corporation",
         bsb: pd.bsb || "033-065",
@@ -1261,9 +2025,10 @@ async function handler(req, res) {
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const cfg = readConfig();
     const smtp = cfg.smtp || {};
-    const pd = cfg.paymentDetails || {};
-    const et = cfg.emailTemplate || {};
-    const pm = cfg.paymentMethods || {};
+    const pd   = cfg.paymentDetails || {};
+    const et   = cfg.emailTemplate  || {};
+    const pm   = cfg.paymentMethods || {};
+    const sp   = cfg.sharepoint     || {};
     return json(res, 200, {
       orderEmail: cfg.orderEmail || "Orders@tocs.co",
       logo: cfg.logo || "",
@@ -1277,6 +2042,22 @@ async function handler(req, res) {
         adminNotificationSubject: et.adminNotificationSubject || "New Order — {orderType} #{orderId}",
         adminNotificationIntro:   et.adminNotificationIntro   || "A new order has been placed.",
       },
+      sharepoint: {
+        tenantId:     sp.tenantId     || "",
+        clientId:     sp.clientId     || "",
+        clientSecret: sp.clientSecret ? "••••••••" : "",
+        siteId:       sp.siteId       || "",
+        folderPath:   sp.folderPath   || "Top Owners Corporation Solution/ORDER DATABASE",
+      },
+      stripe: {
+        secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
+        publishableKey: cfg.stripe?.publishableKey || "",
+      },
+      piq: {
+        baseUrl:      cfg.piq?.baseUrl      || "https://tocs.propertyiq.com.au",
+        clientId:     cfg.piq?.clientId     || "",
+        clientSecret: cfg.piq?.clientSecret ? "••••••••" : "",
+      },
     });
   }
 
@@ -1285,7 +2066,7 @@ async function handler(req, res) {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
     const body2 = await readBody(req, res);
-    const { orderEmail, smtp, paymentDetails, emailTemplate, paymentMethods, logo } = body2;
+    const { orderEmail, smtp, paymentDetails, emailTemplate, paymentMethods, logo, sharepoint, stripe, piq } = body2;
     const cfg = readConfig();
     if (logo !== undefined) {
       if (typeof logo !== "string") return json(res, 400, { error: "logo must be a string." });
@@ -1306,7 +2087,8 @@ async function handler(req, res) {
         cfg.smtp.port = p;
       }
       if (smtp.user !== undefined) cfg.smtp.user = stripCRLF(smtp.user);
-      if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass; // ignore masked placeholder
+      // Guard: never overwrite a saved password with a blank or masked placeholder
+      if (smtp.pass !== undefined && smtp.pass !== "••••••••" && smtp.pass !== "") cfg.smtp.pass = smtp.pass;
     }
     if (paymentDetails && typeof paymentDetails === "object") {
       const sanitised = {};
@@ -1327,8 +2109,82 @@ async function handler(req, res) {
       if (typeof paymentMethods.bankEnabled  === "boolean") cfg.paymentMethods.bankEnabled  = paymentMethods.bankEnabled;
       if (typeof paymentMethods.payidEnabled === "boolean") cfg.paymentMethods.payidEnabled = paymentMethods.payidEnabled;
     }
+    if (sharepoint && typeof sharepoint === "object") {
+      cfg.sharepoint = cfg.sharepoint || {};
+      if (sharepoint.tenantId   !== undefined) cfg.sharepoint.tenantId   = sharepoint.tenantId;
+      if (sharepoint.clientId   !== undefined) cfg.sharepoint.clientId   = sharepoint.clientId;
+      if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••" && sharepoint.clientSecret !== "") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
+      if (sharepoint.siteId      !== undefined) cfg.sharepoint.siteId     = sharepoint.siteId;
+      if (sharepoint.folderPath  !== undefined) cfg.sharepoint.folderPath = sharepoint.folderPath;
+    }
+    if (stripe && typeof stripe === "object") {
+      cfg.stripe = cfg.stripe || {};
+      if (stripe.secretKey      !== undefined && stripe.secretKey      !== "••••••••" && stripe.secretKey      !== "") cfg.stripe.secretKey      = stripe.secretKey;
+      if (stripe.publishableKey !== undefined) cfg.stripe.publishableKey = stripe.publishableKey;
+    }
+    if (piq && typeof piq === "object") {
+      cfg.piq = cfg.piq || {};
+      if (piq.baseUrl      !== undefined) cfg.piq.baseUrl      = piq.baseUrl;
+      if (piq.clientId     !== undefined) cfg.piq.clientId     = piq.clientId;
+      if (piq.clientSecret !== undefined && piq.clientSecret !== "••••••••" && piq.clientSecret !== "") cfg.piq.clientSecret = piq.clientSecret;
+    }
     writeConfig(cfg);
     return json(res, 200, { ok: true });
+  }
+
+  // ── Vercel-handler delegated routes ───────────────────────────────────────
+  // Each route below delegates to the same handler that runs on Vercel, via
+  // callVercelHandler(). Local-dev state persistence requires either
+  // REDIS_URL or LOCAL_KV_DIR to be set; without either, the Vercel handlers
+  // operate on the seed data only (their reads return defaults, writes throw).
+
+  // POST /api/orders/:id/save-to-sharepoint  (admin — retroactive SP archival)
+  const saveToSpMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/save-to-sharepoint$/);
+  if (saveToSpMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: saveToSpMatch[1], action: "save-to-sharepoint" },
+    });
+  }
+
+  // POST /api/orders/:id/check-piq-payment  (admin — manual PIQ poll)
+  const checkPiqMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/check-piq-payment$/);
+  if (checkPiqMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: checkPiqMatch[1], action: "check-piq-payment" },
+    });
+  }
+
+  // POST /api/orders/:id/stripe-confirm  (public — browser callback)
+  const stripeConfirmMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/stripe-confirm$/);
+  if (stripeConfirmMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: stripeConfirmMatch[1], action: "stripe-confirm" },
+    });
+  }
+
+  // POST /api/orders/:id/stripe-cancel  (public — browser cancel callback)
+  const stripeCancelMatch = urlPath.match(/^\/api\/orders\/([^/]+)\/stripe-cancel$/);
+  if (stripeCancelMatch && method === "POST") {
+    return callVercelHandler(orderActionHandler, req, res, {
+      query: { id: stripeCancelMatch[1], action: "stripe-cancel" },
+    });
+  }
+
+  // POST /api/stripe-webhook  (Stripe-signed; reads raw body via getRawBody)
+  if (urlPath === "/api/stripe-webhook" && method === "POST") {
+    return callVercelHandler(stripeWebhookHandler, req, res, { parseBody: false });
+  }
+
+  // GET /api/orders?action=poll-piq  (cron-triggered manual PIQ poll)
+  // GET /api/orders?action=poll-piq-status  (admin — last cron summary)
+  // GET /api/orders?action=refresh-piq-payments  (admin — bulk re-poll)
+  // These all delegate to api/orders/index.js (not the [action] handler).
+  if (urlPath === "/api/orders" && method === "GET") {
+    const action = new URL("http://x" + req.url).searchParams.get("action");
+    if (action === "poll-piq" || action === "poll-piq-status" || action === "refresh-piq-payments") {
+      const { default: ordersIndexHandler } = await import("../api/orders/index.js");
+      return callVercelHandler(ordersIndexHandler, req, res, { parseBody: false });
+    }
   }
 
   // ── 405 / 404 for unmatched /api/ routes ──────────────────────────────────
@@ -1339,13 +2195,23 @@ async function handler(req, res) {
       [/^\/api\/data$/, ["GET"]],
       [/^\/api\/orders$/, ["POST"]],
       [/^\/api\/orders\/export$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/track$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/delete$/, ["DELETE"]],
       [/^\/api\/orders\/[^/]+\/status$/, ["PUT"]],
+      [/^\/api\/orders\/[^/]+\/amend$/, ["PUT"]],
       [/^\/api\/orders\/[^/]+\/authority$/, ["GET"]],
+      [/^\/api\/orders\/[^/]+\/certificate$/, ["GET"]],
       [/^\/api\/orders\/[^/]+\/send-certificate$/, ["POST"]],
       [/^\/api\/orders\/[^/]+\/send-invoice$/, ["POST"]],
+      [/^\/api\/orders\/[^/]+\/notify$/, ["POST"]],
+      // Vercel-handler-delegated routes (mounted via callVercelHandler):
+      [/^\/api\/orders\/[^/]+\/save-to-sharepoint$/, ["POST"]],
+      [/^\/api\/orders\/[^/]+\/check-piq-payment$/,  ["POST"]],
+      [/^\/api\/orders\/[^/]+\/stripe-confirm$/,     ["POST"]],
+      [/^\/api\/orders\/[^/]+\/stripe-cancel$/,      ["POST"]],
+      [/^\/api\/stripe-webhook$/,                     ["POST"]],
       [/^\/api\/lots\/import$/, ["POST"]],
-      [/^\/api\/plans$/, ["POST"]],
+      [/^\/api\/plans$/, ["GET", "POST"]],
       [/^\/api\/config\/settings$/, ["GET", "POST"]],
       [/^\/api\/config\/public$/, ["GET"]],
       [/^\/api\/config\/test-email$/, ["POST"]],
@@ -1369,18 +2235,44 @@ async function handler(req, res) {
     if (err) {
       fs.readFile(path.join(DIST, "index.html"), (err2, html) => {
         if (err2) { res.writeHead(404); return res.end("Not found"); }
-        res.writeHead(200, { "Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-cache, no-store, must-revalidate" });
-        res.end(html);
+        sendStatic(req, res, html, ".html", path.join(DIST, "index.html"), "no-cache, no-store, must-revalidate");
       });
       return;
     }
-    res.writeHead(200, {
-      "Content-Type": MIME[ext] || "application/octet-stream",
-      "Cache-Control": cacheHeader(ext),
-      "Content-Length": data.length,
-    });
-    res.end(data);
+    sendStatic(req, res, data, ext, filePath);
   });
+}
+
+// ── Static response with cached gzip ──────────────────────────────────────────
+// Text assets (the JS bundle in particular) compress 3-4×. Compressed bodies
+// are cached in memory keyed on file mtime, so each asset is gzipped once per
+// change rather than per request (gzipSync on the ~500 KB bundle costs ~10 ms —
+// fine once, not on every page load).
+const COMPRESSIBLE = new Set([".html", ".js", ".css", ".svg", ".json"]);
+const gzipCache = new Map(); // filePath -> { mtimeMs, gz }
+function sendStatic(req, res, data, ext, filePath, cacheControl) {
+  const headers = {
+    "Content-Type": MIME[ext] || "application/octet-stream",
+    "Cache-Control": cacheControl || cacheHeader(ext),
+  };
+  if (COMPRESSIBLE.has(ext) && data.length > 1024 && acceptsGzip(req)) {
+    try {
+      const mtimeMs = fs.statSync(filePath).mtimeMs;
+      let entry = gzipCache.get(filePath);
+      if (!entry || entry.mtimeMs !== mtimeMs) {
+        entry = { mtimeMs, gz: zlib.gzipSync(data) };
+        gzipCache.set(filePath, entry);
+      }
+      headers["Content-Encoding"] = "gzip";
+      headers["Vary"] = "Accept-Encoding";
+      headers["Content-Length"] = entry.gz.length;
+      res.writeHead(200, headers);
+      return res.end(entry.gz);
+    } catch { /* fall through to uncompressed */ }
+  }
+  headers["Content-Length"] = data.length;
+  res.writeHead(200, headers);
+  res.end(data);
 }
 
 // ── Server bootstrap ──────────────────────────────────────────────────────────

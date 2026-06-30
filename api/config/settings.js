@@ -1,4 +1,5 @@
-import { readConfig, writeConfig, validToken, extractToken, cors, kvGet, kvSet, KV_AVAILABLE } from "../_lib/store.js";
+import { readConfig, writeConfig, validAdminToken, verifyToken, extractToken, cors, kvGet, kvSet, clientIp, writeAuthAudit, KV_AVAILABLE } from "../_lib/store.js";
+import { getPiqToken, getPiqBuilding, getPiqSchedules, getPiqLots, getAllPiqBuildings, getPiqBuildingById, extractPiqAddress } from "../_lib/piq.js";
 import Stripe from "stripe";
 
 export default async function handler(req, res) {
@@ -6,7 +7,9 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const token = extractToken(req);
-  if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+  // Admin-session only — config holds SMTP/Stripe/SharePoint/PIQ secrets, so the
+  // read-only SERVICE_API_TOKEN must not read (masked) or write them.
+  if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
   if (req.method === "GET") {
     try {
@@ -38,11 +41,21 @@ export default async function handler(req, res) {
           clientId:     sp.clientId     || "",
           clientSecret: sp.clientSecret ? "••••••••" : "",
           siteId:       sp.siteId       || "",
-          folderPath:   sp.folderPath   || "Top Owners Corporation Solution/ORDER DATABASE",
+          // Don't pre-fill the well-known default in the admin response —
+          // returning a blank string forces the admin to make an explicit
+          // choice and avoids advertising an internal folder name. The
+          // runtime fallback in api/_lib/sharepoint.js still applies if
+          // they save without setting one.
+          folderPath:   sp.folderPath   || "",
         },
         stripe: {
           secretKey:      cfg.stripe?.secretKey      ? "••••••••" : "",
           publishableKey: cfg.stripe?.publishableKey || "",
+        },
+        piq: {
+          baseUrl:      cfg.piq?.baseUrl      || "https://tocs.propertyiq.com.au",
+          clientId:     cfg.piq?.clientId     || "",
+          clientSecret: cfg.piq?.clientSecret ? "••••••••" : "",
         },
         paymentMethods: {
           bankEnabled:  pm.bankEnabled  !== false,
@@ -72,12 +85,171 @@ export default async function handler(req, res) {
     }
   }
 
+  // POST /api/config/settings?action=test-piq  ← verify PIQ OAuth credentials
+  if (req.method === "POST" && req.query?.action === "test-piq") {
+    try {
+      const cfg = await readConfig();
+      const { access_token, baseUrl } = await getPiqToken(cfg);
+      // Light check: fetch 1 building to confirm the token works
+      const resp = await fetch(`${baseUrl}/api/buildings?number=1`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) return res.status(200).json({ ok: false, error: `PIQ API returned ${resp.status}` });
+      const data = await resp.json();
+      const count = Array.isArray(data) ? data.length : (data?.data?.length ?? 0);
+      return res.status(200).json({ ok: true, message: `Connected — ${count} building(s) visible` });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
+  // POST /api/config/settings?action=fetch-piq-building-address
+  // Body: { piqBuildingId: 123 }  OR  { planId: "PS726461P" }
+  // Lightweight: fetches only the building record (no schedules, no lots).
+  // Returns: { ok, piqBuildingId, buildingName, address }
+  if (req.method === "POST" && req.query?.action === "fetch-piq-building-address") {
+    try {
+      const { planId, piqBuildingId: bodyBuildingId } = req.body || {};
+      if (!planId && !bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId." });
+
+      const cfg = await readConfig();
+      let building, resolvedId;
+
+      if (bodyBuildingId) {
+        resolvedId = bodyBuildingId;
+        building   = await getPiqBuildingById(cfg, bodyBuildingId);
+      } else {
+        // List search by splan to get the building ID, then fetch individual record
+        const listBuilding = await getPiqBuilding(cfg, planId);
+        if (!listBuilding) return res.status(200).json({ ok: false, error: `Building not found in PIQ for plan "${planId}".` });
+        resolvedId = listBuilding.id;
+        // Individual endpoint has more detail (e.g. address) than the list endpoint
+        building = await getPiqBuildingById(cfg, resolvedId);
+        if (!building) building = listBuilding; // last-resort fallback to list data
+      }
+
+      if (!building) return res.status(200).json({ ok: false, error: "Building not found in PIQ." });
+
+      const address = extractPiqAddress(building);
+
+      // Always include _debugKeys so admins can see what fields PIQ returned when address is empty
+      const _debugKeys = Object.entries(building)
+        .filter(([, v]) => v !== null && v !== undefined && typeof v !== "object")
+        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+        .join(", ");
+
+      return res.status(200).json({
+        ok:            true,
+        piqBuildingId: resolvedId,
+        buildingName:  building.buildingName || building.name || "",
+        address,
+        _debugKeys,
+      });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
+  // POST /api/config/settings?action=list-piq-buildings
+  // Returns all PIQ buildings (single page, max 100) for building discovery.
+  if (req.method === "POST" && req.query?.action === "list-piq-buildings") {
+    try {
+      const cfg = await readConfig();
+      const { buildings, warning } = await getAllPiqBuildings(cfg);
+      return res.status(200).json({ ok: true, buildings, ...(warning ? { warning } : {}) });
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
+  // POST /api/config/settings?action=sync-piq
+  // Body: { planId: "SP12345" }  OR  { piqBuildingId: 123 }
+  // planId branch: looks up building by splan, returns buildingName + schedules + lots.
+  // piqBuildingId branch: skips lookup (caller already knows the building), returns schedules + lots only.
+  if (req.method === "POST" && req.query?.action === "sync-piq") {
+    try {
+      const { planId, piqBuildingId: bodyBuildingId } = req.body || {};
+      if (!planId && !bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId." });
+      if (planId  &&  bodyBuildingId) return res.status(400).json({ error: "Provide planId or piqBuildingId, not both." });
+
+      const cfg = await readConfig();
+
+      let piqBuildingId, buildingName, buildingAddress;
+
+      if (planId) {
+        // Original path: find building by splan
+        const building = await getPiqBuilding(cfg, planId);
+        if (!building) return res.status(404).json({ error: `No PIQ building found for splan "${planId}".` });
+        piqBuildingId   = building.id;
+        buildingName    = building.buildingName || building.name;
+        buildingAddress = building.address || building.buildingAddress || building.propertyAddress || null;
+      } else {
+        // New path: piqBuildingId supplied directly — skip splan lookup
+        piqBuildingId   = bodyBuildingId;
+        buildingName    = undefined; // caller already has the name from list-piq-buildings
+        buildingAddress = undefined; // caller already has the address from list-piq-buildings
+      }
+
+      // Fetch schedules (Owner Corporations)
+      const rawSchedules = await getPiqSchedules(cfg, piqBuildingId);
+
+      // Fetch all lots (paginated)
+      const rawLots = await getPiqLots(cfg, piqBuildingId);
+
+      // Map PIQ schedules → platform ownerCorp format
+      const schedules = rawSchedules.map(s => ({
+        piqScheduleId: s.id,
+        name:          s.name || `Schedule ${s.id}`,
+      }));
+
+      // Map PIQ lots → platform lot format.
+      // Address fields may be top-level scalars OR nested under l.address / l.propertyAddress.
+      const lots = rawLots.map(l => {
+        const addr = l.address || l.propertyAddress || l.physicalAddress || {};
+        return {
+          piqLotId:     l.id,
+          lotNumber:    l.lotNumber  || l.lot    || l.number || String(l.id),
+          unitNumber:   l.unitNumber || l.unit   || addr.unitNumber || addr.unit || "",
+          streetNumber: l.streetNumber || l.houseNumber || l.streetNo ||
+                        addr.streetNumber || addr.houseNumber || addr.streetNo || "",
+          streetName:   l.streetName || l.street ||
+                        addr.streetName || addr.street || "",
+          ownerName:    l.ownerContact?.name || l.name || "",
+        };
+      });
+
+      // Include raw first lot for debugging — lets admin inspect what fields PIQ actually returns
+      // so field-name mapping can be verified/corrected without guessing.
+      const _debugRawLot = rawLots.length > 0 ? rawLots[0] : null;
+
+      const response = { ok: true, piqBuildingId, schedules, lots, _debugRawLot };
+      if (buildingName    !== undefined) response.buildingName    = buildingName;
+      if (buildingAddress !== undefined && buildingAddress !== null) response.address = buildingAddress;
+      return res.status(200).json(response);
+    } catch (err) {
+      return res.status(200).json({ ok: false, error: err.message });
+    }
+  }
+
   if (req.method === "POST") {
     try {
-      const { orderEmail, logo, smtp, paymentDetails, paymentMethods, emailTemplate, sharepoint, stripe } = req.body || {};
+      const { orderEmail, logo, smtp, paymentDetails, paymentMethods, emailTemplate, sharepoint, stripe, piq } = req.body || {};
       const cfg = await readConfig();
       if (orderEmail !== undefined) cfg.orderEmail = orderEmail;
       if (logo !== undefined) {
+        // Validate the logo is a sane data: URL or empty (clears the logo).
+        // Without this an authenticated admin can plant arbitrary content
+        // (Redis-fill DoS, or non-image MIME reflected to every visitor via
+        // /api/config/public).
+        if (logo !== "" && logo !== null) {
+          if (typeof logo !== "string") return res.status(400).json({ error: "logo must be a data URL string." });
+          // Cap at 256 KB raw — generous for an SVG/PNG/JPEG company logo.
+          if (logo.length > 256 * 1024) return res.status(400).json({ error: "logo is too large (max 256 KB)." });
+          if (!/^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(logo)) {
+            return res.status(400).json({ error: "logo must be a base64 data URL with a recognised image MIME type." });
+          }
+        }
         if (KV_AVAILABLE) {
           // Store logo in its own Redis key so readConfig() never loads the large blob.
           await kvSet("tocs:logo", logo);
@@ -93,7 +265,7 @@ export default async function handler(req, res) {
         if (smtp.host !== undefined) cfg.smtp.host = smtp.host;
         if (smtp.port !== undefined) cfg.smtp.port = Number(smtp.port) || 2525;
         if (smtp.user !== undefined) cfg.smtp.user = smtp.user;
-        if (smtp.pass !== undefined && smtp.pass !== "••••••••") cfg.smtp.pass = smtp.pass;
+        if (smtp.pass !== undefined && smtp.pass !== "••••••••" && smtp.pass !== "") cfg.smtp.pass = smtp.pass;
       }
       if (paymentDetails  && typeof paymentDetails  === "object") cfg.paymentDetails  = { ...cfg.paymentDetails,  ...paymentDetails  };
       if (paymentMethods  && typeof paymentMethods  === "object") cfg.paymentMethods  = { ...cfg.paymentMethods,  ...paymentMethods  };
@@ -102,24 +274,50 @@ export default async function handler(req, res) {
         cfg.sharepoint = cfg.sharepoint || {};
         if (sharepoint.tenantId   !== undefined) cfg.sharepoint.tenantId   = sharepoint.tenantId;
         if (sharepoint.clientId   !== undefined) cfg.sharepoint.clientId   = sharepoint.clientId;
-        // Only update clientSecret if a real value is provided (not the masked placeholder)
-        if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
+        // Only update clientSecret if a real non-empty value is provided (not masked or blank)
+        if (sharepoint.clientSecret !== undefined && sharepoint.clientSecret !== "••••••••" && sharepoint.clientSecret !== "") cfg.sharepoint.clientSecret = sharepoint.clientSecret;
         if (sharepoint.siteId      !== undefined) cfg.sharepoint.siteId     = sharepoint.siteId;
         if (sharepoint.folderPath  !== undefined) cfg.sharepoint.folderPath = sharepoint.folderPath;
       }
       if (stripe && typeof stripe === "object") {
         cfg.stripe = cfg.stripe || {};
-        if (stripe.secretKey !== undefined && stripe.secretKey !== "••••••••") {
+        if (stripe.secretKey !== undefined && stripe.secretKey !== "••••••••" && stripe.secretKey !== "") {
           cfg.stripe.secretKey = stripe.secretKey;
         }
         if (stripe.publishableKey !== undefined) {
           cfg.stripe.publishableKey = stripe.publishableKey;
         }
       }
+      if (piq && typeof piq === "object") {
+        cfg.piq = cfg.piq || {};
+        if (piq.baseUrl      !== undefined) cfg.piq.baseUrl      = piq.baseUrl;
+        if (piq.clientId     !== undefined) cfg.piq.clientId     = piq.clientId;
+        // Only update clientSecret if a real non-empty value is provided (not masked or blank)
+        if (piq.clientSecret !== undefined && piq.clientSecret !== "••••••••" && piq.clientSecret !== "") {
+          cfg.piq.clientSecret = piq.clientSecret;
+        }
+      }
       await writeConfig(cfg);
+      // Audit the change (who, from where, which sections, whether a secret was
+      // rotated) so a config rewrite via a stolen bearer is at least traceable.
+      const sections = ["orderEmail", "logo", "smtp", "paymentDetails", "paymentMethods", "emailTemplate", "sharepoint", "stripe", "piq"]
+        .filter(k => req.body?.[k] !== undefined);
+      const secretTouched =
+        (smtp?.pass         && smtp.pass         !== "••••••••" && smtp.pass         !== "") ||
+        (stripe?.secretKey  && stripe.secretKey  !== "••••••••" && stripe.secretKey  !== "") ||
+        (sharepoint?.clientSecret && sharepoint.clientSecret !== "••••••••" && sharepoint.clientSecret !== "") ||
+        (piq?.clientSecret  && piq.clientSecret  !== "••••••••" && piq.clientSecret  !== "");
+      const verified = await verifyToken(extractToken(req));
+      await writeAuthAudit({
+        actor:  verified?.user || "unknown",
+        ip:     clientIp(req),
+        action: "config-updated",
+        note:   `${sections.join(", ") || "—"}${secretTouched ? " | secrets changed" : ""}`,
+      });
       return res.status(200).json({ ok: true });
     } catch (err) {
-      return res.status(500).json({ error: "Failed to save settings: " + err.message });
+      console.error("[settings] save failed:", err.message);
+      return res.status(500).json({ error: "Failed to save settings. Please try again." });
     }
   }
 

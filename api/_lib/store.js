@@ -41,11 +41,15 @@ let _client = null;
 async function getClient() {
   if (!KV_AVAILABLE) return null;
   if (!_client) {
-    // Support both redis:// and rediss:// (TLS) URLs — e.g. Upstash uses rediss://
+    // Support both redis:// and rediss:// (TLS) URLs — e.g. Upstash uses rediss://.
+    // Verify the server's TLS cert by default; Upstash and Vercel KV have
+    // valid certs. Operators on private Redis with self-signed certs can opt
+    // out via REDIS_ALLOW_INSECURE_TLS=1.
     const useTLS = REDIS_URL.startsWith("rediss://");
+    const allowInsecure = process.env.REDIS_ALLOW_INSECURE_TLS === "1";
     _client = createClient({
       url: REDIS_URL,
-      socket: useTLS ? { tls: true, rejectUnauthorized: false } : undefined,
+      socket: useTLS ? { tls: true, rejectUnauthorized: !allowInsecure } : undefined,
     });
     _client.on("error", (err) => console.error("Redis error:", err.message));
   }
@@ -127,19 +131,33 @@ export const DEFAULT_CONFIG = {
     footer:                   "Top Owners Corporation Solution  |  info@tocs.co",
     adminNotificationSubject: "New Order — {orderType} #{orderId} — {total}",
     adminNotificationIntro:   "A new order has been placed.",
+    keysOrderConfirmation:    "Your Keys/Fobs order{orderDesc} has been received. The invoice will be sent in a separate email, once payment is received, your order will be processed within the stated turnaround time.",
   },
   stripe: {
     secretKey:      "",
     publishableKey: "",
   },
+  piq: {
+    baseUrl:      "https://tocs.propertyiq.com.au",
+    clientId:     "",
+    clientSecret: "",
+  },
 };
 
 // ── Demo seed data ────────────────────────────────────────────────────────────
 // Used when DEMO_MODE=true and Redis has no demo:data/demo:config key yet,
-// and by POST /api/demo/reset to restore the known state.
+// and by POST /api/demo/reset to restore the known state. The default demo
+// password is sourced from `DEMO_ADMIN_PASS` env var; it falls back to the
+// well-known "Demo@1234" only on the dedicated demo deployment. If DEMO_MODE
+// is ever flipped on a production project by accident, the env var won't be
+// set and any login attempt with the well-known password will fail because
+// of the placeholder below.
+const DEMO_PW_PLACEHOLDER = process.env.DEMO_ADMIN_PASS && process.env.DEMO_ADMIN_PASS.length >= 8
+  ? process.env.DEMO_ADMIN_PASS
+  : "Demo@1234";
 export const DEMO_DEFAULT_CONFIG = {
-  admins: [{ id: "demo-admin", username: "demo@tocs.co", password: "Demo@1234", name: "Demo Admin" }],
-  user: "demo@tocs.co", pass: "Demo@1234",
+  admins: [{ id: "demo-admin", username: "demo@tocs.co", password: DEMO_PW_PLACEHOLDER, name: "Demo Admin" }],
+  user: "demo@tocs.co", pass: DEMO_PW_PLACEHOLDER,
   orderEmail: "demo@tocs.co",
   logo: "",
   smtp: { host: "", port: 2525, user: "", pass: "" },
@@ -214,29 +232,112 @@ export const DEMO_DEFAULT_DATA = {
 };
 
 // ── Stateless HMAC token helpers ──────────────────────────────────────────────
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual, randomBytes } from "crypto";
+
+const IS_PROD = process.env.NODE_ENV === "production";
+// Stable dev-only secret — used ONLY when NODE_ENV !== "production" and
+// TOKEN_SECRET is unset. Production deploys must set TOKEN_SECRET; getSecret()
+// throws otherwise. The secret is intentionally not derived from the admin
+// password (a previous behaviour) so that rotating the admin password no
+// longer changes the signing key — session invalidation is now handled by
+// the session-epoch mechanism below.
+const DEV_FALLBACK_SECRET = "tocs-dev-only-secret-DO-NOT-USE-IN-PRODUCTION";
 
 if (!process.env.TOKEN_SECRET) {
-  console.warn("[store.js] WARNING: TOKEN_SECRET env var is not set. Token security is degraded. Set TOKEN_SECRET in Vercel environment variables.");
-}
-
-async function getSecret() {
-  if (process.env.TOKEN_SECRET) return process.env.TOKEN_SECRET;
-  try {
-    const cfg = await readConfig();
-    return cfg.pass || process.env.ADMIN_PASS || "tocs-default-secret-change-me";
-  } catch {
-    return process.env.ADMIN_PASS || "tocs-default-secret-change-me";
+  if (IS_PROD) {
+    console.error("[store.js] CRITICAL: TOKEN_SECRET env var is not set in production. Auth endpoints will refuse to issue or accept tokens.");
+  } else {
+    console.warn("[store.js] WARNING: TOKEN_SECRET not set — using insecure dev fallback. Set TOKEN_SECRET before deploying.");
   }
 }
 
-async function hmacSign(payload) {
-  const secret = await getSecret();
+function getSecret() {
+  if (process.env.TOKEN_SECRET) return process.env.TOKEN_SECRET;
+  if (IS_PROD) {
+    throw new Error("TOKEN_SECRET environment variable is required in production.");
+  }
+  return DEV_FALLBACK_SECRET;
+}
+
+function hmacSign(payload) {
+  const secret = getSecret();
   return createHmac("sha256", secret).update(payload).digest("hex");
 }
 
+// ── Session epoch ─────────────────────────────────────────────────────────────
+// All sessions embed the current epoch in their payload. Bumping the epoch
+// (e.g. on password change) invalidates every previously-issued token without
+// having to track them individually.
+const SESSION_EPOCH_KEY = DEMO_MODE ? "demo:session_epoch" : "tocs:session_epoch";
+
+async function getSessionEpoch() {
+  if (!KV_AVAILABLE) return 0;
+  try {
+    const v = await kvGet(SESSION_EPOCH_KEY);
+    return Number(v) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function bumpSessionEpoch() {
+  if (!KV_AVAILABLE) return;
+  try {
+    const client = await getClient();
+    await client.incr(SESSION_EPOCH_KEY);
+  } catch (err) {
+    console.error("bumpSessionEpoch failed:", err.message);
+  }
+}
+
 // ── Safe Redis wrapper ────────────────────────────────────────────────────────
+// ── File-based KV fallback ────────────────────────────────────────────────────
+// Local dev (no Redis) needs a working KV so the Vercel handlers can be
+// exercised end-to-end via the local server's Vercel-handler adapter. When
+// `LOCAL_KV_DIR` is set, kvGet/kvSet/kvDel persist one JSON file per key in
+// that directory. TTLs are recorded as a sidecar field and lazily honoured
+// on read (no scheduled cleanup; expired keys come back as null).
+//
+// Sanitise key → filename by replacing `:` with `--` and rejecting anything
+// outside `[\w.-]` so a malicious key can't escape the directory.
+const LOCAL_KV_DIR = process.env.LOCAL_KV_DIR || null;
+async function _fileKvPath(key) {
+  const { default: fs }   = await import("node:fs/promises");
+  const { default: path } = await import("node:path");
+  const safe = String(key).replace(/[^A-Za-z0-9._-]+/g, "_");
+  await fs.mkdir(LOCAL_KV_DIR, { recursive: true });
+  return path.join(LOCAL_KV_DIR, safe + ".json");
+}
+async function _fileKvGet(key) {
+  try {
+    const { default: fs } = await import("node:fs/promises");
+    const file = await _fileKvPath(key);
+    const text = await fs.readFile(file, "utf8");
+    const entry = JSON.parse(text);
+    if (entry?.exp && Date.now() > entry.exp) return null;
+    return entry?.v ?? null;
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+}
+async function _fileKvSet(key, value, ttlSeconds) {
+  const { default: fs } = await import("node:fs/promises");
+  const file = await _fileKvPath(key);
+  const entry = { v: value };
+  if (ttlSeconds) entry.exp = Date.now() + ttlSeconds * 1000;
+  await fs.writeFile(file, JSON.stringify(entry, null, 2));
+}
+async function _fileKvDel(key) {
+  try {
+    const { default: fs } = await import("node:fs/promises");
+    const file = await _fileKvPath(key);
+    await fs.unlink(file);
+  } catch (e) { if (e.code !== "ENOENT") throw e; }
+}
+
 async function kvGet(key) {
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return _fileKvGet(key);
   if (!KV_AVAILABLE) return null;
   try {
     const client = await getClient();
@@ -244,12 +345,13 @@ async function kvGet(key) {
     return val ? JSON.parse(val) : null;
   } catch (err) {
     console.error("Redis GET error:", err.message);
-    return null;
+    throw err;
   }
 }
 
 // ttlSeconds is optional; when provided, the key expires after that many seconds.
 async function kvSet(key, value, ttlSeconds) {
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return _fileKvSet(key, value, ttlSeconds);
   if (!KV_AVAILABLE) {
     throw new Error(NO_KV_MSG);
   }
@@ -267,6 +369,7 @@ async function kvSet(key, value, ttlSeconds) {
 }
 
 async function kvDel(key) {
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return _fileKvDel(key);
   if (!KV_AVAILABLE) return;
   try {
     const client = await getClient();
@@ -274,11 +377,32 @@ async function kvDel(key) {
   } catch { /* best-effort */ }
 }
 
+// Batched GET — one MGET round trip on Redis instead of N sequential GETs.
+async function kvMGet(keys) {
+  if (keys.length === 0) return [];
+  if (LOCAL_KV_DIR && !KV_AVAILABLE) return Promise.all(keys.map(_fileKvGet));
+  if (!KV_AVAILABLE) return keys.map(() => null);
+  try {
+    const client = await getClient();
+    const vals = await client.mGet(keys);
+    return vals.map(v => (v ? JSON.parse(v) : null));
+  } catch (err) {
+    console.error("Redis MGET error:", err.message);
+    throw err;
+  }
+}
+
 export { kvGet, kvSet, kvDel };
 
 // ── Authority document helpers ────────────────────────────────────────────────
+// TTL: 90 days. Authority docs are uploaded at order-creation time and are
+// only needed during processing — once the certificate is issued, SharePoint
+// becomes the long-term store and the Redis copy is redundant. Note this is
+// SHORTER than the certificate TTL below (365 d) — if an admin tries to
+// re-download a >90 d old order's authority via the KV fallback path, the
+// authority KV entry will already have expired; they must rely on the
+// SharePoint copy. By design — KV is a hot cache, SharePoint is canonical.
 export async function writeAuthority(orderId, doc) {
-  // Expire authority documents after 90 days to avoid unbounded Redis growth.
   // Pass doc directly — kvSet already calls JSON.stringify internally.
   await kvSet(`tocs:authority:${orderId}`, doc, 90 * 86400);
 }
@@ -287,21 +411,86 @@ export async function readAuthority(orderId) {
   return await kvGet(`tocs:authority:${orderId}`);
 }
 
+// ── Issued-certificate helpers ────────────────────────────────────────────────
+// Stores a copy of the OC certificate / keys order attachment that was emailed
+// to the applicant. Acts as a guaranteed fallback for admin re-download when
+// the SharePoint upload fails or the SP link is unreachable. TTL: 365 days —
+// longer than authority docs (90 d) because issued certificates are more
+// likely to be referenced months later (re-send to a different recipient,
+// regulator request, etc.) and the storage cost is similar. SharePoint
+// remains the canonical long-term store; KV is the safety net.
+export async function writeCertificate(orderId, doc) {
+  await kvSet(`tocs:certificate:${orderId}`, doc, 365 * 86400);
+}
+
+export async function readCertificate(orderId) {
+  return await kvGet(`tocs:certificate:${orderId}`);
+}
+
+// ── PIQ poll status helpers ───────────────────────────────────────────────────
+// Stores the result of the most recent /api/orders?action=poll-piq run so the
+// admin UI can surface "last auto-poll succeeded N hours ago" without scraping
+// Vercel logs. Kept in a dedicated KV key (separate from data/config) so a
+// concurrent poll never races writeData() back over an order-status update.
+//
+// Cron and manual runs are stored in *separate* slots so a manual "Check PIQ"
+// click never makes the auto-poll banner look healthy when the Vercel cron is
+// actually broken — staleness is only ever judged against the cron slot.
+//
+// Demo deployments get their own key so they cannot overwrite or read the
+// production banner state when sharing a Redis instance (matches DATA_KEY).
+const POLL_PIQ_STATUS_KEY = DEMO_MODE ? "demo:poll-piq:last-run" : "tocs:poll-piq:last-run";
+
+export async function writePiqPollStatus(status) {
+  const slot    = status?.trigger === "cron" ? "lastCron" : "lastManual";
+  const entry   = { ts: new Date().toISOString(), ...status };
+  const current = (await kvGet(POLL_PIQ_STATUS_KEY)) || {};
+  current[slot] = entry;
+  await kvSet(POLL_PIQ_STATUS_KEY, current);
+}
+
+export async function readPiqPollStatus() {
+  return await kvGet(POLL_PIQ_STATUS_KEY);
+}
+
 export { KV_AVAILABLE };
 
 // ── Data helpers ──────────────────────────────────────────────────────────────
-export async function readData() {
-  const d = await kvGet(DATA_KEY);
-  if (!d) return DEMO_MODE ? structuredClone(DEMO_DEFAULT_DATA) : DEFAULT_DATA;
+// Storage layout (since 2026-06): the dataset is SPLIT across keys instead of
+// one monolithic JSON blob —
+//   PLANS_KEY      strataPlans array (changes rarely)
+//   ORDER_IDS_KEY  array of order ids, newest first (the index)
+//   orderKey(id)   one key per order
+// readData()/writeData() keep their original whole-dataset signature so every
+// handler works unchanged, but writeData now DIFFS against the snapshot taken
+// at read time and writes only the orders that actually changed — a status
+// update touches one small key instead of re-serialising every order ever
+// placed. Reads assemble the dataset with a single MGET. The legacy blob
+// (DATA_KEY) is migrated on first read and kept as a backup.
+const PLANS_KEY         = DEMO_MODE ? "demo:plans"          : "tocs:plans";
+const ORDER_IDS_KEY     = DEMO_MODE ? "demo:order-ids"      : "tocs:order-ids";
+const LEGACY_BACKUP_KEY = DEMO_MODE ? "demo:data:pre-split" : "tocs:data:pre-split";
+const orderKey = (id) => (DEMO_MODE ? "demo:order:" : "tocs:order:") + id;
 
-  // One-time migrations for plans stored in Redis before new fields were added.
+// Per-warm-instance snapshot of what we last read/wrote, used by writeData's
+// diff. Handlers follow read-modify-write within one invocation, so the
+// snapshot is fresh when the diff runs.
+let _seenOrders    = new Map(); // order id -> JSON string
+let _seenIds       = null;      // ids array as last read/written
+let _seenPlansJson = null;
+
+function defaultData() {
+  return structuredClone(DEMO_MODE ? DEMO_DEFAULT_DATA : DEFAULT_DATA);
+}
+
+// One-time migrations for plans stored before new fields were added.
+// Returns true if anything changed (caller persists).
+function migratePlans(strataPlans) {
   let migrated = false;
-  // Build O(1) lookup map so migration doesn't do O(n²) searches.
-  const storedById = new Map((d.strataPlans || []).map(p => [p.id, p]));
+  const storedById = new Map((strataPlans || []).map(p => [p.id, p]));
   for (const defPlan of DEFAULT_DATA.strataPlans) {
     const plan = storedById.get(defPlan.id);
     if (!plan) continue;
-
     // Migrate missing products (e.g. K1/K2/K3 added after initial seed).
     const existingIds = new Set((plan.products || []).map(p => p.id));
     const missing = defPlan.products.filter(p => !existingIds.has(p.id));
@@ -309,33 +498,146 @@ export async function readData() {
       plan.products = [...(plan.products || []), ...missing];
       migrated = true;
     }
-
     // Migrate missing shippingOptions field (added 2026-03-20).
-    // Inject an empty array so admin can configure options via the UI.
     if (!Array.isArray(plan.shippingOptions)) {
       plan.shippingOptions = [];
       migrated = true;
     }
   }
-
-  // Migrate keysShipping on ALL stored plans (incl. custom plans not in DEFAULT_DATA).
-  for (const plan of (d.strataPlans || [])) {
+  // Migrate keysShipping on ALL stored plans (incl. custom plans).
+  for (const plan of (strataPlans || [])) {
     if (!plan.keysShipping) {
       plan.keysShipping = { deliveryCost: 0, expressCost: 0 };
       migrated = true;
     }
   }
+  return migrated;
+}
 
-  if (migrated) {
-    // Write back so subsequent reads don't need to migrate again
-    try { await kvSet(DATA_KEY, d); } catch { /* best-effort */ }
+// Split the legacy monolithic blob into per-order keys. Runs at most once —
+// guarded by a lock so two cold instances can't double-migrate. The blob is
+// preserved under LEGACY_BACKUP_KEY for manual rollback.
+async function migrateLegacyData() {
+  await withLock("data-migrate", async () => {
+    if ((await kvGet(ORDER_IDS_KEY)) !== null) return; // raced — already migrated
+    const legacy = await kvGet(DATA_KEY);
+    if (!legacy) return; // fresh install — nothing to migrate
+    const orders = legacy.orders || [];
+    await Promise.all(orders.map(o => kvSet(orderKey(o.id), o)));
+    await kvSet(PLANS_KEY, legacy.strataPlans || []);
+    await kvSet(ORDER_IDS_KEY, orders.map(o => o.id));
+    await kvSet(LEGACY_BACKUP_KEY, legacy);
+    await kvDel(DATA_KEY);
+    console.log(`[store] migrated ${orders.length} orders + ${(legacy.strataPlans || []).length} plans from monolithic ${DATA_KEY} to split keys`);
+  });
+}
+
+export async function readData() {
+  let ids = await kvGet(ORDER_IDS_KEY);
+  if (ids === null) {
+    await migrateLegacyData();
+    ids = await kvGet(ORDER_IDS_KEY);
+    if (ids === null) {
+      // Fresh install (or no KV at all) — defaults, nothing persisted yet.
+      _seenOrders = new Map(); _seenIds = []; _seenPlansJson = null;
+      return defaultData();
+    }
   }
 
-  return d;
+  const [plans, ...orderVals] = await kvMGet([PLANS_KEY, ...ids.map(orderKey)]);
+  const strataPlans = plans || defaultData().strataPlans;
+
+  const orders = [];
+  const seen = new Map();
+  ids.forEach((id, i) => {
+    const o = orderVals[i];
+    if (!o) { console.warn(`[store] order ${id} in index but key missing — skipping`); return; }
+    if (!o.status) o.status = "Pending Payment";
+    orders.push(o);
+    seen.set(id, JSON.stringify(o));
+  });
+
+  if (migratePlans(strataPlans)) {
+    try { await kvSet(PLANS_KEY, strataPlans); } catch { /* best-effort */ }
+  }
+
+  _seenOrders = seen;
+  _seenIds = ids;
+  _seenPlansJson = JSON.stringify(strataPlans);
+  return { strataPlans, orders };
+}
+
+// Fast path for handlers that need ONE order (e.g. the public /track lookup):
+// a single GET instead of assembling the whole dataset. Falls back to a full
+// readData() when the key is absent — which also covers a store that hasn't
+// been migrated yet.
+export async function readOrder(orderId) {
+  const o = await kvGet(orderKey(orderId));
+  if (o) {
+    if (!o.status) o.status = "Pending Payment";
+    _seenOrders.set(orderId, JSON.stringify(o));
+    return o;
+  }
+  const d = await readData();
+  return d.orders.find(x => x.id === orderId) || null;
 }
 
 export async function writeData(d) {
-  await kvSet(DATA_KEY, d);
+  const orders = d.orders || [];
+  const plans  = d.strataPlans || [];
+  const dIds   = orders.map(o => o.id);
+
+  const ops = [];
+  const plansJson = JSON.stringify(plans);
+  if (plansJson !== _seenPlansJson) {
+    ops.push(kvSet(PLANS_KEY, plans).then(() => { _seenPlansJson = plansJson; }));
+  }
+  for (const o of orders) {
+    const j = JSON.stringify(o);
+    if (_seenOrders.get(o.id) !== j) {
+      ops.push(kvSet(orderKey(o.id), o).then(() => { _seenOrders.set(o.id, j); }));
+    }
+  }
+  // Orders we deleted relative to our read snapshot (NOT relative to the live
+  // index — another instance may have added orders we never saw).
+  const dIdSet = new Set(dIds);
+  const removed = (_seenIds || []).filter(id => !dIdSet.has(id));
+  for (const id of removed) {
+    ops.push(kvDel(orderKey(id)).then(() => { _seenOrders.delete(id); }));
+  }
+  await Promise.all(ops);
+
+  // Index update: merge with the LIVE index under a short lock so two
+  // instances creating different orders concurrently can't lose each other's
+  // additions (the old whole-blob write lost far more in that race).
+  const sameAsSeen = _seenIds !== null
+    && _seenIds.length === dIds.length
+    && _seenIds.every((v, i) => v === dIds[i]);
+  if (!sameAsSeen) {
+    await withLock("order-index", async () => {
+      const fresh = (await kvGet(ORDER_IDS_KEY)) || [];
+      const known = new Set([...dIds, ...(_seenIds || []), ...removed]);
+      const others = fresh.filter(id => !known.has(id)); // added by other instances
+      const merged = [...others, ...dIds];
+      await kvSet(ORDER_IDS_KEY, merged);
+      _seenIds = merged;
+    });
+  }
+}
+
+// Replace-ALL semantics (demo reset): deletes every existing order key, then
+// writes the new dataset from scratch. writeData's diff/merge would otherwise
+// preserve orders the caller intends to wipe.
+export async function replaceData(d) {
+  const existing = (await kvGet(ORDER_IDS_KEY)) || [];
+  await Promise.all(existing.map(id => kvDel(orderKey(id))));
+  const orders = d.orders || [];
+  await Promise.all(orders.map(o => kvSet(orderKey(o.id), o)));
+  await kvSet(PLANS_KEY, d.strataPlans || []);
+  await kvSet(ORDER_IDS_KEY, orders.map(o => o.id));
+  _seenOrders = new Map(orders.map(o => [o.id, JSON.stringify(o)]));
+  _seenIds = orders.map(o => o.id);
+  _seenPlansJson = JSON.stringify(d.strataPlans || []);
 }
 
 // ── Config helpers ────────────────────────────────────────────────────────────
@@ -353,7 +655,16 @@ export async function readConfig() {
     paymentDetails: { ...DEFAULT_CONFIG.paymentDetails, ...(c.paymentDetails || {}) },
     emailTemplate:  { ...DEFAULT_CONFIG.emailTemplate,  ...(c.emailTemplate  || {}) },
     stripe:         { ...DEFAULT_CONFIG.stripe,         ...(c.stripe         || {}) },
+    piq:            { ...DEFAULT_CONFIG.piq,            ...(c.piq            || {}) },
   };
+
+  // Once an admins[] array is in place, do not let DEFAULT_CONFIG.pass /
+  // DEFAULT_CONFIG.user resurrect a plaintext default password through the
+  // merge. The admins[] array is now the only source of truth.
+  if (Array.isArray(c.admins) && c.admins.length > 0) {
+    delete merged.pass;
+    if (!c.user) merged.user = c.admins[0].username;
+  }
 
   // Critical env-var overrides: if Redis has an empty value, use the env var.
   if (!merged.smtp.pass && process.env.SMTP_PASS) merged.smtp.pass = process.env.SMTP_PASS;
@@ -370,35 +681,103 @@ export async function writeConfig(c) {
 // ── Session helpers ───────────────────────────────────────────────────────────
 export async function createSession(user) {
   const exp = Date.now() + 8 * 3600 * 1000; // 8 hours
-  const payload = Buffer.from(JSON.stringify({ user, exp })).toString("base64url");
-  const sig = await hmacSign(payload);
+  const epoch = await getSessionEpoch();
+  const payload = Buffer.from(JSON.stringify({ user, exp, epoch })).toString("base64url");
+  const sig = hmacSign(payload);
   return `${payload}.${sig}`;
 }
 
-export async function invalidateSession(_token) {
-  // Stateless tokens are invalidated when the admin password changes.
-}
-
-export async function invalidateAllSessions() {
-  // No-op: changing cfg.pass changes the HMAC key, invalidating all old tokens.
-}
-
-export async function validToken(token) {
-  if (!token || !token.includes(".")) return false;
+// Decode and verify a token. Returns the parsed payload object on success,
+// or null on any failure (bad signature, expired, stale epoch, malformed).
+export async function verifyToken(token) {
+  if (!token || typeof token !== "string" || !token.includes(".")) return null;
   try {
     const lastDot = token.lastIndexOf(".");
     const payload = token.slice(0, lastDot);
     const sig     = token.slice(lastDot + 1);
-    if (!/^[0-9a-f]{64}$/.test(sig)) return false;
-    const expected = await hmacSign(payload);
+    if (!/^[0-9a-f]{64}$/.test(sig)) return null;
+    const expected = hmacSign(payload);
     const sigBuf  = Buffer.from(sig,      "hex");
     const expBuf  = Buffer.from(expected, "hex");
-    if (sigBuf.length !== expBuf.length) return false;
-    if (!timingSafeEqual(sigBuf, expBuf)) return false;
-    const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
-    return Date.now() < exp;
+    if (sigBuf.length !== expBuf.length) return null;
+    if (!timingSafeEqual(sigBuf, expBuf)) return null;
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
+    if (typeof parsed?.exp !== "number" || Date.now() >= parsed.exp) return null;
+    // Reject tokens issued before the current session epoch.
+    const currentEpoch = await getSessionEpoch();
+    if ((parsed.epoch ?? 0) < currentEpoch) return null;
+    return parsed;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+/**
+ * Authorisation gate used by read endpoints that only need to know
+ * "is this caller allowed?" without inspecting the admin identity.
+ *
+ * Accepts EITHER:
+ *   1. A static service token from process.env.SERVICE_API_TOKEN
+ *      (constant-time match, min 32 chars). For server-to-server
+ *      callers like the oc-tasks /occ-tracker integration.
+ *   2. A valid 8-hour HMAC session token from verifyToken() (the
+ *      existing human-admin path, unchanged).
+ *
+ * Service tokens are deliberately restricted to validToken(): mutation
+ * endpoints (add-admin, change-credentials, …) call verifyToken() and
+ * read the payload's `user` field, so a service token — which has no
+ * admin identity — cannot impersonate a real admin there.
+ */
+export async function validToken(token) {
+  if (typeof token === "string" && token.length > 0) {
+    const serviceToken = process.env.SERVICE_API_TOKEN;
+    if (serviceToken && serviceToken.length >= 32) {
+      const a = Buffer.from(token);
+      const b = Buffer.from(serviceToken);
+      if (a.length === b.length && timingSafeEqual(a, b)) {
+        return true;
+      }
+    }
+  }
+  return (await verifyToken(token)) !== null;
+}
+
+/**
+ * Authorisation gate for MUTATING admin endpoints (save plans, write config,
+ * change order status/amend/delete, send certificate/invoice/notify, …).
+ *
+ * Unlike validToken(), this REJECTS the static SERVICE_API_TOKEN: service /
+ * integration tokens are read-only by design (see validToken). Only a human
+ * admin's 8-hour HMAC session token (verifyToken) may perform writes. This
+ * closes the gap where a leaked read-only integration token could replace all
+ * strata plans, overwrite SMTP/Stripe secrets, or delete orders.
+ */
+export async function validAdminToken(token) {
+  return (await verifyToken(token)) !== null;
+}
+
+export async function invalidateSession(_token) {
+  // Stateless tokens are invalidated by bumping the session epoch.
+}
+
+export async function invalidateAllSessions() {
+  await bumpSessionEpoch();
+}
+
+// ── Auth / config change audit trail ──────────────────────────────────────────
+// Append-only ring buffer (last 500 entries) of sensitive actions: admin-pool
+// changes, credential changes, and config/secret writes. Lives in store.js as
+// the single source of truth so both auth/index.js and config/settings.js log
+// to the same place. Best-effort — never blocks the action on a failed write.
+const AUTH_AUDIT_KEY = "tocs:auth-audit";
+export async function writeAuthAudit(entry) {
+  if (!KV_AVAILABLE) return;
+  try {
+    const prev = (await kvGet(AUTH_AUDIT_KEY)) || [];
+    const next = [...prev, { ts: new Date().toISOString(), ...entry }].slice(-500);
+    await kvSet(AUTH_AUDIT_KEY, next);
+  } catch (e) {
+    console.error("[auth-audit] persist failed:", e.message);
   }
 }
 
@@ -408,17 +787,155 @@ export function extractToken(req) {
   return auth.startsWith("Bearer ") ? auth.slice(7) : null;
 }
 
-const ALLOWED_ORIGINS = [
+// Exact-origin allow-list. The previous startsWith() check accepted
+// https://tocs.co.evil.com because it began with an allowed prefix.
+const ALLOWED_ORIGINS = new Set([
   "https://occorder.vercel.app",
   "https://tocs.co",
+  "https://www.tocs.co",
   "http://localhost:5173",
   "http://localhost:3000",
-];
+]);
 export function cors(res, req) {
   const origin = req?.headers?.origin;
-  const allowedOrigin = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o)) ? origin : "*";
-  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  const allowedOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : null;
+  if (allowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Cron-Secret");
+  // Bearer tokens travel in the Authorization header — cookies are not used,
+  // so credentialed mode is unnecessary and would broaden CSRF surface.
+}
+
+// ── Per-IP rate limiter ───────────────────────────────────────────────────────
+// Simple sliding-window-style counter using Redis EX. Returns:
+//   { allowed: true,  remaining }  when the request is permitted
+//   { allowed: false, retryAfter } (seconds) when the cap is hit
+// `key` should be specific (e.g. "track:1.2.3.4"); pass max + window in seconds.
+// When KV is unavailable this is a no-op (allowed = true) — the caller still
+// gets best-effort protection rather than 503-ing every request.
+export async function rateLimit(key, max, windowSeconds) {
+  if (!KV_AVAILABLE) return { allowed: true, remaining: max };
+  const k = `tocs:rl:${key}`;
+  try {
+    const client = await getClient();
+    const cnt = await client.incr(k);
+    if (cnt === 1) {
+      await client.expire(k, windowSeconds);
+    }
+    if (cnt > max) {
+      let ttl = await client.ttl(k);
+      if (ttl < 0) ttl = windowSeconds;
+      return { allowed: false, retryAfter: ttl };
+    }
+    return { allowed: true, remaining: Math.max(0, max - cnt) };
+  } catch (err) {
+    console.error("rateLimit error:", err.message);
+    return { allowed: true, remaining: max };
+  }
+}
+
+// Returns the originating client IP for rate-limiting purposes.
+//
+// Selection order:
+//   1. `x-vercel-forwarded-for` — set by Vercel's edge. Clients cannot forge
+//      this header at Vercel (the platform overwrites it on ingress).
+//      Vercel populates it such that the **leftmost** entry is the
+//      originating client (Vercel's own hops, if any, are appended right of
+//      that), so we take `[0]`.
+//   2. The **rightmost** entry of `x-forwarded-for`. Outside of Vercel
+//      `x-vercel-forwarded-for` is absent; XFF is the next-most-trustworthy
+//      signal but only when *something* trustworthy appended Vercel-side.
+//      A bare client-supplied XFF (no proxy hop) would still be spoofable
+//      here — local dev / non-Vercel deployments should rely on a proxy
+//      that appends its own IP rightmost.
+//   3. `req.socket?.remoteAddress` — direct-connection fallback.
+//
+// Naive `xff.split(",")[0]` (the previous implementation) returned the
+// *client-supplied* leftmost entry on Vercel and was trivially spoofable.
+export function clientIp(req) {
+  const vercel = req.headers["x-vercel-forwarded-for"];
+  if (typeof vercel === "string" && vercel.trim()) {
+    // Leftmost = originating client per Vercel's documented format.
+    const first = vercel.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  // The XFF fallback is only safe when an upstream proxy appends its own hop
+  // rightmost. On Vercel (the primary deploy target) `x-vercel-forwarded-for`
+  // is the canonical signal and this fallback is reached only in local dev or
+  // exotic deployments. To prevent a non-Vercel deploy from silently relying
+  // on attacker-controllable XFF for rate-limiter buckets, require an
+  // explicit `TRUST_XFF=1` env var to enable the fallback.
+  if (process.env.TRUST_XFF === "1") {
+    const xff = req.headers["x-forwarded-for"];
+    if (typeof xff === "string" && xff.trim()) {
+      const last = xff.split(",").pop()?.trim();
+      if (last) return last;
+    }
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
+// ── Per-order mutation lock ───────────────────────────────────────────────────
+// Backed by Redis SET NX EX. Use to serialise concurrent mutations on a single
+// order (Stripe webhook + stripe-confirm racing, dual amend submits, etc.).
+// Falls open when KV is unavailable so local dev still works.
+const LOCK_TTL_SECONDS = 10;
+const LOCK_RETRY_MS    = 75;
+const LOCK_MAX_WAIT_MS = 5000;
+
+async function withLock(name, fn) {
+  if (!KV_AVAILABLE) return await fn();
+  const key   = `tocs:lock:${name}`;
+  const token = randomBytes(16).toString("hex");
+  const client = await getClient();
+  const start  = Date.now();
+  let acquired = false;
+  while (Date.now() - start < LOCK_MAX_WAIT_MS) {
+    const ok = await client.set(key, token, { NX: true, EX: LOCK_TTL_SECONDS });
+    if (ok === "OK") { acquired = true; break; }
+    await new Promise(r => setTimeout(r, LOCK_RETRY_MS));
+  }
+  if (!acquired) {
+    throw new Error("Order is busy — please try again.");
+  }
+  try {
+    return await fn();
+  } finally {
+    // Best-effort release; only delete if we still own the lock.
+    try {
+      const current = await client.get(key);
+      if (current === token) await client.del(key);
+    } catch { /* lock will expire via TTL */ }
+  }
+}
+
+export async function withOrderLock(orderId, fn) {
+  return withLock(`order:${orderId}`, fn);
+}
+
+// ── Stripe webhook event deduplication ────────────────────────────────────────
+// Stripe retries webhook events on non-2xx; if the same event.id is delivered
+// twice, both invocations would otherwise repeat side effects (emails, status
+// flips). We mark the event ID as processed for 7 days; subsequent calls
+// short-circuit. SET NX semantics guarantee atomic check-and-set.
+const STRIPE_EVENT_TTL_SECONDS = 7 * 24 * 3600;
+
+export async function tryClaimStripeEvent(eventId) {
+  if (!KV_AVAILABLE) return true; // best-effort allow
+  if (!eventId || typeof eventId !== "string") return false;
+  try {
+    const client = await getClient();
+    const ok = await client.set(
+      `tocs:stripe:event:${eventId}`,
+      String(Date.now()),
+      { NX: true, EX: STRIPE_EVENT_TTL_SECONDS }
+    );
+    return ok === "OK";
+  } catch (err) {
+    console.error("tryClaimStripeEvent error:", err.message);
+    return true; // fall open — better to risk a duplicate than reject a valid event
+  }
 }

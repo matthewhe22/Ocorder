@@ -1,44 +1,367 @@
 // POST /api/orders — Customer places an order (public)
-import { readData, writeData, readConfig, cors, writeAuthority, KV_AVAILABLE } from "../_lib/store.js";
-import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH } from "../_lib/sharepoint.js";
+// GET  /api/orders?action=poll-piq — Cron: check PIQ ledgers for pending keys orders
+import { readData, writeData, readConfig, cors, writeAuthority, writePiqPollStatus, readPiqPollStatus, rateLimit, clientIp, withOrderLock, KV_AVAILABLE } from "../_lib/store.js";
+import { waitUntil } from "@vercel/functions";
+import { randomBytes } from "crypto";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, FOLDER_PATH, sanitiseSegment, pushAuditOnce } from "../_lib/sharepoint.js";
 import { generateOrderPdf } from "../_lib/pdf.js";
-import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../_lib/email.js";
-import Stripe from "stripe";
+import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../_lib/email.js";
+import { detectPiqPayment } from "../_lib/piq.js";
+import { normaliseLotNumber } from "../_lib/constants.js";
+
+// Cold-start assertion: log loudly if CRON_SECRET is missing. Without it, the
+// Vercel cron at 02:30 UTC is rejected with 401 inside the handler below and
+// payments stop syncing automatically. Surfacing this at module load means a
+// single deploy log line is enough to catch the misconfiguration — the user
+// no longer has to wait for a missed run to notice.
+if (!process.env.CRON_SECRET) {
+  console.error("[startup][CRITICAL] CRON_SECRET is not set. The poll-piq cron will be rejected with 401 until CRON_SECRET is configured in Vercel → Settings → Environment Variables. Manual admin 'Check PIQ' will continue to work.");
+} else {
+  console.log("[startup] CRON_SECRET is configured; poll-piq cron auth is wired up.");
+}
 
 async function sendMail(smtp, mailOpts) {
   const transporter = createTransporter(smtp);
   await transporter.sendMail(mailOpts);
 }
 
+// ── Helper: apply a PIQ payment result to an order and persist ────────────────
+async function applyPiqPayment(order, result, cfg, data) {
+  const now = new Date().toISOString();
+  order.piqLastPolled      = now;
+  order.piqLevyFound       = result.levyFound;
+  order.piqLevyTotalDue    = result.totalDue    ?? order.piqLevyTotalDue    ?? null;
+  order.piqLevyTotalNett   = result.totalNett   ?? (result.paid ? 0 : null);
+  if (result.paid) {
+    // Use server time as payment date on first confirmation only — never overwrite.
+    if (!order.piqPaymentDate) order.piqPaymentDate = now;
+    order.piqPaymentReference = result.paymentReference || null;
+    // Don't regress status from "Issued" — keys were already dispatched; just record payment details.
+    if (order.status !== "Issued") order.status = "Paid";
+    const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
+    order.auditLog = [...(order.auditLog || []), {
+      ts:     now,
+      action: "Payment confirmed via PropertyIQ",
+      note:   `Date: ${dateStr} | Ref: ${result.paymentReference || "—"} | Amount: $${(result.totalPaid || 0).toFixed(2)}`,
+    }];
+    // Send payment notification email to admin (non-fatal). Idempotency:
+    // mark `piqPaymentEmailSent` on first dispatch so a cron retry over a
+    // re-detected payment doesn't re-email the admin. If writeData fails
+    // after the email goes, the next cron will re-email — a known small
+    // duplicate risk in exchange for not double-sending the common case.
+    if (!order.piqPaymentEmailSent) {
+      try {
+        const smtp = cfg.smtp || {};
+        if (smtp.host && smtp.user && smtp.pass) {
+          const toEmail     = cfg.orderEmail || "Orders@tocs.co";
+          const transporter = createTransporter(smtp);
+          const lotNumber   = order.items?.[0]?.lotNumber || "";
+          const planName    = order.items?.[0]?.planName  || "";
+          await transporter.sendMail({
+            from:    `"TOCS Order Portal" <${toEmail}>`,
+            to:      toEmail,
+            subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
+            html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
+          });
+          order.piqPaymentEmailSent = now;
+          console.log(`PIQ payment notification sent for order ${order.id}`);
+        }
+      } catch (emailErr) {
+        console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
+        order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
+      }
+    }
+  }
+}
+
 export default async function handler(req, res) {
   cors(res, req);
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // ── GET /api/orders?action=poll-piq  (called by Vercel cron daily at 02:30 UTC) ─
+  // Also accepts admin Bearer token for manual triggers.
+  // Scans all keys orders awaiting payment and polls their PIQ lot ledgers.
+  if (req.method === "GET" && req.query?.action === "poll-piq") {
+    // Allow either: a valid CRON_SECRET (Vercel cron / scheduled trigger)
+    // or an admin Bearer token (manual trigger via admin UI). When CRON_SECRET
+    // is unset we MUST deny rather than allow — silently allowing cron
+    // requests without a secret would let any unauthenticated caller drive
+    // the PIQ poll loop and potentially flip order statuses.
+    //
+    // Cron secret may arrive as either:
+    //   - x-cron-secret: <secret>            (custom header from external schedulers)
+    //   - authorization: Bearer <secret>     (Vercel cron's native format)
+    // Both are checked with crypto.timingSafeEqual against CRON_SECRET.
+    const cronSecret = process.env.CRON_SECRET;
+    const reqSecret  = req.headers["x-cron-secret"];
+    const token      = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    const { timingSafeEqual, createHash } = await import("crypto");
+    const tsHashEqual = (a, b) => {
+      const ah = createHash("sha256").update(String(a == null ? "" : a)).digest();
+      const bh = createHash("sha256").update(String(b == null ? "" : b)).digest();
+      return timingSafeEqual(ah, bh);
+    };
+    const isAdmin = await validToken(token);
+    const cronViaHeader = !!(cronSecret && reqSecret && tsHashEqual(reqSecret, cronSecret));
+    const cronViaBearer = !!(cronSecret && token && tsHashEqual(token, cronSecret));
+    const isCron = cronViaHeader || cronViaBearer;
+    if (!isAdmin && !isCron) {
+      if (!cronSecret) {
+        console.error("[CRITICAL] CRON_SECRET not set — refusing cron request. Set CRON_SECRET in the deployment environment.");
+        // Record the rejection so admins can see it via poll-piq-status without
+        // grepping Vercel logs. Best-effort — don't fail the response on KV error.
+        await writePiqPollStatus({
+          ok:        false,
+          trigger:   "cron",
+          error:     "CRON_SECRET not configured — cron request rejected with 401.",
+        }).catch(() => {});
+      }
+      return res.status(401).json({ error: "Not authenticated." });
+    }
+
+    const trigger = isCron ? "cron" : "manual";
+    try {
+      const cfg  = await readConfig();
+      const data = await readData();
+
+      // Find all keys/invoice orders not yet resolved.
+      // "Issued" is intentionally NOT excluded — if keys were dispatched before payment was confirmed
+      // in the system, the payment must still be detected and recorded for proper reconciliation.
+      // piqLotId is NOT required here — auto-link runs below for orders that are missing it.
+      const candidates = data.orders.filter(o =>
+        o.orderCategory === "keys" &&
+        o.payment === "invoice" &&
+        !["Paid", "Cancelled"].includes(o.status)
+      );
+      // Snapshot the audit-log length per candidate so the post-loop merge
+      // can copy only the entries this cron run actually appended.
+      for (const c of candidates) c._auditStartLen = (c.auditLog || []).length;
+
+      // normaliseLotNumber strips common civic prefixes ("Lot 5", "Unit 5", …)
+      // — single source of truth in api/_lib/constants.js so this and the
+      // single-order check-piq-payment normaliser can't drift again.
+
+      let checked = 0, confirmed = 0, linked = 0;
+      const errors = [];
+
+      for (const order of candidates) {
+        // Auto-link piqLotId from plan data for orders created before PIQ was synced.
+        // Uses only local data — no extra API call needed.
+        if (!order.piqLotId) {
+          const lotNumber = order.items?.[0]?.lotNumber || "";
+          const lotId     = order.items?.[0]?.lotId     || "";
+          const planId    = order.items?.[0]?.planId    || "";
+          const plan      = data.strataPlans?.find(p => p.id === planId);
+          const lots      = plan?.lots || [];
+          const matches   = l =>
+            (lotNumber && normaliseLotNumber(l.number) === normaliseLotNumber(lotNumber)) ||
+            (lotId     && l.id === lotId);
+          const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
+          if (lot?.piqLotId) {
+            order.piqLotId = lot.piqLotId;
+            order.auditLog = [...(order.auditLog || []), {
+              ts:     new Date().toISOString(),
+              action: "PIQ lot linked",
+              note:   `piqLotId ${lot.piqLotId} auto-linked by poll-piq cron`,
+            }];
+            linked++;
+          }
+        }
+
+        if (!order.piqLotId) continue; // plan not yet synced from PIQ — skip
+
+        try {
+          const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+          await applyPiqPayment(order, result, cfg, data);
+          checked++;
+          if (result.paid) confirmed++;
+        } catch (err) {
+          console.error(`poll-piq: failed for order ${order.id}:`, err.message);
+          errors.push({ orderId: order.id, error: err.message?.substring(0, 120) });
+          // Still update lastPolled even on error
+          order.piqLastPolled = new Date().toISOString();
+        }
+      }
+
+      // Always persist what the cron actually did. The admin UI surfaces
+      // `piqLastPolled` per order and was previously stuck on a stale value
+      // for any order that returned no payment found. To avoid clobbering a
+      // concurrent send-invoice / status change (the original reason this
+      // block was gated), we re-read fresh and copy ONLY the PIQ-related
+      // fields + any newly-appended audit entries from each updated order.
+      try {
+        const fresh = await readData();
+        const PIQ_FIELDS = ["piqLastPolled", "piqLevyFound", "piqLevyTotalDue",
+          "piqLevyTotalNett", "piqLotId", "piqPaymentDate",
+          "piqPaymentReference", "piqPaymentEmailSent"];
+        for (const updated of candidates) {
+          const fi = fresh.orders.findIndex(o => o.id === updated.id);
+          if (fi === -1) continue;
+          const target = fresh.orders[fi];
+          for (const f of PIQ_FIELDS) {
+            if (updated[f] !== undefined) target[f] = updated[f];
+          }
+          // Only adopt the "Paid" status; never regress something the admin
+          // moved (e.g. to Cancelled) between our initial read and now.
+          if (updated.status === "Paid" && target.status !== "Issued" && target.status !== "Cancelled") {
+            target.status = "Paid";
+          }
+          // Append audit entries the cron added during this run by diffing
+          // against the snapshot length captured at the start of the loop.
+          const startLen = updated._auditStartLen ?? 0;
+          const delta = (updated.auditLog || []).slice(startLen);
+          if (delta.length) target.auditLog = [...(target.auditLog || []), ...delta];
+        }
+        await writeData(fresh);
+      } catch (err) {
+        console.error("poll-piq: writeData failed:", err.message);
+      }
+
+      // Record this run so the admin UI can show "last auto-poll" status.
+      // ok=false when ANY per-order detectPiqPayment threw (e.g. PIQ down or
+      // credentials rejected) — those orders were not actually checked, so the
+      // banner must surface this even if some other orders succeeded. The
+      // first error message is included as a hint without leaking all of them.
+      await writePiqPollStatus({
+        ok:         errors.length === 0,
+        trigger,
+        checked,
+        confirmed,
+        linked,
+        errorCount: errors.length,
+        firstError: errors[0]?.error || null,
+      }).catch(e => console.error("poll-piq: writePiqPollStatus failed:", e.message));
+
+      return res.status(200).json({ ok: true, checked, confirmed, linked: linked || undefined, errors: errors.length ? errors : undefined });
+    } catch (err) {
+      console.error("poll-piq error:", err.message);
+      await writePiqPollStatus({
+        ok:      false,
+        trigger,
+        error:   err.message?.substring(0, 240) || "unknown error",
+      }).catch(() => {});
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── GET /api/orders?action=poll-piq-status (admin only) ──────────────────────
+  // Returns the most recent poll-piq run summary plus whether CRON_SECRET is
+  // configured in this deployment. Used by the admin Orders panel so a missed
+  // or broken cron is visible without scraping Vercel logs.
+  if (req.method === "GET" && req.query?.action === "poll-piq-status") {
+    const token = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    // KV value shape: { lastCron?: {...}, lastManual?: {...} }. Returned as
+    // distinct fields so the UI can judge auto-poll freshness against the cron
+    // slot only — a recent manual run must NOT mask a broken Vercel cron.
+    const status = await readPiqPollStatus().catch(() => null);
+    return res.status(200).json({
+      cronSecretConfigured: !!process.env.CRON_SECRET,
+      schedule:             "30 2 * * * (UTC)",
+      lastCronRun:          status?.lastCron   || null,
+      lastManualRun:        status?.lastManual || null,
+    });
+  }
+
+  // ── GET /api/orders?action=refresh-piq-payments  (admin only) ────────────────
+  // Re-polls all already-paid PIQ orders and updates piqPaymentDate/piqPaymentReference
+  // without re-sending emails. Used to correct dates stored before the piq.js bug fix.
+  if (req.method === "GET" && req.query?.action === "refresh-piq-payments") {
+    const token   = req.headers["authorization"]?.replace("Bearer ", "");
+    const { validToken } = await import("../_lib/store.js");
+    if (!await validToken(token)) return res.status(401).json({ error: "Not authenticated." });
+
+    try {
+      const cfg  = await readConfig();
+      const data = await readData();
+
+      const candidates = data.orders.filter(o =>
+        o.orderCategory === "keys" && o.piqLotId && o.status === "Paid"
+      );
+
+      let refreshed = 0;
+      const errors  = [];
+
+      for (const order of candidates) {
+        try {
+          const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+          if (result.paid) {
+            if (!order.piqPaymentDate) order.piqPaymentDate = new Date().toISOString();
+            if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
+            refreshed++;
+          }
+        } catch (err) {
+          console.error(`refresh-piq-payments: failed for ${order.id}:`, err.message);
+          errors.push({ orderId: order.id, error: err.message?.substring(0, 120) });
+        }
+      }
+
+      if (refreshed > 0) await writeData(data);
+      return res.status(200).json({ ok: true, refreshed, total: candidates.length, errors: errors.length ? errors : undefined });
+    } catch (err) {
+      console.error("refresh-piq-payments error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
 
+  // Rate-limit unauthenticated order POSTs. Without this, a single IP can
+  // loop and (a) flood the order store, (b) burn SMTP quota, (c) fill SP
+  // with junk folders, (d) starve the function pool.
+  // 5 orders/minute per IP is well above legitimate use (a normal customer
+  // places 1-3 orders in a session) while blunting scripted abuse.
+  const orderRl = await rateLimit(`orders-post:${clientIp(req)}`, 5, 60);
+  if (!orderRl.allowed) {
+    res.setHeader("Retry-After", String(orderRl.retryAfter || 60));
+    return res.status(429).json({ error: "Too many orders from this IP. Please wait a moment and try again." });
+  }
+
   const body = req.body || {};
+  // Cap the request body size to keep a malicious client from streaming a
+  // huge JSON blob through req.json(). 12 MB is generous (covers a max-sized
+  // authority PDF after base64 inflation) but bounded. Checked via the
+  // Content-Length header — re-serialising the parsed body just to measure it
+  // costs a full extra copy of a potentially 10 MB payload on every order.
+  const ORDER_BODY_MAX = 12 * 1024 * 1024;
+  const contentLength = Number(req.headers?.["content-length"] || 0);
+  if (contentLength > ORDER_BODY_MAX || (body.lotAuthority?.data?.length || 0) > ORDER_BODY_MAX) {
+    return res.status(413).json({ error: "Order payload too large." });
+  }
+
   const order = body.order || body;
   if (!Array.isArray(order?.items) || order.items.length === 0) return res.status(400).json({ error: "Invalid order: 'items' must be a non-empty array." });
   if (!order?.payment) return res.status(400).json({ error: "Invalid order: 'payment' method is required (bank, payid, stripe)." });
 
   try {
-    const cfg      = await readConfig();
+    // Config and plan catalog are independent reads — fetch in parallel to
+    // save a sequential Redis round-trip on every order.
+    const [cfg, planData] = await Promise.all([readConfig(), readData()]);
     const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
     const smtp     = cfg.smtp || {};
     const toEmail  = cfg.orderEmail || "Orders@tocs.co";
     const spConfig = cfg?.sharepoint || {};
     const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
 
-    // CRIT-1: Generate order ID server-side
-    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+    // CRIT-1: Generate order ID server-side. The suffix uses 8 cryptographically
+    // random bytes (~48 bits of entropy in the encoded form) — 65k× harder to
+    // guess than the previous 3-char Math.random suffix and resistant to
+    // /track endpoint enumeration.
+    const serverId = "TOCS-" + Date.now().toString(36).toUpperCase()
+      + "-" + randomBytes(8).toString("base64url").replace(/[-_]/g, "").slice(0, 10).toUpperCase();
     order.id = serverId;
 
-    // CRIT-2: Validate payment method
+    // CRIT-2: Validate payment method and order category
     if (!["bank", "payid", "stripe", "invoice"].includes(order.payment)) return res.status(400).json({ error: "Invalid payment method." });
+    if (!["oc", "keys"].includes(order.orderCategory)) return res.status(400).json({ error: "Invalid orderCategory — must be 'oc' or 'keys'." });
 
     // CRIT-2: Sanitise total
     order.total = Math.max(0, Number(order.total) || 0);
 
-    // CRIT-2: Validate contact email
+    // CRIT-2: Validate and whitelist contactInfo fields
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!order.contactInfo?.email) {
       return res.status(400).json({ error: "Contact email is required." });
@@ -46,17 +369,142 @@ export default async function handler(req, res) {
     if (!EMAIL_RE.test(order.contactInfo.email)) {
       return res.status(400).json({ error: "Contact email is invalid." });
     }
+    if (order.contactInfo.applicantType && !["agent", "owner"].includes(order.contactInfo.applicantType)) {
+      return res.status(400).json({ error: "applicantType must be 'agent' or 'owner'." });
+    }
+    // Whitelist contactInfo to prevent arbitrary fields entering the database
+    const ci = order.contactInfo;
+    order.contactInfo = {
+      name:         String(ci.name         || "").slice(0, 200),
+      email:        String(ci.email        || "").slice(0, 200),
+      phone:        String(ci.phone        || "").slice(0, 50),
+      companyName:  String(ci.companyName  || "").slice(0, 200),
+      ownerName:    String(ci.ownerName    || "").slice(0, 200),
+      applicantType: ci.applicantType || "",
+      ocReference:  String(ci.ocReference  || "").slice(0, 100),
+      ...(ci.shippingAddress && typeof ci.shippingAddress === "object" ? {
+        shippingAddress: {
+          street:   String(ci.shippingAddress.street   || "").slice(0, 200),
+          suburb:   String(ci.shippingAddress.suburb   || "").slice(0, 100),
+          state:    String(ci.shippingAddress.state    || "").slice(0, 50),
+          postcode: String(ci.shippingAddress.postcode || "").slice(0, 10),
+        },
+      } : {}),
+    };
 
     // CRIT-2: Set status server-side
     if (order.payment === "stripe") {
       order.status = "Awaiting Stripe Payment";
+    } else if (order.payment === "invoice") {
+      order.status = "Invoice to be issued";
     } else {
-      order.status = "Awaiting Payment";
+      order.status = "Pending Payment";
+    }
+
+    // Plan catalog (`planData`, fetched above with the config) is read ONCE and
+    // reused for both the piqLotId lookup and the price/total reconciliation
+    // below. Both are read-only plan lookups and the store is not mutated
+    // between them, so a single snapshot is correct and saves a Redis
+    // round-trip per order.
+
+    // Auto-populate piqLotId for keys orders (enables PIQ payment polling)
+    // Look up the lot in the plan's lots array by lot number and copy its piqLotId.
+    if (order.orderCategory === "keys" && order.payment === "invoice") {
+      try {
+        const lotNumber = order.items?.[0]?.lotNumber || "";
+        const planId    = order.items?.[0]?.planId    || "";
+        const plan      = planData.strataPlans?.find(p => p.id === planId);
+        const lot       = plan?.lots?.find(l =>
+          l.number?.toLowerCase() === lotNumber.toLowerCase() ||
+          l.piqLotId != null && String(l.piqLotId) === String(order.items?.[0]?.lotId)
+        );
+        if (lot?.piqLotId) {
+          order.piqLotId = lot.piqLotId;
+          console.log(`[orders] piqLotId ${lot.piqLotId} auto-set for keys order`);
+        }
+      } catch (e) {
+        console.warn("[orders] piqLotId lookup failed:", e.message);
+      }
     }
 
     // MED-11: Validate items fields
     if (!order.items.every(item => item.productName && typeof item.price === "number")) {
       return res.status(400).json({ error: "Invalid order items: each item must have productName and price." });
+    }
+
+    // ── C1: Server-side price & total reconciliation ────────────────────────
+    // Without this, a customer can POST `total: 0` (or any value) for a paid
+    // OC order and the order saves with that total on bank/payid/invoice paths.
+    // Stripe path is gated on `total > 0` but the other paths trust the body.
+    // We look up each item's expected unit price in the plan catalog and reject
+    // any mismatch.  Keys orders are special: product.price = 0 by design
+    // (admin sets the real amount on the invoice), so we only enforce the
+    // non-negative invariant and trust the rest of the keys-flow.
+    {
+      const planId = order.items[0]?.planId;
+      const plan = planData.strataPlans?.find(p => p.id === planId);
+      if (order.orderCategory === "oc" && !plan) {
+        return res.status(400).json({ error: "Invalid order: unknown planId." });
+      }
+      let recomputedItemsTotal = 0;
+      const perOcSeen = {}; // productId → number of perOC lines seen (for volume discount)
+      for (const item of order.items) {
+        if (!Number.isFinite(item.price) || item.price < 0) {
+          return res.status(400).json({ error: "Invalid item: price must be a non-negative number." });
+        }
+        const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
+        if (order.orderCategory === "keys") {
+          // Keys: trust client price. `item.price` is already the line total
+          // (unit × qty) — the cart stores and the frontend sums it that way
+          // (App.jsx: `cart.reduce((s, i) => s + i.price, 0)`), so it must NOT
+          // be multiplied by qty again here. Doing so double-counted quantity
+          // and rejected valid multi-qty orders with
+          // "Invalid total: expected $440.00 (received $220.00)".
+          recomputedItemsTotal += item.price;
+          continue;
+        }
+        // OC: price must match the plan catalog. The "secondary OC" discount is
+        // a VOLUME discount derived SERVER-SIDE — never trusted from the client:
+        // per perOC product the first line is charged the primary price and each
+        // additional line the secondaryPrice. (Previously the client's
+        // `isSecondaryOC` flag chose the rate, so a crafted request could claim
+        // the discount on a primary OC and under-pay.)
+        const product = plan.products?.find(p => p.id === item.productId);
+        if (!product) {
+          return res.status(400).json({ error: `Invalid order: unknown productId "${item.productId}".` });
+        }
+        const primary = Number(product.price) || 0;
+        const hasSecondary = product.perOC && Number.isFinite(Number(product.secondaryPrice));
+        const secondary = hasSecondary ? Number(product.secondaryPrice) : primary;
+        // Anti-tamper: each submitted line price must equal one of the catalog
+        // rates (the server decides which one actually applies below).
+        if (Math.abs(item.price - primary) > 0.01 && Math.abs(item.price - secondary) > 0.01) {
+          const opts = (hasSecondary && Math.abs(primary - secondary) > 0.01)
+            ? `$${primary.toFixed(2)} or $${secondary.toFixed(2)}`
+            : `$${primary.toFixed(2)}`;
+          return res.status(400).json({
+            error: `Invalid order: ${product.id} must be ${opts} (received $${Number(item.price).toFixed(2)}).`,
+          });
+        }
+        if (product.perOC) {
+          // First line of this product → primary rate; each additional → secondary.
+          perOcSeen[item.productId] = (perOcSeen[item.productId] || 0) + 1;
+          recomputedItemsTotal += (perOcSeen[item.productId] === 1) ? primary : secondary;
+        } else {
+          recomputedItemsTotal += primary * qty;
+        }
+      }
+      const shippingCost = (order.orderCategory === "keys" && order.selectedShipping)
+        ? Math.max(0, Number(order.selectedShipping.cost) || Number(order.selectedShipping.price) || 0)
+        : 0;
+      const recomputedTotal = Math.round((recomputedItemsTotal + shippingCost) * 100) / 100;
+      if (Math.abs(recomputedTotal - order.total) > 0.01) {
+        return res.status(400).json({
+          error: `Invalid total: expected $${recomputedTotal.toFixed(2)} (received $${Number(order.total || 0).toFixed(2)}).`,
+        });
+      }
+      // Trust the server-computed value going forward
+      order.total = recomputedTotal;
     }
 
     // Derive SharePoint folder structure: {buildingName}/{categoryFolder}/{orderId}
@@ -76,16 +524,39 @@ export default async function handler(req, res) {
       if (byteSize > 10 * 1024 * 1024) {
         return res.status(400).json({ error: "Authority document must be under 10 MB." });
       }
+      // Magic-byte check: the decoded bytes must actually match the declared
+      // type, so a mislabelled or garbage blob can't be stored as a "PDF".
+      // (The local server.js already did this; the Vercel handler did not.)
+      const decoded = Buffer.from(body.lotAuthority.data, "base64");
+      if (decoded.length === 0) {
+        return res.status(400).json({ error: "Authority document is empty or not valid base64." });
+      }
+      const ct     = body.lotAuthority.contentType;
+      const isPDF  = decoded[0] === 0x25 && decoded[1] === 0x50 && decoded[2] === 0x44 && decoded[3] === 0x46; // %PDF
+      const isJPEG = decoded[0] === 0xFF && decoded[1] === 0xD8 && decoded[2] === 0xFF;
+      const isPNG  = decoded[0] === 0x89 && decoded[1] === 0x50 && decoded[2] === 0x4E && decoded[3] === 0x47;
+      const validMagic = (ct === "application/pdf" && isPDF)
+        || ((ct === "image/jpeg" || ct === "image/jpg") && isJPEG)
+        || (ct === "image/png" && isPNG);
+      if (!validMagic) {
+        return res.status(400).json({ error: "Authority document content does not match the declared file type." });
+      }
     }
 
     // Set filename synchronously — sanitise client-supplied name to prevent path traversal
-    // and HTTP header injection via Content-Disposition.
+    // and HTTP header injection via Content-Disposition. Use a strict allow-list
+    // matching the contentType validation above; anything else falls back to
+    // `bin` so a filename like `auth.` or `auth..pdf` doesn't yield empty/weird ext.
     if (body.lotAuthority?.data) {
       const rawName = String(body.lotAuthority.filename || "document");
-      const ext = rawName.includes(".") ? rawName.split(".").pop().replace(/[^\w]/g, "").slice(0, 5) : "bin";
+      const m = /\.([A-Za-z0-9]+)$/.exec(rawName);
+      const candidate = (m?.[1] || "").toLowerCase();
+      const ALLOWED_EXTS = new Set(["pdf", "jpg", "jpeg", "png"]);
+      const ext = ALLOWED_EXTS.has(candidate) ? candidate : "bin";
       order.lotAuthorityFile = `${order.id}-lot-authority.${ext}`;
     }
 
+    order.date = new Date().toISOString();
     order.auditLog = [{ ts: new Date().toISOString(), action: "Order created", note: `Customer: ${order.contactInfo?.name || "?"}` }];
 
     // ── STRIPE PRE-VALIDATION (before Redis save — prevents ghost orders) ────────
@@ -116,10 +587,24 @@ export default async function handler(req, res) {
     // are all skipped for Stripe orders (accepted limitation for initial implementation).
     if (order.payment === "stripe") {
       try {
+        // Lazy import — stripe's module graph is multi-MB and only the stripe
+        // payment branch needs it; keeps cold starts fast for bank/PayID orders.
+        const { default: Stripe } = await import("stripe");
         const stripe = new Stripe(stripeKey);
-        const proto = req.headers["x-forwarded-proto"] || "https";
-        const host  = req.headers["host"] || "occorder.vercel.app";
-        const baseUrl = `${proto}://${host}`;
+        // Prefer the env-configured canonical origin so a tampered `Host`
+        // header can't redirect paying customers to attacker.com after Stripe
+        // checkout (phishing / credential-collection vector). Fall back to
+        // the request's `Host` only when no env is set — appropriate for
+        // local dev / preview deployments.
+        const envOrigin = (process.env.PUBLIC_ORIGIN || cfg.publicOrigin || "").trim().replace(/\/$/, "");
+        let baseUrl;
+        if (envOrigin && /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(envOrigin)) {
+          baseUrl = envOrigin;
+        } else {
+          const proto = req.headers["x-forwarded-proto"] || "https";
+          const host  = req.headers["host"] || "occorder.vercel.app";
+          baseUrl = `${proto}://${host}`;
+        }
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
           line_items: [{
@@ -132,7 +617,11 @@ export default async function handler(req, res) {
           }],
           mode: "payment",
           success_url: `${baseUrl}/complete?orderId=${serverId}&stripeOk=1`,
-          cancel_url:  `${baseUrl}/?cancelled=1&orderId=${serverId}`,
+          // Include the Stripe-injected session-id so the cancel endpoint can
+          // verify the caller is the actual paying customer (not anyone who
+          // guessed the order id). {CHECKOUT_SESSION_ID} is a Stripe template
+          // placeholder, NOT a JS variable.
+          cancel_url:  `${baseUrl}/?cancelled=1&orderId=${serverId}&session_id={CHECKOUT_SESSION_ID}`,
           metadata: { orderId: order.id },
         });
         // Persist the session ID so stripe-confirm can verify it server-side
@@ -177,7 +666,10 @@ export default async function handler(req, res) {
     if (spEnabled) {
       spPromise = (async () => {
         try {
-          const spFilename = `authority-${body.lotAuthority?.filename || "doc"}`;
+          // Sanitise the client-supplied filename before it's concatenated into
+          // the upload path — `../foo.pdf` would otherwise resolve out of the
+          // order folder under Graph's `root:/{path}:` API.
+          const spFilename = `authority-${sanitiseSegment(body.lotAuthority?.filename, "doc")}`;
           // Capture upload errors so audit log entries contain the actual reason
           let authErr = null, pdfErr = null;
           // Run both uploads in parallel — each takes ~8–9 s independently
@@ -197,16 +689,28 @@ export default async function handler(req, res) {
           ]);
           const spUrl     = authResult.status === "fulfilled" ? authResult.value : null;
           const summaryUrl = pdfResult.status  === "fulfilled" ? pdfResult.value  : null;
-          // Fresh read before writing SP results to avoid stale-data overwrites
-          const freshData = await readData().catch(() => data);
-          const freshOi = freshData.orders.find(o => o.id === order.id);
-          if (freshOi) {
+          // Persist SP results under the order lock so this read-modify-write
+          // cannot clobber a concurrent writer (the email-failure audit write
+          // below, a PIQ poll, or an admin amend). On read failure, SKIP the
+          // write rather than persisting the stale pre-save `data` snapshot —
+          // writing that back would revert other writers' audit rows / URLs.
+          await withOrderLock(order.id, async () => {
+            const freshData = await readData().catch(() => null);
+            if (!freshData) { console.error("SP result persist skipped: readData failed"); return; }
+            const freshOi = freshData.orders.find(o => o.id === order.id);
+            if (!freshOi) return;
             if (spUrl) { freshOi.lotAuthorityUrl = spUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: spUrl }); }
             if (summaryUrl) { freshOi.summaryUrl = summaryUrl; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-            if (!spUrl && body.lotAuthority?.data) { const note = authErr?.message ? authErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note }); }
-            if (!summaryUrl) { const note = pdfErr?.message ? pdfErr.message.substring(0, 120) : "See Vercel logs"; freshOi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note }); }
-          }
-          await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
+            // Failures use pushAuditOnce so a persistently broken SP can't
+            // flood the audit log with hundreds of duplicate rows over time.
+            if (!spUrl && body.lotAuthority?.data) {
+              pushAuditOnce(freshOi.auditLog, "Authority doc SP upload failed", authErr?.message?.substring(0, 60) || "See Vercel logs");
+            }
+            if (!summaryUrl) {
+              pushAuditOnce(freshOi.auditLog, "Order summary SP upload failed", pdfErr?.message?.substring(0, 60) || "See Vercel logs");
+            }
+            await writeData(freshData);
+          }).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for order ${order.id}: auth=${!!spUrl} pdf=${!!summaryUrl}`);
         } catch (e) {
           console.error("SP upload block failed:", e.message);
@@ -231,10 +735,12 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── Send emails SYNCHRONOUSLY (before response — guaranteed delivery) ───────
-    // SMTP2GO on port 2525 takes ~6.6 s per send (parallel). SP uploads are
-    // already running above in parallel, so emails don't eat into SP time.
-    if (smtp.host && smtp.user && smtp.pass) {
+    // ── Build the email work as a deferrable promise (do NOT await inline) ──────
+    // SMTP2GO on port 2525 takes ~6.6 s per send (admin + customer in parallel).
+    // Awaiting this before responding was the dominant source of response
+    // latency, so it is handed to the background-work deferral below instead.
+    const emailPromise = (async () => {
+      if (!(smtp.host && smtp.user && smtp.pass)) return;
       console.log(`Sending emails for order ${order.id}...`);
       const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[order.orderCategory] || "Order";
       const lotNumber = order.items?.[0]?.lotNumber || "";
@@ -270,16 +776,19 @@ export default async function handler(req, res) {
           }).catch(e => console.error("Customer email failed:", e.message))
         );
       }
-      await Promise.allSettled(emailJobs).then(async results => {
-        const sent = results.filter(r => r.status === "fulfilled").length;
-        console.log(`Emails: ${sent}/${results.length} sent for order ${order.id}`);
-        // Log any email failures to the audit log so admins can see them
-        const labels = ["Admin notification", "Customer confirmation"];
-        const failures = results
-          .map((r, i) => r.status === "rejected" ? `${labels[i] || "Email"} failed: ${r.reason?.message || "unknown"}` : null)
-          .filter(Boolean);
-        if (failures.length > 0) {
-          try {
+      const results = await Promise.allSettled(emailJobs);
+      const sent = results.filter(r => r.status === "fulfilled").length;
+      console.log(`Emails: ${sent}/${results.length} sent for order ${order.id}`);
+      // Log any email failures to the audit log so admins can see them
+      const labels = ["Admin notification", "Customer confirmation"];
+      const failures = results
+        .map((r, i) => r.status === "rejected" ? `${labels[i] || "Email"} failed: ${r.reason?.message || "unknown"}` : null)
+        .filter(Boolean);
+      if (failures.length > 0) {
+        try {
+          // Under the order lock so this audit write serialises with the
+          // concurrent SharePoint-result write above instead of clobbering it.
+          await withOrderLock(order.id, async () => {
             const fresh = await readData();
             const oi = fresh.orders.find(o => o.id === order.id);
             if (oi) {
@@ -287,21 +796,46 @@ export default async function handler(req, res) {
               failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: msg }));
               await writeData(fresh);
             }
-          } catch (e) { console.error("Email audit log persist failed:", e.message); }
-        }
-      });
+          });
+        } catch (e) { console.error("Email audit log persist failed:", e.message); }
+      }
+    })();
+
+    // ── RESPOND FAST; finish best-effort work in the background ─────────────────
+    // The order is already durably persisted in Redis above, so the SharePoint
+    // uploads (~5 s) and confirmation emails (~6.6 s) are best-effort follow-ups,
+    // not part of the customer's critical path. Hand both to Vercel's
+    // `waitUntil`, which keeps the serverless invocation alive until they settle
+    // AFTER the response is flushed — cutting the response from ~7 s to well
+    // under a second.
+    //
+    // Safety: `waitUntil` only keeps work alive inside a real Vercel request
+    // scope. Off-Vercel (local server, tests) we await the work inline so it is
+    // never silently dropped. `process.env.VERCEL` is set to "1" on every Vercel
+    // deployment, which cleanly distinguishes the two environments.
+    const backgroundWork = Promise.allSettled([spPromise, emailPromise]);
+    let deferred = false;
+    if (process.env.VERCEL) {
+      try {
+        waitUntil(backgroundWork);
+        deferred = true;
+      } catch (e) {
+        console.warn("waitUntil registration failed; awaiting background work inline:", e?.message);
+      }
     }
-
-    // ── RESPOND ───────────────────────────────────────────────────────────────
-    res.status(200).json({ ok: true, order, emailSentTo: toEmail });
-
-    // Allow SP uploads to finish if still in-flight (~1–2 s remaining after ~7 s emails)
-    await spPromise;
+    if (!deferred) await backgroundWork;
+    // Strip the internal `managerAdminCharge` from each item before echoing the
+    // order back to the (public) caller — it's an admin-only figure and must
+    // not be disclosed to applicants. The stored order keeps it for CSV/admin.
+    const customerOrder = { ...order, items: (order.items || []).map(({ managerAdminCharge: _omit, ...rest }) => rest) };
+    return res.status(200).json({ ok: true, order: customerOrder, emailSentTo: toEmail });
 
   } catch (err) {
     console.error("Order creation failed:", err.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message || "Order could not be saved. Please try again." });
+      // Generic message to the (public) caller — the detail is logged above and
+      // must not leak internal Redis/Stripe/SMTP error text to applicants.
+      res.status(500).json({ error: "Order could not be saved. Please try again." });
     }
   }
 }

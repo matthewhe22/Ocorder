@@ -1,15 +1,66 @@
 // Merged handler: GET  /api/orders/:id/authority
 //                 PUT  /api/orders/:id/status
+//                 PUT  /api/orders/:id/amend
+//                 POST /api/orders/:id/notify
 //                 POST /api/orders/:id/send-certificate
 //                 POST /api/orders/:id/send-invoice
 //                 POST /api/orders/:id/stripe-confirm  (public — no admin auth)
 // Replaces separate files to stay within Vercel Hobby's 12-function limit.
 
-import Stripe from "stripe";
-import { readData, writeData, readConfig, validToken, extractToken, cors, readAuthority, KV_AVAILABLE } from "../../_lib/store.js";
-import { uploadToSharePoint, SHAREPOINT_ENABLED } from "../../_lib/sharepoint.js";
-import { buildOrderEmailHtml, buildCustomerEmailHtml, createTransporter } from "../../_lib/email.js";
+import { waitUntil } from "@vercel/functions";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { readData, readOrder, writeData, readConfig, validToken, validAdminToken, extractToken, cors, readAuthority, writeCertificate, readCertificate, withOrderLock, rateLimit, clientIp, KV_AVAILABLE } from "../../_lib/store.js";
+import { uploadToSharePoint, SHAREPOINT_ENABLED, isSharePointEnabled, uploadOrderDocs, sanitiseSegment, pushAuditOnce } from "../../_lib/sharepoint.js";
+import { buildOrderEmailHtml, buildCustomerEmailHtml, buildPiqPaymentEmailHtml, createTransporter } from "../../_lib/email.js";
 import { generateOrderPdf, generateReceiptPdf } from "../../_lib/pdf.js";
+import { detectPiqPayment } from "../../_lib/piq.js";
+import { VALID_STATUSES, AMENDABLE_STATUSES, normaliseLotNumber } from "../../_lib/constants.js";
+
+// Stripe is only needed by the stripe-confirm/stripe-cancel actions, but this
+// merged handler also serves hot public routes like /track. Lazy-loading keeps
+// the multi-MB stripe module graph out of every cold start.
+async function getStripe(key) {
+  const { default: Stripe } = await import("stripe");
+  return new Stripe(key);
+}
+
+// ── HTML escape helper ────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
+// ── Generic customer notification email (used by /notify) ────────────────────
+function buildNotifyEmailHtml(order, message, cfg) {
+  const tpl = cfg.emailTemplate || {};
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+  const body = esc(message).replace(/\n/g, "<br>");
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
+  <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1c3326;padding:24px 32px;">
+      <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
+      <p style="color:#a8c5b0;margin:4px 0 0;font-size:0.85rem;">Order ${esc(order.id)} — status update</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin-top:0;white-space:pre-wrap;line-height:1.5;">${body}</p>
+      <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
+      </div>
+      <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
+      <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+// Note: buildAmendedEmailHtml was removed alongside the redundant amend-
+// notification block — the post-amend confirmation flow now uses
+// buildOrderEmailHtml / buildCustomerEmailHtml with `{ isAmendment: true }`.
 
 // ── Email builder ─────────────────────────────────────────────────────────────
 function buildCertEmailHtml(order, message, cfg) {
@@ -20,12 +71,11 @@ function buildCertEmailHtml(order, message, cfg) {
   const keysDefault = "Dear {name},\n\nPlease find attached your Keys/Fobs/Remotes order documents for {address}.\n\nIf you have any questions please don't hesitate to contact us.\n\nKind regards,\nTOCS Team";
   const ocDefault = "Dear {name},\n\nPlease find attached your OC Certificate.\n\nKind regards,\nTOCS Team";
   const raw = (tpl.certificateGreeting || (isKeys ? keysDefault : ocDefault))
-    .replace(/{name}/g, contact.name || "Applicant")
-    .replace(/{lotNumber}/g, lot?.lotNumber || "")
-    .replace(/{address}/g, lot?.planName || "");
-  const bodyText = message || raw;
-  const htmlBody = bodyText.replace(/\n/g, "<br>");
-  const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+    .replace(/{name}/g, esc(contact.name || "Applicant"))
+    .replace(/{lotNumber}/g, esc(lot?.lotNumber || ""))
+    .replace(/{address}/g, esc(lot?.planName || ""));
+  const bodyText = message ? esc(message).replace(/\n/g, "<br>") : raw.replace(/\n/g, "<br>");
+  const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -33,15 +83,171 @@ function buildCertEmailHtml(order, message, cfg) {
       <h1 style="color:#fff;margin:0;font-size:1.35rem;letter-spacing:0.05em;">Top Owners Corporation Solution</h1>
     </div>
     <div style="padding:32px;">
-      <p style="margin-top:0;">${htmlBody}</p>
+      <p style="margin-top:0;">${bodyText}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
     </div>
   </div>
 </body></html>`;
+}
+
+// ── Multipart parser (for FormData uploads) ───────────────────────────────────
+// Used by send-certificate / send-invoice so a 3.9 MB PDF doesn't get base64-
+// inflated past Vercel's 4.5 MB request body limit.
+function parseMultipart(buffer, contentType) {
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || "");
+  if (!m) return { fields: {}, files: {} };
+  const boundary = Buffer.from("--" + (m[1] || m[2]).trim());
+  const fields = {};
+  const files = {};
+  let pos = buffer.indexOf(boundary);
+  if (pos < 0) return { fields, files };
+  pos += boundary.length;
+  while (pos < buffer.length) {
+    if (buffer[pos] === 0x2d && buffer[pos + 1] === 0x2d) break; // closing --
+    if (buffer[pos] === 0x0d && buffer[pos + 1] === 0x0a) pos += 2;
+    const next = buffer.indexOf(boundary, pos);
+    if (next < 0) break;
+    let partEnd = next;
+    if (buffer[partEnd - 2] === 0x0d && buffer[partEnd - 1] === 0x0a) partEnd -= 2;
+    const part = buffer.slice(pos, partEnd);
+    const headerEnd = part.indexOf("\r\n\r\n");
+    pos = next + boundary.length;
+    if (headerEnd < 0) continue;
+    const headerStr = part.slice(0, headerEnd).toString("utf8");
+    const body = part.slice(headerEnd + 4);
+    const nameMatch = /name="([^"]+)"/.exec(headerStr);
+    if (!nameMatch) continue;
+    const fileMatch = /filename="([^"]*)"/.exec(headerStr);
+    if (fileMatch) {
+      const ctMatch = /Content-Type:\s*([^\r\n]+)/i.exec(headerStr);
+      const fileObj = {
+        filename: fileMatch[1],
+        contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
+        data: body,
+      };
+      const key = nameMatch[1];
+      if (files[key]) {
+        if (!Array.isArray(files[key])) files[key] = [files[key]];
+        files[key].push(fileObj);
+      } else {
+        files[key] = fileObj;
+      }
+    } else {
+      fields[nameMatch[1]] = body.toString("utf8");
+    }
+  }
+  return { fields, files };
+}
+
+// Cap the buffered request body so a malicious/oversized upload can't OOM the
+// function before the per-attachment size check runs. 5 MB covers a 4.5 MB
+// attachment plus multipart/form overhead (Vercel rejects bodies above ~4.5 MB
+// anyway).
+const RAW_BODY_MAX = 5 * 1024 * 1024;
+async function readRawBody(req) {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const b = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    total += b.length;
+    if (total > RAW_BODY_MAX) {
+      const err = new Error("Request body too large.");
+      err.statusCode = 413;
+      throw err;
+    }
+    chunks.push(b);
+  }
+  return Buffer.concat(chunks);
+}
+
+// Returns { message, attachments } where each attachment has a .buffer Node Buffer.
+// Accepts both legacy JSON ({ message, attachment: { filename, contentType, data: base64 } })
+// and multipart/form-data (fields: message; file: PDF, one or many) for backward compatibility.
+async function readMessageAndAttachments(req) {
+  // Preserve the original content-type header — multipart boundaries are
+  // case-sensitive, and mobile Safari sends mixed-case boundaries (e.g.
+  // ----WebKitFormBoundaryXyZ) that won't match the body if we lowercase.
+  const ctRaw = req.headers["content-type"] || "";
+  const ct = ctRaw.toLowerCase();
+  if (ct.includes("multipart/form-data")) {
+    let buf;
+    if (Buffer.isBuffer(req.body)) buf = req.body;
+    else if (typeof req.body === "string") buf = Buffer.from(req.body, "utf8");
+    else buf = await readRawBody(req).catch(() => Buffer.alloc(0));
+    const { fields, files } = parseMultipart(buf, ctRaw);
+    const fileField = files.file || files.attachment;
+    const fileList = fileField ? (Array.isArray(fileField) ? fileField : [fileField]) : [];
+    return {
+      message: fields.message || "",
+      attachments: fileList.map(f => ({ filename: f.filename, contentType: f.contentType, buffer: f.data })),
+    };
+  }
+  const body = req.body || {};
+  const a = body.attachment;
+  return {
+    message: body.message || "",
+    attachments: a?.data
+      ? [{ filename: a.filename, contentType: a.contentType, buffer: Buffer.from(a.data, "base64") }]
+      : [],
+  };
+}
+
+// ── Redirect target allow-list ────────────────────────────────────────────────
+// Limits the hosts the authority/cert endpoints will expose to admins so a
+// corrupted or forged URL on the order cannot turn the portal into an open
+// redirector / phishing chain.
+//
+// By default we allow the entire SharePoint Online + Microsoft tenant
+// namespace, which is correct out-of-the-box for any deployment. Operators
+// can lock this down further to their actual tenant by setting
+// `SHAREPOINT_ALLOWED_HOSTS` to a comma-separated list of host suffixes
+// (e.g. `tocsau.sharepoint.com,tocsau-my.sharepoint.com`). Suffix match —
+// each entry matches itself and any subdomain.
+const ALLOWED_REDIRECT_HOSTS_DEFAULT = ["sharepoint.com", "onmicrosoft.com", "microsoft.com"];
+const ALLOWED_REDIRECT_HOSTS = (() => {
+  const env = (process.env.SHAREPOINT_ALLOWED_HOSTS || "")
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  return env.length ? env : ALLOWED_REDIRECT_HOSTS_DEFAULT;
+})();
+// Merge the changes that check-piq-payment made on its local `order` copy into
+// a fresh Redis snapshot, under the order lock. Only the PIQ-related fields +
+// any newly-appended audit entries are merged, so a concurrent admin click,
+// send-cert, or amendment isn't clobbered. Audit entries appended since the
+// handler began are tracked via the `auditLogStartLen` snapshot.
+const PIQ_MERGE_FIELDS = ["piqLotId", "piqPaymentDate", "piqPaymentReference",
+  "piqLastPolled", "piqLevyFound", "piqLevyTotalDue", "piqLevyTotalNett"];
+async function persistPiqChanges(orderId, localOrder, auditLogStartLen) {
+  return withOrderLock(orderId, async () => {
+    const fresh = await readData();
+    const fi = fresh.orders.findIndex(o => o.id === orderId);
+    if (fi === -1) return;
+    const target = fresh.orders[fi];
+    for (const f of PIQ_MERGE_FIELDS) target[f] = localOrder[f];
+    // Only overwrite status when the local handler actually changed it.
+    if (localOrder.status === "Paid") target.status = "Paid";
+    // Apply the auto-link side-effect on items[0].lotId if it changed.
+    if (localOrder.items?.[0]?.lotId && target.items?.[0]) {
+      target.items[0].lotId = localOrder.items[0].lotId;
+    }
+    const newAudits = (localOrder.auditLog || []).slice(auditLogStartLen);
+    if (newAudits.length) {
+      target.auditLog = [...(target.auditLog || []), ...newAudits];
+    }
+    await writeData(fresh);
+  });
+}
+
+function isAllowedRedirectHost(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    return ALLOWED_REDIRECT_HOSTS.some(suffix => host === suffix || host.endsWith("." + suffix));
+  } catch { return false; }
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -52,8 +258,15 @@ export default async function handler(req, res) {
   const { id, action } = req.query;
 
   // ── GET /api/orders/:id/authority ─────────────────────────────────────────
+  // Two response shapes (matches the /certificate endpoint):
+  //   - SharePoint URL on the order → 200 { url } (JSON). Frontend opens it.
+  //     Previously this was a 302 that carried the admin token via Referer.
+  //   - SharePoint URL missing → stream the binary from Redis KV.
   if (action === "authority" && req.method === "GET") {
-    const token = extractToken(req) || req.query?.token;
+    // Bearer header only — the previous ?token= fallback leaked the long-lived
+    // admin token via Vercel access logs, browser history, and (on the old
+    // 302 path) Referer headers cross-origin to *.sharepoint.com.
+    const token = extractToken(req);
     if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const data = await readData();
@@ -61,9 +274,13 @@ export default async function handler(req, res) {
     if (!order) return res.status(404).json({ error: "Order not found." });
     if (!order.lotAuthorityFile && !order.lotAuthorityUrl) return res.status(404).json({ error: "No authority document for this order." });
 
-    // Preferred: redirect to SharePoint URL (opens directly in browser)
     if (order.lotAuthorityUrl) {
-      return res.redirect(302, order.lotAuthorityUrl);
+      if (!isAllowedRedirectHost(order.lotAuthorityUrl)) {
+        console.error(`Authority URL blocked — non-allowed host: ${order.lotAuthorityUrl}`);
+        return res.status(502).json({ error: "Stored authority URL is not on an allowed host." });
+      }
+      res.setHeader("X-Doc-Source", "sharepoint");
+      return res.status(200).json({ url: order.lotAuthorityUrl });
     }
 
     // Fallback: serve from Redis KV
@@ -76,7 +293,170 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(stored.data, "base64");
     res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
+    res.setHeader("X-Doc-Source", "blob");
     const safeFilename = String(order.lotAuthorityFile || "authority").replace(/[^\w.\-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
+    res.setHeader("Content-Length", buf.length);
+    return res.send(buf);
+  }
+
+  // ── POST /api/orders/:id/save-to-sharepoint  (admin — retroactive SP save) ─
+  // Admin remediation for orders whose SP folder was never created (e.g. Stripe
+  // webhook path before the May 13 fix, or any historical SP upload failure).
+  // Generates the order summary (and payment receipt for Stripe orders) and
+  // uploads alongside the authority doc, then persists the URLs back onto the
+  // order.
+  //
+  // Idempotent — each doc kind is only uploaded if its URL is not already
+  // populated on the order. A second click on a fully-uploaded order is a
+  // no-op (no audit log noise, no Graph API calls).
+  if (action === "save-to-sharepoint" && req.method === "POST") {
+    const token = extractToken(req);
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    // PDF generation is CPU-bound and each call hits the Graph API; rate-limit
+    // to stop a script (or a leaked token) from amplifying into a function /
+    // Graph-quota DoS. Key on BOTH client IP and a short hash of the token —
+    // (a) IP alone is fooled by an attacker rotating x-forwarded-for (the
+    // `clientIp` helper hardens this on Vercel but local proxies vary), and
+    // (b) token alone lets two admins on the same office NAT eat each other's
+    // budget. Either limit hitting 10/60s trips the 429.
+    const tokenHash = createHash("sha256").update(String(token)).digest("hex").slice(0, 12);
+    const [rlIp, rlTok] = await Promise.all([
+      rateLimit(`sp-save-ip:${clientIp(req)}`, 10, 60),
+      rateLimit(`sp-save-tok:${tokenHash}`, 10, 60),
+    ]);
+    if (!rlIp.allowed || !rlTok.allowed) {
+      const retry = Math.max(rlIp.retryAfter || 0, rlTok.retryAfter || 0, 60);
+      res.setHeader("Retry-After", String(retry));
+      return res.status(429).json({ error: "Too many SharePoint saves — please wait a moment and try again." });
+    }
+
+    const data = await readData();
+    const idx = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+
+    const cfg = await readConfig();
+    const spConfig = cfg?.sharepoint || {};
+    if (!isSharePointEnabled(spConfig)) return res.status(400).json({ error: "SharePoint is not configured." });
+
+    const authDocStored = await readAuthority(id).catch(() => null);
+    const isStripePaid = order.payment === "stripe" && order.status === "Paid" && !!order.stripeSessionId;
+
+    // Per-doc gating — skip anything already in SharePoint.
+    const needSummary = !order.summaryUrl;
+    const needAuth    = !!authDocStored?.data && !order.lotAuthorityUrl;
+    const needReceipt = isStripePaid && !order.receiptUrl;
+
+    if (!needSummary && !needAuth && !needReceipt) {
+      return res.status(200).json({
+        ok: true, alreadyPresent: true,
+        summaryUrl: order.summaryUrl || null,
+        authUrl:    order.lotAuthorityUrl || null,
+        receiptUrl: order.receiptUrl || null,
+        order,
+      });
+    }
+
+    let result;
+    try {
+      result = await uploadOrderDocs(order, spConfig, { generateOrderPdf, generateReceiptPdf }, {
+        authDoc: needAuth ? authDocStored : null,
+        includeSummary: needSummary,
+        includeReceipt: needReceipt,
+        stripeSessionId: order.stripeSessionId,
+      });
+    } catch (e) {
+      console.error(`save-to-sharepoint failed for ${id}:`, e.message);
+      return res.status(500).json({ error: "SharePoint upload failed: " + (e.message || "unknown error") });
+    }
+    const { authUrl, summaryUrl, receiptUrl, errors } = result;
+
+    // Wrap the audit-log write in the order lock so a concurrent amend / status
+    // / piq / send-cert can't clobber the URLs or entries we just produced.
+    let finalOrder;
+    try {
+      const lockRes = await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const fi = fresh.orders.findIndex(o => o.id === id);
+        if (fi === -1) return { missing: true };
+        const fo = fresh.orders[fi];
+        fo.auditLog = fo.auditLog || [];
+        const ts = () => new Date().toISOString();
+        if (needAuth) {
+          if (authUrl) { fo.lotAuthorityUrl = authUrl; fo.auditLog.push({ ts: ts(), action: "Authority doc saved to SharePoint", note: `Manual: ${authUrl}` }); }
+          else         { fo.auditLog.push({ ts: ts(), action: "Authority doc SP upload failed", note: "Manual: " + (errors.auth?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
+        if (needSummary) {
+          if (summaryUrl) { fo.summaryUrl = summaryUrl; fo.auditLog.push({ ts: ts(), action: "Order summary saved to SharePoint", note: `Manual: ${summaryUrl}` }); }
+          else            { fo.auditLog.push({ ts: ts(), action: "Order summary SP upload failed", note: "Manual: " + (errors.summary?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
+        if (needReceipt) {
+          if (receiptUrl) { fo.receiptUrl = receiptUrl; fo.auditLog.push({ ts: ts(), action: "Payment receipt saved to SharePoint", note: `Manual: ${receiptUrl}` }); }
+          else            { fo.auditLog.push({ ts: ts(), action: "Payment receipt SP upload failed", note: "Manual: " + (errors.receipt?.message?.slice(0, 60) || "See Vercel logs") }); }
+        }
+        await writeData(fresh);
+        return { order: fo };
+      });
+      if (lockRes.missing) return res.status(404).json({ error: "Order vanished mid-upload." });
+      finalOrder = lockRes.order;
+    } catch (e) {
+      console.error(`save-to-sharepoint persist failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
+    const fo = finalOrder;
+    return res.status(200).json({
+      ok: true,
+      authUrl, summaryUrl, receiptUrl,
+      order: fo,
+    });
+  }
+
+  // ── GET /api/orders/:id/certificate  (admin — re-download issued cert) ────
+  // Two response shapes:
+  //   - SharePoint copy available → 200 { url: "<sp view url>" } (JSON).
+  //     The frontend opens this in a new tab. A 302 here was previously used
+  //     but broke `fetch`-based downloads: browsers follow the cross-origin
+  //     redirect without CORS headers and the response becomes opaque, so the
+  //     admin saw a generic "could not download" toast on the happy path.
+  //   - SharePoint URL missing → stream the bytes from Redis KV.
+  if (action === "certificate" && req.method === "GET") {
+    // Bearer header only — the previous ?token= fallback leaked the long-lived
+    // admin token via Vercel access logs, browser history, and the Referer
+    // header on the SP-redirect path. The frontend always passes the token
+    // via the Authorization header.
+    const token = extractToken(req);
+    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const data = await readData();
+    const order = data.orders.find(o => o.id === id);
+    if (!order) return res.status(404).json({ error: "Order not found." });
+
+    if (order.certificateUrl) {
+      // Mirror /authority — validate the stored URL against the SharePoint
+      // host allow-list before exposing it to the admin client. Without this,
+      // a corrupted certificateUrl would become a phishing primitive when
+      // the frontend opens it in a new tab.
+      if (!isAllowedRedirectHost(order.certificateUrl)) {
+        console.error(`Certificate URL blocked — non-allowed host: ${order.certificateUrl}`);
+        return res.status(502).json({ error: "Stored certificate URL is not on an allowed host." });
+      }
+      res.setHeader("X-Doc-Source", "sharepoint");
+      return res.status(200).json({ url: order.certificateUrl });
+    }
+
+    if (!KV_AVAILABLE) return res.status(503).json({ error: "Document storage is not connected." });
+    let stored = null;
+    try { stored = await readCertificate(id); } catch (e) {
+      return res.status(503).json({ error: "Document storage unavailable: " + e.message });
+    }
+    if (!stored?.data) return res.status(404).json({ error: "No stored certificate for this order." });
+
+    const buf = Buffer.from(stored.data, "base64");
+    res.setHeader("Content-Type", stored.contentType || "application/pdf");
+    res.setHeader("X-Doc-Source", "blob");
+    const safeFilename = String(stored.filename || order.certificateFile || `certificate-${order.id}.pdf`).replace(/[^\w.\-]/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Content-Length", buf.length);
     return res.send(buf);
@@ -85,34 +465,323 @@ export default async function handler(req, res) {
   // ── PUT /api/orders/:id/status ────────────────────────────────────────────
   if (action === "status" && req.method === "PUT") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
     const { status, note } = req.body || {};
     if (!status) return res.status(400).json({ error: "status is required." });
     // Must match production server.js status enum exactly
-    const VALID_STATUSES = ["Pending Payment","Processing","Issued","Cancelled","On Hold","Awaiting Documents","Invoice to be issued","Paid","Awaiting Stripe Payment"];
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status: "${status}".` });
+
+    try {
+      const result = await withOrderLock(id, async () => {
+        const data = await readData();
+        const idx = data.orders.findIndex(o => o.id === id);
+        if (idx === -1) return { error: "Order not found.", code: 404 };
+
+        data.orders[idx].status = status;
+        const auditEntry = { ts: new Date().toISOString(), action: `Status changed to ${status}` };
+        if (note) auditEntry.note = note;
+        data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), auditEntry];
+        if (status === "Cancelled" && note) data.orders[idx].cancelReason = note;
+
+        await writeData(data);
+        return { ok: true };
+      });
+      if (result.error) return res.status(result.code).json({ error: result.error });
+      return res.status(200).json(result);
+    } catch (e) {
+      console.error(`status update failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
+  }
+
+  // ── PUT /api/orders/:id/amend ────────────────────────────────────────────
+  // Admin only. Edits items / shipping for an unpaid order and recomputes total.
+  // Order reference (id) is preserved.  If an invoice was already sent the admin
+  // must click "Send Invoice" again after amending — this endpoint does not
+  // re-issue invoices automatically.
+  if (action === "amend" && req.method === "PUT") {
+    const token = extractToken(req);
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    // AMENDABLE_STATUSES imported from _lib/constants.js for cross-handler consistency.
+    const { items, selectedShipping, note } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items must be a non-empty array." });
+    if (items.length > 50) return res.status(400).json({ error: "Too many items (max 50)." });
+    for (const it of items) {
+      if (!it?.productName || typeof it.price !== "number" || !Number.isFinite(it.price) || it.price < 0) {
+        return res.status(400).json({ error: "Each item must have productName and a non-negative numeric price." });
+      }
+    }
 
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+    if (!AMENDABLE_STATUSES.includes(order.status)) {
+      return res.status(409).json({ error: `Order cannot be amended in status "${order.status}". Cancel and re-create instead.` });
+    }
+    if (order.payment === "stripe" && order.status === "Awaiting Stripe Payment") {
+      return res.status(409).json({ error: "Stripe orders cannot be amended — the customer is mid-checkout. Cancel and re-create instead." });
+    }
 
-    data.orders[idx].status = status;
-    const auditEntry = { ts: new Date().toISOString(), action: `Status changed to ${status}` };
-    if (note) auditEntry.note = note;
-    data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), auditEntry];
-    if (status === "Cancelled" && note) data.orders[idx].cancelReason = note;
+    const cleanItems = items.map(it => ({
+      productId:   it.productId,
+      productName: String(it.productName).slice(0, 200),
+      price:       Math.max(0, Math.round(Number(it.price) * 100) / 100),
+      qty:         Math.min(100, Math.max(1, Math.floor(Number(it.qty) || 1))),
+      lotNumber:   String(it.lotNumber || "").slice(0, 50),
+      lotId:       it.lotId,
+      planId:      it.planId,
+      planName:    String(it.planName || "").slice(0, 200),
+      ocName:      String(it.ocName || "").slice(0, 200),
+      ocId:        it.ocId || null,
+      ...(it.isSecondaryOC ? { isSecondaryOC: true } : {}),
+      ...(it.turnaround ? { turnaround: String(it.turnaround).slice(0, 100) } : {}),
+      ...(it.managerAdminCharge !== undefined ? { managerAdminCharge: Math.max(0, Number(it.managerAdminCharge) || 0) } : {}),
+      ...(it.key ? { key: String(it.key).slice(0, 200) } : {}),
+    }));
 
-    await writeData(data);
-    return res.status(200).json({ ok: true });
+    let cleanShipping = order.selectedShipping;
+    if (order.orderCategory === "keys" && selectedShipping && typeof selectedShipping === "object") {
+      // Customer orders persist the shipping amount as `.cost` (what the PDF,
+      // emails, and customer summary all read); admin/legacy payloads may send
+      // `.price`. Accept either and persist BOTH fields so every consumer
+      // agrees — previously this read only `.price`, so amending a customer
+      // keys order computed shipping as 0 and silently dropped it from the
+      // total and overwrote the stored `.cost`.
+      const shipCost = Math.max(0, Number(selectedShipping.cost) || Number(selectedShipping.price) || 0);
+      cleanShipping = {
+        id:    String(selectedShipping.id   || "").slice(0, 50),
+        name:  String(selectedShipping.name || "").slice(0, 100),
+        type:  String(selectedShipping.type || "").slice(0, 50),
+        cost:  shipCost,
+        price: shipCost,
+        ...(selectedShipping.requiresAddress !== undefined ? { requiresAddress: !!selectedShipping.requiresAddress } : {}),
+      };
+    }
+    const shippingCost = (order.orderCategory === "keys" && cleanShipping)
+      ? Math.max(0, Number(cleanShipping.cost) || Number(cleanShipping.price) || 0) : 0;
+    const newTotal = Math.round((cleanItems.reduce((s, it) => s + (Number(it.price) || 0), 0) + shippingCost) * 100) / 100;
+
+    const oldTotal = Number(order.total) || 0;
+    const oldItemCount = (order.items || []).length;
+    const noteText = (typeof note === "string" && note.trim()) ? note.trim().slice(0, 200) : "";
+    const auditNote = `Total: $${oldTotal.toFixed(2)} → $${newTotal.toFixed(2)} | Items: ${oldItemCount} → ${cleanItems.length}${noteText ? ` | ${noteText}` : ""}`;
+
+    const amendTs = new Date().toISOString();
+    // Persist the amendment inside the order lock so a concurrent send-cert,
+    // PIQ poll, or another admin amend serialises rather than clobbers.
+    try {
+      const persisted = await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const fi = fresh.orders.findIndex(o => o.id === id);
+        if (fi === -1) return { error: "Order vanished mid-amend.", code: 404 };
+        const fo = fresh.orders[fi];
+        if (!AMENDABLE_STATUSES.includes(fo.status)) {
+          return { error: `Order status "${fo.status}" no longer amendable.`, code: 409 };
+        }
+        fo.items = cleanItems;
+        fo.total = newTotal;
+        if (cleanShipping) fo.selectedShipping = cleanShipping;
+        fo.auditLog = [...(fo.auditLog || []), { ts: amendTs, action: "Order amended", note: auditNote }];
+        await writeData(fresh);
+        return { ok: true, order: fo };
+      });
+      if (persisted.error) return res.status(persisted.code).json({ error: persisted.error });
+      // Refresh local refs so the post-amend (PDF/email) phase uses the
+      // persisted state.
+      data.orders[idx] = persisted.order;
+    } catch (e) {
+      console.error(`amend persist failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
+
+    // After saving the amendment we (a) regenerate the order summary PDF,
+    // (b) upload it to SharePoint with a date-stamped filename, and (c) email
+    // both the admin and the customer to confirm the new totals.  PDF gen runs
+    // first because both the SP upload and the email attachment need it;
+    // SP upload + emails then run in parallel to fit within Vercel's 10s
+    // timeout.  All of these are best-effort — failures are appended to the
+    // audit log but never roll back the amendment.
+    const cfgPost = await readConfig();
+    const spConfig = cfgPost?.sharepoint || {};
+    const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
+    const updatedOrder = data.orders[idx];
+    const categoryFolder = updatedOrder.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+    const buildingName = (updatedOrder.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+    const spSubFolder = `${buildingName}/${categoryFolder}/${updatedOrder.id}`;
+    const dateStr = amendTs.slice(0, 10); // YYYY-MM-DD
+    const filename = `order-summary-amended-${dateStr}.pdf`;
+
+    let pdfBase64 = null;
+    let pdfErr = null;
+    try {
+      pdfBase64 = (await generateOrderPdf(updatedOrder)).toString("base64");
+    } catch (e) {
+      pdfErr = e;
+      console.error(`Amend: PDF generation failed for ${id}:`, e.message);
+    }
+
+    // SP upload (background)
+    let spPromise = Promise.resolve(null);
+    let spErr = null;
+    if (pdfBase64 && spEnabled) {
+      spPromise = uploadToSharePoint(filename, "application/pdf", pdfBase64, spConfig, spSubFolder)
+        .catch(e => { spErr = e; console.error(`Amend: SP upload failed for ${id}:`, e.message); return null; });
+    }
+
+    // Confirmation emails (admin + customer)
+    const smtp    = cfgPost?.smtp || {};
+    const toEmail = cfgPost?.orderEmail || "Orders@tocs.co";
+    const customerEmail = updatedOrder.contactInfo?.email || null;
+    const emailFailures = [];
+    let emailsAttempted = false;
+    if (smtp.host && smtp.user && smtp.pass) {
+      emailsAttempted = true;
+      const transporter = createTransporter(smtp);
+      const fromHeader = `"TOCS Order Portal" <${toEmail}>`;
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[updatedOrder.orderCategory] || "Order";
+      const adminSubject = `Order Amended — ${orderType} #${updatedOrder.id} — $${(updatedOrder.total || 0).toFixed(2)}`;
+      const customerSubject = `Your TOCS Order ${updatedOrder.id} has been updated`;
+      const attachments = pdfBase64 ? [{ filename, content: pdfBase64, encoding: "base64", contentType: "application/pdf" }] : [];
+
+      const jobs = [{
+        label: "Admin amendment notification",
+        promise: transporter.sendMail({
+          from: fromHeader, to: toEmail,
+          subject: adminSubject,
+          html: buildOrderEmailHtml(updatedOrder, cfgPost, { isAmendment: true }),
+          attachments,
+        }),
+      }];
+      if (customerEmail) {
+        jobs.push({
+          label: "Customer amendment confirmation",
+          promise: transporter.sendMail({
+            from: fromHeader, to: customerEmail,
+            subject: customerSubject,
+            html: buildCustomerEmailHtml(updatedOrder, cfgPost, { isAmendment: true }),
+            attachments,
+          }),
+        });
+      }
+      const results = await Promise.allSettled(jobs.map(j => j.promise));
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          const msg = r.reason?.message || "unknown";
+          console.error(`Amend ${jobs[i].label} failed for ${id}:`, msg);
+          emailFailures.push(`${jobs[i].label}: ${msg.substring(0, 120)}`);
+        }
+      });
+    }
+
+    const newSummaryUrl = await spPromise;
+
+    // Single fresh-read + write to commit summaryUrl change and all audit
+    // entries for this post-amend phase.  Fresh-read avoids clobbering
+    // concurrent writes (e.g. the hourly PIQ poll) that ran while we were
+    // generating the PDF / sending email.
+    // Persist post-amend SP / email audit entries under the order lock so
+    // PIQ poll / send-cert / send-invoice can't race against this write.
+    await withOrderLock(id, async () => {
+      const fresh = await readData();
+      const oi = fresh.orders.find(o => o.id === id);
+      if (!oi) return;
+      if (newSummaryUrl) {
+        oi.summaryUrl = newSummaryUrl;
+        oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary regenerated", note: `${filename} → ${newSummaryUrl}` });
+        data.orders[idx].summaryUrl = newSummaryUrl;
+      } else if (spEnabled && pdfBase64) {
+        pushAuditOnce(oi.auditLog, "Order summary regeneration failed", spErr?.message?.substring(0, 60) || "See Vercel logs");
+      } else if (spEnabled && pdfErr) {
+        pushAuditOnce(oi.auditLog, "Order summary regeneration failed", `PDF gen: ${pdfErr.message?.substring(0, 60)}`);
+      }
+      if (emailsAttempted) {
+        if (emailFailures.length === 0) {
+          const recipients = `Admin: ${toEmail}${customerEmail ? `, Customer: ${customerEmail}` : ""}`;
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment confirmation emails sent", note: recipients });
+        } else {
+          oi.auditLog.push({ ts: new Date().toISOString(), action: "Amendment confirmation emails partially failed", note: emailFailures.join("; ").substring(0, 200) });
+        }
+      }
+      await writeData(fresh);
+    }).catch(e => console.error("Amend post-write failed:", e.message));
+    return res.status(200).json({ ok: true, order: data.orders[idx] });
+  }
+
+  // ── POST /api/orders/:id/notify  (admin — generic customer email) ────────
+  // Body: { subject?, message }.  Sends to order.contactInfo.email; failure is
+  // logged to the order audit log so the admin UI surfaces delivery problems
+  // without needing access to server logs.
+  if (action === "notify" && req.method === "POST") {
+    const token = extractToken(req);
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const { subject, message } = req.body || {};
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ error: "A non-empty message is required." });
+    }
+    const safeMessage = message.slice(0, 5000);
+    const safeSubject = (typeof subject === "string" && subject.trim()) ? subject.slice(0, 200) : null;
+
+    const data = await readData();
+    const idx = data.orders.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+    const recipientEmail = order.contactInfo?.email;
+    if (!recipientEmail) return res.status(400).json({ error: "Order has no customer email address." });
+
+    const cfg = await readConfig();
+    const smtp = cfg.smtp || {};
+    if (!smtp.host || !smtp.user || !smtp.pass) return res.status(400).json({ error: "SMTP not configured." });
+
+    const subj = safeSubject || `Update on your TOCS order ${order.id}`;
+    try {
+      const transporter = createTransporter(smtp);
+      const fromEmail = cfg.orderEmail || "Orders@tocs.co";
+      await transporter.sendMail({
+        from: `"Top Owners Corporation Solution" <${fromEmail}>`,
+        to: recipientEmail,
+        subject: subj,
+        html: buildNotifyEmailHtml(order, safeMessage, cfg),
+      });
+      // Persist audit entry inside the order lock so a concurrent amend /
+      // status / piq run can't clobber the entry we just produced.
+      await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const oi = fresh.orders.find(o => o.id === id);
+        if (!oi) return;
+        oi.auditLog = [...(oi.auditLog || []), { ts: new Date().toISOString(), action: "Customer notified", note: `Subject: ${subj}` }];
+        await writeData(fresh);
+      }).catch(e => console.error("notify audit persist failed:", e.message));
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      await withOrderLock(id, async () => {
+        const fresh = await readData();
+        const oi = fresh.orders.find(o => o.id === id);
+        if (!oi) return;
+        oi.auditLog = [...(oi.auditLog || []), { ts: new Date().toISOString(), action: "Customer notify failed", note: err.message?.substring(0, 200) || "" }];
+        await writeData(fresh);
+      }).catch(() => {});
+      console.error(`Customer notify failed for ${id}:`, err.message);
+      return res.status(500).json({ error: "Failed to send notification email." });
+    }
   }
 
   // ── POST /api/orders/:id/send-certificate ─────────────────────────────────
   if (action === "send-certificate" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const { message, attachment } = req.body || {};
+    const { message, attachments } = await readMessageAndAttachments(req);
+    const ATTACH_LIMIT = 4.5 * 1024 * 1024;
+    const totalAttachSize = attachments.reduce((sum, a) => sum + a.buffer.length, 0);
+    if (totalAttachSize > ATTACH_LIMIT) return res.status(413).json({ error: "Attachments too large — total must be under 4.5 MB." });
+    // Refuse to send a "certificate" email with no certificate attached — the
+    // recipient would get an empty notification and SharePoint would never
+    // receive a copy. Both happened for TOCS-MOJI6FCL-YLC / TOCS-MOI215N8-GR4.
+    if (attachments.length === 0) return res.status(400).json({ error: "Attach at least one certificate file before sending." });
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -137,38 +806,77 @@ export default async function handler(req, res) {
         subject: subj,
         html: buildCertEmailHtml(order, message, cfg),
       };
-      if (attachment?.data) {
-        mailOpts.attachments = [{ filename: attachment.filename || "OC-Certificate.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+      if (attachments.length > 0) {
+        const defaultFilename = "OC-Certificate.pdf";
+        mailOpts.attachments = attachments.map((a, i) => ({
+          filename: a.filename || (i === 0 ? defaultFilename : `attachment-${i + 1}.pdf`),
+          content: a.buffer,
+          contentType: a.contentType || "application/pdf",
+        }));
       }
       await transporter.sendMail(mailOpts);
 
-      // Auto-save certificate to SharePoint (best-effort, non-fatal)
-      if (attachment?.data) {
+      // Save the emailed certificate to Redis KV as a guaranteed fallback for
+      // admin re-download. This succeeds even when SharePoint is unreachable so
+      // the cert is never lost after delivery.
+      const first = attachments[0];
+      const firstFilename    = first.filename    || "certificate.pdf";
+      const firstContentType = first.contentType || "application/pdf";
+      let kvSaved = false;
+      if (KV_AVAILABLE) {
         try {
-          const spConfig  = cfg?.sharepoint || {};
-          const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
-          if (spEnabled) {
-            const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
-            const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
-            const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
-            const certUrl = await uploadToSharePoint(
-              attachment.filename || "certificate.pdf",
-              attachment.contentType || "application/pdf",
-              attachment.data,
-              spConfig,
-              spSubFolder
-            );
-            if (certUrl) {
-              data.orders[idx].certificateUrl = certUrl;
-              data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate saved to SharePoint", note: certUrl }];
-            }
-          }
-        } catch (e) { console.error("Certificate SharePoint upload failed:", e.message); }
+          await writeCertificate(order.id, {
+            data: first.buffer.toString("base64"),
+            filename: firstFilename,
+            contentType: firstContentType,
+          });
+          kvSaved = true;
+        } catch (e) { console.error("Certificate KV save failed:", e.message); }
       }
 
-      data.orders[idx].status = "Issued";
-      data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` }];
-      await writeData(data);
+      // Auto-save first certificate to SharePoint (best-effort, non-fatal)
+      let certUrlNew = null;
+      try {
+        const spConfig  = cfg?.sharepoint || {};
+        const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
+        if (spEnabled) {
+          const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
+          const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
+          const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
+          certUrlNew = await uploadToSharePoint(
+            firstFilename,
+            firstContentType,
+            first.buffer,
+            spConfig,
+            spSubFolder
+          );
+        }
+      } catch (e) { console.error("Certificate SharePoint upload failed:", e.message); }
+
+      // Persist the issued-certificate state inside the order lock so a
+      // concurrent amend / status / piq run can't clobber the URLs or audit
+      // entries we just produced. The SMTP + Graph I/O above is unlocked
+      // (~7s of network) and runs as before.
+      await withOrderLock(id, async () => {
+        const freshDataCert = await readData();
+        const freshIdxCert  = freshDataCert.orders.findIndex(o => o.id === id);
+        if (freshIdxCert === -1) return;
+        const freshOrder = freshDataCert.orders[freshIdxCert];
+        freshOrder.certificateFile = firstFilename;
+        freshOrder.certificateContentType = firstContentType;
+        if (certUrlNew) freshOrder.certificateUrl = certUrlNew;
+        freshOrder.status = "Issued";
+        // Successes always append; the SP failure (if it occurred) goes
+        // through pushAuditOnce so admin retries don't flood the audit log.
+        freshOrder.auditLog = freshOrder.auditLog || [];
+        if (kvSaved) freshOrder.auditLog.push({ ts: new Date().toISOString(), action: "Certificate saved to Redis", note: firstFilename });
+        if (certUrlNew) freshOrder.auditLog.push({ ts: new Date().toISOString(), action: "Certificate saved to SharePoint", note: certUrlNew });
+        else if (SHAREPOINT_ENABLED || cfg?.sharepoint?.siteId) {
+          pushAuditOnce(freshOrder.auditLog, "Certificate SP upload failed", "See Vercel logs");
+        }
+        freshOrder.auditLog.push({ ts: new Date().toISOString(), action: "Certificate issued", note: `Sent to: ${order.contactInfo.email}` });
+        await writeData(freshDataCert);
+      }).catch(e => console.error("send-certificate persist failed:", e.message));
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -178,9 +886,17 @@ export default async function handler(req, res) {
   // ── POST /api/orders/:id/send-invoice ────────────────────────────────────
   if (action === "send-invoice" && req.method === "POST") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const { message, attachment } = req.body || {};
+    const { message, attachments: invoiceAttachments } = await readMessageAndAttachments(req);
+    // Mirror the 4.5 MB cap on send-certificate. Without this, an admin (or
+    // a stolen-token attacker) could OOM the function / DoS SMTP2GO with a
+    // single oversized upload.
+    const INVOICE_ATTACH_LIMIT = 4.5 * 1024 * 1024;
+    const invoiceTotalSize = invoiceAttachments.reduce((sum, a) => sum + a.buffer.length, 0);
+    if (invoiceTotalSize > INVOICE_ATTACH_LIMIT) {
+      return res.status(413).json({ error: "Attachments too large — total must be under 4.5 MB." });
+    }
     const data = await readData();
     const idx = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
@@ -196,11 +912,10 @@ export default async function handler(req, res) {
       const transporter = createTransporter(smtp);
       const pd = cfg.paymentDetails || {};
       const contact = order.contactInfo || {};
-      const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nPayment details:\nAccount Name: ${pd.accountName || ""}\nBSB: ${pd.bsb || ""}\nAccount Number: ${pd.accountNumber || ""}\nPayID: ${pd.payid || ""}\n\nPlease use your order number as the payment reference.\n\nKind regards,\nTOCS Team`;
-      const bodyText = message || defaultMsg;
-      const htmlBody = bodyText.replace(/\n/g, "<br>");
+      const defaultMsg = `Dear ${contact.name || "Applicant"},\n\nPlease find attached your invoice for Keys/Fobs/Remotes order #${order.id}.\n\nKind regards,\nTOCS Team`;
+      const htmlBody = message ? esc(message).replace(/\n/g, "<br>") : esc(defaultMsg).replace(/\n/g, "<br>");
       const tpl = cfg.emailTemplate || {};
-      const footer = (tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
+      const footer = esc(tpl.footer || "Top Owners Corporation Solution  |  info@tocs.co").replace(/\n/g, "<br>");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,sans-serif;color:#222;background:#f5f7f5;margin:0;padding:20px;">
   <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -210,7 +925,7 @@ export default async function handler(req, res) {
     <div style="padding:32px;">
       <p style="margin-top:0;">${htmlBody}</p>
       <div style="background:#f0f7f3;border-left:4px solid #2e6b42;padding:10px 16px;border-radius:4px;margin:20px 0;font-size:0.83rem;">
-        Order Reference: <strong style="font-family:monospace;">${order.id}</strong>
+        Order Reference: <strong style="font-family:monospace;">${esc(order.id)}</strong>
       </div>
       <hr style="border:none;border-top:1px solid #e8edf0;margin:24px 0 16px;">
       <p style="font-size:0.78rem;color:#aaa;margin:0;">${footer}</p>
@@ -223,13 +938,20 @@ export default async function handler(req, res) {
         subject: `Invoice for your Keys/Fobs/Remotes Order #${order.id}`,
         html,
       };
-      if (attachment?.data) {
-        mailOpts.attachments = [{ filename: attachment.filename || "Invoice.pdf", content: Buffer.from(attachment.data, "base64"), contentType: attachment.contentType || "application/pdf" }];
+      if (invoiceAttachments.length > 0) {
+        mailOpts.attachments = invoiceAttachments.map((a, i) => ({
+          filename: a.filename || (i === 0 ? "Invoice.pdf" : `attachment-${i + 1}.pdf`),
+          content: a.buffer,
+          contentType: a.contentType || "application/pdf",
+        }));
       }
       await transporter.sendMail(mailOpts);
 
       // Auto-save invoice to SharePoint (best-effort, non-fatal)
-      if (attachment?.data) {
+      // Capture the URL separately so we can apply it to fresh data below.
+      let spInvoiceUrl = null;
+      let spAuditEntry = null;
+      if (invoiceAttachments.length > 0) {
         try {
           const spConfig  = cfg?.sharepoint || {};
           const spEnabled = SHAREPOINT_ENABLED || !!(spConfig.tenantId && spConfig.clientId && spConfig.clientSecret && spConfig.siteId);
@@ -237,24 +959,42 @@ export default async function handler(req, res) {
             const spCategoryFolder = order.orderCategory === "keys" ? "Keys-Fobs" : "OC-Certificates";
             const spBuildingName = (order.items?.[0]?.planName || "Unknown Building").replace(/[\\/:*?"<>|]/g, "-").trim();
             const spSubFolder = `${spBuildingName}/${spCategoryFolder}/${order.id}`;
-            const invoiceUrl = await uploadToSharePoint(
-              attachment.filename || "invoice.pdf",
-              attachment.contentType || "application/pdf",
-              attachment.data,
+            const first = invoiceAttachments[0];
+            const uploadedUrl = await uploadToSharePoint(
+              first.filename || "invoice.pdf",
+              first.contentType || "application/pdf",
+              first.buffer,
               spConfig,
               spSubFolder
             );
-            if (invoiceUrl) {
-              data.orders[idx].invoiceUrl = invoiceUrl;
-              data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice saved to SharePoint", note: invoiceUrl }];
+            if (uploadedUrl) {
+              spInvoiceUrl = uploadedUrl;
+              spAuditEntry = { ts: new Date().toISOString(), action: "Invoice saved to SharePoint", note: uploadedUrl };
             }
           }
         } catch (e) { console.error("Invoice SharePoint upload failed:", e.message); }
       }
 
-      data.orders[idx].status = "Invoice sent, awaiting payment";
-      data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${order.contactInfo.email}` }];
-      await writeData(data);
+      // Re-read fresh data before writing the status update to avoid clobbering
+      // concurrent writes (e.g. the hourly PIQ poll) that ran while the email was
+      // being sent.  The email is already delivered at this point so we must not
+      // let a stale snapshot from earlier in this request overwrite the current state.
+      // Wrap the persist in the order lock so the hourly PIQ poll, an admin
+      // amendment, or a concurrent send-cert can't clobber the URLs / audit
+      // we just produced. The SMTP + Graph I/O above is unlocked.
+      await withOrderLock(id, async () => {
+        const freshData = await readData();
+        const freshIdx  = freshData.orders.findIndex(o => o.id === id);
+        if (freshIdx === -1) return;
+        if (spInvoiceUrl) freshData.orders[freshIdx].invoiceUrl = spInvoiceUrl;
+        freshData.orders[freshIdx].status = "Pending Payment";
+        const newAuditEntries = [
+          ...(spAuditEntry ? [spAuditEntry] : []),
+          { ts: new Date().toISOString(), action: "Invoice sent", note: `Sent to: ${order.contactInfo.email}` },
+        ];
+        freshData.orders[freshIdx].auditLog = [...(freshData.orders[freshIdx].auditLog || []), ...newAuditEntries];
+        await writeData(freshData);
+      }).catch(e => console.error("send-invoice persist failed:", e.message));
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -272,26 +1012,25 @@ export default async function handler(req, res) {
       return res.status(503).json({ error: "Stripe is not configured on this server." });
     }
 
-    // Always read order from Redis first — idempotency check depends on it
-    const data = await readData();
-    const idx  = data.orders.findIndex(o => o.id === id);
-    if (idx === -1) return res.status(404).json({ error: "Order not found." });
-    const order = data.orders[idx];
-
-    // Idempotency guard — prevents duplicate emails on page refresh / replay
-    if (order.status === "Paid") {
-      return res.status(200).json({ success: true, order });
+    // Pre-lock read so we can short-circuit on already-paid (avoids a Stripe
+    // round-trip and the lock contention that would otherwise stack up if
+    // the customer double-submits the confirmation request).
+    const initialData = await readData();
+    const initialIdx  = initialData.orders.findIndex(o => o.id === id);
+    if (initialIdx === -1) return res.status(404).json({ error: "Order not found." });
+    if (initialData.orders[initialIdx].status === "Paid") {
+      return res.status(200).json({ success: true, order: initialData.orders[initialIdx] });
     }
 
-    const { stripeSessionId } = order;
-    if (!stripeSessionId) {
+    const stripeSessionIdRef = initialData.orders[initialIdx].stripeSessionId;
+    if (!stripeSessionIdRef) {
       return res.status(400).json({ error: "No Stripe session associated with this order." });
     }
 
-    const stripe = new Stripe(stripeKey);
+    const stripe = await getStripe(stripeKey);
     let session;
     try {
-      session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+      session = await stripe.checkout.sessions.retrieve(stripeSessionIdRef);
     } catch (e) {
       console.error("Stripe session retrieve failed:", e.message);
       return res.status(500).json({ error: "Could not verify payment. Please contact support." });
@@ -307,14 +1046,31 @@ export default async function handler(req, res) {
       return res.status(402).json({ error: "Payment not completed.", payment_status: session.payment_status });
     }
 
-    // Update order status and audit log
-    data.orders[idx].status = "Paid";
-    data.orders[idx].auditLog = [...(data.orders[idx].auditLog || []), {
-      ts: new Date().toISOString(),
-      action: "Payment confirmed via Stripe",
-      note: `Session: ${stripeSessionId}`,
-    }];
-    await writeData(data);
+    // Acquire the order lock and re-check status to serialise against the
+    // checkout.session.completed webhook (which can race this endpoint).
+    let data, idx, stripeSessionId;
+    try {
+      const r = await withOrderLock(id, async () => {
+        const d = await readData();
+        const i = d.orders.findIndex(o => o.id === id);
+        if (i === -1) return { error: "Order not found.", code: 404 };
+        if (d.orders[i].status === "Paid") return { alreadyPaid: true, order: d.orders[i] };
+        d.orders[i].status = "Paid";
+        d.orders[i].auditLog = [...(d.orders[i].auditLog || []), {
+          ts: new Date().toISOString(),
+          action: "Payment confirmed via Stripe",
+          note: `Session: ${d.orders[i].stripeSessionId}`,
+        }];
+        await writeData(d);
+        return { data: d, idx: i, stripeSessionId: d.orders[i].stripeSessionId };
+      });
+      if (r.error) return res.status(r.code).json({ error: r.error });
+      if (r.alreadyPaid) return res.status(200).json({ success: true, order: r.order });
+      data = r.data; idx = r.idx; stripeSessionId = r.stripeSessionId;
+    } catch (e) {
+      console.error(`stripe-confirm lock/write failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
 
     // Send admin + customer emails using shared helpers from _lib/email.js
     // Timeout config: connectionTimeout:8000, socketTimeout:10000, NO greetingTimeout
@@ -352,7 +1108,9 @@ export default async function handler(req, res) {
           const [authResult, summaryResult, receiptResult] = await Promise.allSettled([
             authDoc?.data
               ? uploadToSharePoint(
-                  `authority-${authDoc.filename || "document"}`,
+                  // Sanitise the client-supplied filename so a `../foo.pdf`
+                  // can't escape the order folder under Graph's path API.
+                  `authority-${sanitiseSegment(authDoc.filename, "document")}`,
                   authDoc.contentType || "application/octet-stream",
                   authDoc.data,
                   spConfig,
@@ -374,12 +1132,14 @@ export default async function handler(req, res) {
           const oi = freshData.orders.find(o => o.id === id);
           if (oi) {
             oi.auditLog = oi.auditLog || [];
+            // Successes always append; failures use pushAuditOnce so a Stripe
+            // retry against a broken SP doesn't flood the audit log.
             if (authUrl)            { oi.lotAuthorityUrl = authUrl;  oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc saved to SharePoint", note: authUrl }); }
-            else if (authDoc?.data) { oi.auditLog.push({ ts: new Date().toISOString(), action: "Authority doc SP upload failed", note: "See Vercel logs" }); }
-            if (summaryUrl)         { oi.summaryUrl = summaryUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
-            else                    { oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary SP upload failed", note: "See Vercel logs" }); }
-            if (receiptUrl)         { oi.receiptUrl = receiptUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
-            else                    { oi.auditLog.push({ ts: new Date().toISOString(), action: "Payment receipt SP upload failed", note: "See Vercel logs" }); }
+            else if (authDoc?.data) { pushAuditOnce(oi.auditLog, "Authority doc SP upload failed", "See Vercel logs"); }
+            if (summaryUrl) { oi.summaryUrl = summaryUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Order summary saved to SharePoint", note: summaryUrl }); }
+            else            { pushAuditOnce(oi.auditLog, "Order summary SP upload failed", "See Vercel logs"); }
+            if (receiptUrl) { oi.receiptUrl = receiptUrl;   oi.auditLog.push({ ts: new Date().toISOString(), action: "Payment receipt saved to SharePoint", note: receiptUrl }); }
+            else            { pushAuditOnce(oi.auditLog, "Payment receipt SP upload failed", "See Vercel logs"); }
           }
           await writeData(freshData).catch(e => console.error("SP result persist failed:", e.message));
           console.log(`SP uploads done for stripe order ${id}: auth=${!!authUrl} summary=${!!summaryUrl} receipt=${!!receiptUrl}`);
@@ -390,6 +1150,7 @@ export default async function handler(req, res) {
     }
     // ── END SP uploads ──────────────────────────────────────────────────────────
 
+    let emailPromise = Promise.resolve();
     if (smtp.host && smtp.user && smtp.pass) {
       const authAttachment = (authDoc?.data && authDoc.filename)
         ? [{ filename: authDoc.filename, content: authDoc.data, encoding: "base64", contentType: authDoc.contentType || "application/octet-stream" }]
@@ -423,7 +1184,7 @@ export default async function handler(req, res) {
           }).catch(e => console.error("Customer stripe email failed:", e.message))
         );
       }
-      await Promise.allSettled(emailJobs).then(async results => {
+      emailPromise = Promise.allSettled(emailJobs).then(async results => {
         const sent = results.filter(r => r.status === "fulfilled").length;
         console.log(`Stripe-confirm emails: ${sent}/${results.length} sent for order ${id}`);
         const labels = ["Admin notification", "Customer confirmation"];
@@ -435,7 +1196,11 @@ export default async function handler(req, res) {
             const fresh = await readData();
             const oi = fresh.orders.find(o => o.id === id);
             if (oi) {
-              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed: " + msg, note: "" }));
+              // Keep the error text in `note` only (never in `action`).
+              // The audit-log UI renders `action` prominently; if any path
+              // ever skipped HTML-escaping, an attacker-controlled SMTP
+              // error response would become stored XSS.
+              failures.forEach(msg => oi.auditLog.push({ ts: new Date().toISOString(), action: "Email notification failed", note: String(msg).slice(0, 200) }));
               await writeData(fresh);
             }
           } catch (e) { console.error("Failed to persist email failure to audit log:", e.message); }
@@ -443,24 +1208,48 @@ export default async function handler(req, res) {
       });
     }
 
-    // Send response before awaiting SP — customer should not wait for uploads
+    // Respond BEFORE emails (~6.6 s with SMTP2GO) and SP uploads settle — this
+    // is the post-payment redirect, so the paying customer should see their
+    // confirmation in well under a second. The "Paid" status is already durable
+    // in Redis. Same waitUntil pattern as orders/index.js: on Vercel the
+    // invocation is kept alive after the response is flushed; off-Vercel
+    // (local server, tests) the work is awaited inline after the response so
+    // it is never silently dropped.
     res.status(200).json({ success: true, order: confirmedOrder });
 
-    // Allow SP uploads to finish if still in-flight.
-    // NOTE: stripe-confirm has ~1–1.5s of pre-IIFE overhead (readData, Stripe API, writeData,
-    // readConfig, readAuthority) before the IIFE and emails start. Combined with ~6.6s emails,
-    // the remaining budget for await spPromise is tighter than orders/index.js (~1–2s max).
-    // SP uploads typically complete in 2–3s; if they exceed the Vercel 10s limit, audit log
-    // entries will not be written but Redis data is not corrupted.
-    await spPromise;
+    const backgroundWork = Promise.allSettled([spPromise, emailPromise]);
+    let deferred = false;
+    if (process.env.VERCEL) {
+      try {
+        waitUntil(backgroundWork);
+        deferred = true;
+      } catch (e) {
+        console.warn("waitUntil registration failed; awaiting background work inline:", e?.message);
+      }
+    }
+    if (!deferred) await backgroundWork;
     return;
   }
   // ── END stripe-confirm ─────────────────────────────────────────────────────
 
   // ── POST /api/orders/:id/stripe-cancel ──────────────────────────────────────
   // PUBLIC — called by the browser when the customer cancels or abandons Stripe checkout.
-  // Verifies the Stripe session is NOT paid before removing the phantom order from Redis.
+  //
+  // Authorization: the client must supply the Stripe `sessionId` it received
+  // from Stripe's cancel-redirect (cancel_url carries `{CHECKOUT_SESSION_ID}`).
+  // We compare it against the session-id we stored at checkout creation.
+  // Without this, anyone who guesses an order id can flip a pending Stripe
+  // checkout to `Cancelled`.
+  //
+  // Rate-limited per IP so a brute-force scanner can't drive arbitrary orders
+  // through repeated 401s.
   if (action === "stripe-cancel" && req.method === "POST") {
+    const rl = await rateLimit(`stripe-cancel:${clientIp(req)}`, 20, 60);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({ error: "Too many cancellation attempts — please wait." });
+    }
+
     const data = await readData();
     const idx  = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(200).json({ ok: true }); // already gone — idempotent
@@ -472,26 +1261,43 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: "Order cannot be cancelled via this endpoint." });
     }
 
+    // Caller must prove they hold the Stripe session id Stripe redirected with.
+    // If we never stored a sessionId (legacy / never reached checkout), the
+    // expired-session webhook is the only sanctioned canceller — refuse here.
+    if (!order.stripeSessionId) {
+      return res.status(409).json({ error: "Order has no Stripe session — cancellation must come from Stripe webhook." });
+    }
+    const suppliedSessionId = String(req.body?.sessionId || "");
+    // Constant-time equality (length-protected; sessionIds are fixed-shape so
+    // length leak is moot, but use a constant-time compare anyway).
+    const a = Buffer.from(suppliedSessionId);
+    const b = Buffer.from(order.stripeSessionId);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: "Invalid cancellation token." });
+    }
+
     // Double-check with Stripe that payment was not actually completed
     const cfg = await readConfig();
     const stripeKey = cfg.stripe?.secretKey || process.env.STRIPE_SECRET_KEY;
-    if (stripeKey && order.stripeSessionId) {
+    if (stripeKey) {
       try {
-        const stripe = new Stripe(stripeKey);
+        const stripe = await getStripe(stripeKey);
         const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
         if (session.payment_status === "paid") {
           // Race condition: payment completed just as user hit cancel — honour the payment
           return res.status(409).json({ error: "Payment was already completed. Refresh to see your confirmation." });
         }
       } catch (e) {
-        // Stripe API unavailable — proceed with cancellation conservatively
+        // Stripe API unavailable — refuse cancellation; let checkout.session.expired webhook handle it
         console.warn(`stripe-cancel: could not verify session for order ${id}:`, e.message);
+        return res.status(503).json({ error: "Could not verify payment status. Please try again shortly." });
       }
     }
 
-    data.orders.splice(idx, 1);
+    order.status = "Cancelled";
+    order.auditLog = [...(order.auditLog || []), { ts: new Date().toISOString(), action: "Order cancelled", note: "Stripe checkout abandoned by customer" }];
     await writeData(data);
-    console.log(`stripe-cancel: removed pending order ${id}`);
+    console.log(`stripe-cancel: cancelled pending order ${id}`);
     return res.status(200).json({ ok: true });
   }
   // ── END stripe-cancel ──────────────────────────────────────────────────────
@@ -500,20 +1306,207 @@ export default async function handler(req, res) {
   // Admin only. Permanently removes an order from Redis. No undo.
   if (action === "delete" && req.method === "DELETE") {
     const token = extractToken(req);
-    if (!(await validToken(token))) return res.status(401).json({ error: "Not authenticated." });
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
 
-    const data = await readData();
-    const idx = data.orders.findIndex(o => o.id === id);
+    // Wrap the read-modify-write in the order lock so a concurrent amend /
+    // status / piq / send-cert cannot race against the splice.
+    try {
+      const result = await withOrderLock(id, async () => {
+        const data = await readData();
+        const idx = data.orders.findIndex(o => o.id === id);
+        if (idx === -1) return { error: "Order not found.", code: 404 };
+        if (data.orders[idx].status !== "Cancelled") {
+          return { error: "Only cancelled orders can be deleted. Cancel the order first.", code: 409 };
+        }
+        data.orders.splice(idx, 1);
+        await writeData(data);
+        return { ok: true };
+      });
+      if (result.error) return res.status(result.code).json({ error: result.error });
+      return res.status(200).json({ ok: true, deleted: id });
+    } catch (e) {
+      console.error(`delete failed for ${id}:`, e.message);
+      return res.status(503).json({ error: "Order is busy — please try again." });
+    }
+  }
+
+  // ── POST /api/orders/:id/check-piq-payment ──────────────────────────────────
+  // Admin only. Manually polls the PIQ lot ledger for a single keys order.
+  // Returns current levy/payment status and persists results to Redis.
+  if (action === "check-piq-payment" && req.method === "POST") {
+    const token = extractToken(req);
+    if (!(await validAdminToken(token))) return res.status(401).json({ error: "Not authenticated." });
+
+    const data  = await readData();
+    const idx   = data.orders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ error: "Order not found." });
+    const order = data.orders[idx];
+    // Snapshot the audit-log length so we can compute the entries we appended
+    // during this handler and merge ONLY those into a fresh-read at write time
+    // (so a concurrent admin click / cron / send-cert isn't clobbered).
+    const auditLogStartLen = (order.auditLog || []).length;
 
-    const orderToDelete = data.orders[idx];
-    if (orderToDelete.status !== "Cancelled") {
-      return res.status(409).json({ error: "Only cancelled orders can be deleted. Cancel the order first." });
+    // 1. Admin-supplied piqLotId (manual link from the UI) takes top priority
+    //    so admins can fix orders that PIQ sync couldn't auto-resolve.
+    // PIQ lot IDs are positive integers; reject floats / 0 / NaN explicitly
+    // so a typo like "5.5" or "0" doesn't silently link to nothing.
+    const manualPiqLotId = req.body?.piqLotId != null ? Number(req.body.piqLotId) : null;
+    if (manualPiqLotId != null && (!Number.isInteger(manualPiqLotId) || manualPiqLotId <= 0)) {
+      return res.status(400).json({ error: "piqLotId must be a positive integer." });
+    }
+    if (manualPiqLotId && Number.isInteger(manualPiqLotId) && manualPiqLotId > 0) {
+      order.piqLotId = manualPiqLotId;
+      order.auditLog = [...(order.auditLog || []), {
+        ts:     new Date().toISOString(),
+        action: "PIQ lot linked",
+        note:   `piqLotId ${manualPiqLotId} manually set by admin`,
+      }];
     }
 
-    data.orders.splice(idx, 1);
-    await writeData(data);
-    return res.status(200).json({ ok: true, deleted: id });
+    // 2. Allow admin to reset the locked payment date so a corrected date can
+    //    be recorded.
+    if (req.body?.resetPaymentDate === true && order.status === "Paid") {
+      order.piqPaymentDate = null;
+      order.auditLog = [...(order.auditLog || []), { ts: new Date().toISOString(), action: "PIQ payment date reset", note: "Reset by admin to allow re-confirmation" }];
+    }
+
+    // 3. Auto-link piqLotId from plan lots for orders placed before the plan
+    //    was synced from PIQ (piqLotId was missing at order-creation time).
+    //    Normalise lot numbers so "Lot 5" matches PIQ's "5" and vice-versa.
+    if (!order.piqLotId) {
+      const lotNumber = order.items?.[0]?.lotNumber || "";
+      const lotId     = order.items?.[0]?.lotId     || "";
+      const planId    = order.items?.[0]?.planId    || "";
+      const plan      = data.strataPlans?.find(p => p.id === planId);
+      const lots      = plan?.lots || [];
+      const matches   = l =>
+        (lotNumber && normaliseLotNumber(l.number) === normaliseLotNumber(lotNumber)) ||
+        (lotId     && l.id === lotId);
+      const lot = lots.find(l => l.piqLotId && matches(l)) ?? lots.find(matches);
+      if (lot?.piqLotId) {
+        order.piqLotId = lot.piqLotId;
+        if (order.items?.[0]) order.items[0].lotId = lot.id;
+        order.auditLog = [...(order.auditLog || []), {
+          ts: new Date().toISOString(),
+          action: "PIQ lot linked",
+          note: `piqLotId ${lot.piqLotId} auto-linked from plan on first check`,
+        }];
+      }
+    }
+
+    if (!order.piqLotId) {
+      return res.status(400).json({ error: "This order has no PIQ lot ID. Sync the plan from PIQ first, or enter the PIQ Lot ID manually." });
+    }
+
+    const cfg = await readConfig();
+    const now = new Date().toISOString();
+
+    try {
+      const result = await detectPiqPayment(cfg, order.piqLotId, order.id);
+
+      // Update order fields
+      order.piqLastPolled    = now;
+      order.piqLevyFound     = result.levyFound;
+      order.piqLevyTotalDue  = result.totalDue  ?? order.piqLevyTotalDue  ?? null;
+      order.piqLevyTotalNett = result.totalNett ?? (result.paid ? 0 : order.piqLevyTotalNett ?? null);
+
+      if (result.paid) {
+        const isNewPayment = !["Paid", "Issued"].includes(order.status) || !order.piqPaymentDate;
+        // Use server time as payment date on first confirmation only — never overwrite.
+        if (!order.piqPaymentDate) order.piqPaymentDate = now;
+        if (result.paymentReference) order.piqPaymentReference = result.paymentReference;
+
+        if (isNewPayment) {
+        // Don't regress status from "Issued" — keys were already dispatched; just record payment details.
+        if (order.status !== "Issued") order.status = "Paid";
+        const dateStr = new Date(now).toLocaleDateString("en-AU", { day:"2-digit", month:"short", year:"numeric" });
+        order.auditLog = [...(order.auditLog || []), {
+          ts:     now,
+          action: "Payment confirmed via PropertyIQ",
+          note:   `Date: ${dateStr} | Ref: ${result.paymentReference || "—"} | Amount: $${(result.totalPaid || 0).toFixed(2)}`,
+        }];
+
+        // Send payment notification email to admin (non-fatal)
+        try {
+          const smtp = cfg.smtp || {};
+          if (smtp.host && smtp.user && smtp.pass) {
+            const toEmail     = cfg.orderEmail || "Orders@tocs.co";
+            const transporter = createTransporter(smtp);
+            const lotNumber   = order.items?.[0]?.lotNumber || "";
+            const planName    = order.items?.[0]?.planName  || "";
+            await transporter.sendMail({
+              from:    `"TOCS Order Portal" <${toEmail}>`,
+              to:      toEmail,
+              subject: `PAYMENT RECEIVED — Keys/Fob Order ${order.id} — ${lotNumber}, ${planName}`,
+              html:    buildPiqPaymentEmailHtml(order, order.piqPaymentDate, result.paymentReference, result.totalPaid),
+            });
+          }
+        } catch (emailErr) {
+          console.error(`PIQ payment email failed for ${order.id}:`, emailErr.message);
+          order.auditLog.push({ ts: now, action: "PIQ payment email failed", note: emailErr.message?.substring(0, 120) });
+        }
+        } // end isNewPayment
+      }
+
+      await persistPiqChanges(id, order, auditLogStartLen);
+
+      return res.status(200).json({
+        ok:               true,
+        levyFound:        result.levyFound,
+        paid:             result.paid || false,
+        totalDue:         result.totalDue    ?? null,
+        totalNett:        result.totalNett   ?? null,
+        totalPaid:        result.totalPaid   ?? null,
+        paymentDate:      order.piqPaymentDate     ?? null,
+        paymentReference: result.paymentReference ?? null,
+        lastPolled:       now,
+        orderStatus:      order.status,
+      });
+    } catch (err) {
+      console.error(`check-piq-payment error for ${id}:`, err.message);
+      // Still update lastPolled on error
+      order.piqLastPolled = now;
+      await persistPiqChanges(id, order, auditLogStartLen).catch(() => {});
+      return res.status(200).json({ ok: false, error: err.message, lastPolled: now });
+    }
+  }
+
+  // ── GET /api/orders/:id/track  (public — applicant order status lookup) ──────
+  if (action === "track" && req.method === "GET") {
+    // Per-IP rate limit: 30 lookups per 5 minutes is well above legitimate use
+    // (a customer occasionally re-checking their own order) but blunts
+    // enumeration scans against the order-id space.
+    const ip = clientIp(req);
+    const rl = await rateLimit(`track:${ip}`, 30, 5 * 60);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({ error: "Too many requests. Please try again shortly." });
+    }
+    // Guard against missing/empty id — `.toUpperCase()` on undefined throws.
+    if (typeof id !== "string" || !id.trim()) {
+      return res.status(400).json({ error: "Order reference is required." });
+    }
+    // Single-key lookup — order ids are generated uppercase, so trying the
+    // uppercased input hits directly without assembling the whole dataset.
+    // readOrder falls back to a full scan for odd-cased legacy ids.
+    const upperId = id.toUpperCase();
+    let order = await readOrder(upperId);
+    if (!order) {
+      const data = await readData();
+      order = data.orders.find(o => typeof o.id === "string" && o.id.toUpperCase() === upperId);
+    }
+    if (!order) return res.status(404).json({ error: "Order not found. Please check your reference number." });
+    const firstItem = order.items?.[0] || {};
+    return res.status(200).json({
+      id: order.id,
+      status: order.status,
+      date: order.date,
+      orderCategory: order.orderCategory,
+      planName: firstItem.planName || "",
+      lotNumber: firstItem.lotNumber || "",
+      total: order.total,
+      items: (order.items || []).map(({ productName, qty, price, ocName }) => ({ productName, qty, price, ocName })),
+    });
   }
 
   return res.status(404).json({ error: "Unknown action." });

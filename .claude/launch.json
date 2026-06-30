@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "Logo Preview",
+      "runtimeExecutable": "/Users/matthewhe/.nvm/versions/node/v24.14.0/bin/node",
+      "runtimeArgs": ["-e", "require('http').createServer((req,res)=>{require('fs').readFile('./convene-logo.html',(e,d)=>{res.writeHead(200,{'Content-Type':'text/html'});res.end(d);})}).listen(5555)"],
+      "port": 5555
+    },
+    {
       "name": "Vercel Dev (full stack)",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "PATH=/Users/matthewhe/.nvm/versions/node/v24.14.0/bin:$PATH vercel dev"],
