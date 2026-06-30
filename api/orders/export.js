@@ -13,16 +13,18 @@ export default async function handler(req, res) {
   const { orders } = await readData();
 
   const rows = [
-    ["Order ID","Date","Name","Email","Phone","Building Name","Lot Number","Applicant Type","Owner Name","Company","Delivery Address","Shipping Method","Shipping Cost (AUD)","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"],
+    ["Order ID","Date","Order Type","Name","Email","Phone","Building Name","Lot Number","Applicant Type","Owner Name","Company","Delivery Address","Shipping Method","Shipping Cost (AUD)","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"],
     ...orders.map(o => {
       const ci = o.contactInfo || {};
       const effectiveType = ci.applicantType || (ci.companyName ? "agent" : "owner");
       const sa = ci.shippingAddress;
       const deliveryAddr = sa?.street ? [sa.street, sa.suburb, sa.state, sa.postcode].filter(Boolean).join(", ") : "";
       const adminCharge = (o.items || []).reduce((sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0);
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[o.orderCategory] || "";
       return [
         o.id,
         new Date(o.date).toLocaleDateString("en-AU"),
+        orderType,
         ci.name  ?? "",
         ci.email ?? "",
         ci.phone ?? "",
