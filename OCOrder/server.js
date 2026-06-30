@@ -9,7 +9,6 @@ import nodemailer from "nodemailer";
 // Shared with the Vercel handlers so the local dev server can't drift from
 // production on what counts as a valid order status.
 import { VALID_STATUSES } from "../api/_lib/constants.js";
-import { generateOrderListPdf } from "../api/_lib/pdf.js";
 // Vercel handlers, mounted via callVercelHandler() so the local dev server
 // can exercise Stripe / SharePoint / PIQ flows end-to-end without duplicating
 // ~1500 lines of handler logic. Set LOCAL_KV_DIR (or REDIS_URL) so the
@@ -1715,20 +1714,55 @@ async function handler(req, res) {
     }
   }
 
-  // ── GET /api/orders/export  (admin — formatted PDF download) ───────────────
+  // ── GET /api/orders/export  (admin — CSV download) ─────────────────────────
   if (urlPath === "/api/orders/export" && method === "GET") {
     const token = authHeader(req);
     if (!validToken(token)) return json(res, 401, { error: "Not authenticated." });
-    const d   = readData();
-    const cfg = readConfig();
-    const pdfBuf = await generateOrderListPdf(d.orders, cfg);
-    const date = new Date().toISOString().slice(0, 10);
+    const d = readData();
+    const rows = [
+      ["Order ID","Date","Order Type","Name","Email","Phone","Building Name","Lot Number","Applicant Type","Owner Name","Company","Delivery Address","Shipping Method","Shipping Cost (AUD)","Items","Total (AUD)","Payment","Status","Manager Admin Charge (AUD)"],
+    ];
+    for (const o of d.orders) {
+      const ci = o.contactInfo || {};
+      const effectiveType = ci.applicantType || (ci.companyName ? "agent" : "owner");
+      const sa = ci.shippingAddress;
+      const deliveryAddr = sa?.street ? [sa.street, sa.suburb, sa.state, sa.postcode].filter(Boolean).join(", ") : "";
+      const adminCharge = (o.items || []).reduce((sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0);
+      const orderType = { oc: "OC Certificate", keys: "Keys / Fobs" }[o.orderCategory] || "";
+      rows.push([
+        o.id,
+        new Date(o.date).toLocaleDateString("en-AU"),
+        orderType,
+        ci.name  ?? "",
+        ci.email ?? "",
+        ci.phone ?? "",
+        o.items?.[0]?.planName  ?? "",
+        o.items?.[0]?.lotNumber ?? "",
+        effectiveType === "agent" ? "Agent" : "Owner",
+        ci.ownerName   ?? "",
+        ci.companyName ?? "",
+        deliveryAddr,
+        o.selectedShipping?.name  ?? "",
+        (o.selectedShipping?.cost ?? 0).toFixed(2),
+        o.items?.length ?? 0,
+        (o.total ?? 0).toFixed(2),
+        o.payment ?? "",
+        o.status  ?? "",
+        adminCharge > 0 ? adminCharge.toFixed(2) : "",
+      ]);
+    }
+    const csvEsc = v => {
+      const s = String(v).replace(/[\r\n\t]/g, " ").replace(/"/g, '""');
+      return /^[=+\-@\t]/.test(s) ? `"'${s}"` : `"${s}"`;
+    };
+    const csv = rows.map(r => r.map(csvEsc).join(",")).join("\r\n");
+    const csvBuf = Buffer.from(csv, "utf8");
     res.writeHead(200, {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="tocs-orders-${date}.pdf"`,
-      "Content-Length": pdfBuf.length,
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="tocs-orders-${new Date().toISOString().slice(0,10)}.csv"`,
+      "Content-Length": csvBuf.length,
     });
-    return res.end(pdfBuf);
+    return res.end(csvBuf);
   }
 
   // ── POST /api/lots/import  (admin — import lots from parsed Excel data) ────
