@@ -1,5 +1,5 @@
-// api/_lib/pdf.js — Order summary PDF generation using pdfkit
-// Produces an A4 PDF receipt for each order, saved to SharePoint alongside authority docs.
+// api/_lib/pdf.js — PDF generation using pdfkit
+// Produces order summary, Stripe receipt, and admin order-list export PDFs.
 
 // pdfkit bundles megabytes of embedded font data — loading it at module scope
 // would tax the cold start of every handler that imports this file, including
@@ -349,6 +349,223 @@ export async function generateReceiptPdf(order, sessionId) {
          align: "center", width: W,
        });
 
+    doc.end();
+  });
+}
+
+/**
+ * Generate a formatted order-list export PDF (landscape A4).
+ * @param {object[]} orders  — Full orders array
+ * @param {object}   cfg     — Config object; cfg.logo may be a data-URL for the logo image
+ * @returns {Promise<Buffer>}
+ */
+export async function generateOrderListPdf(orders, cfg = {}) {
+  const PDFDocument = await getPDFDocument();
+
+  const FOREST     = "#1c3326";
+  const SAGE       = "#4a7255";
+  const SAGE_LIGHT = "#e4ede7";
+  const CREAM      = "#f7f3ec";
+  const BORDER     = "#d8d2c8";
+  const INK        = "#1a1f1c";
+  const MID        = "#4a5248";
+  const WHITE      = "#ffffff";
+
+  const COLS = [
+    { label: "Order ID",       w: 88,  align: "left"  },
+    { label: "Date",           w: 52,  align: "left"  },
+    { label: "Type",           w: 64,  align: "left"  },
+    { label: "Name",           w: 82,  align: "left"  },
+    { label: "Building / Lot", w: 92,  align: "left"  },
+    { label: "Email",          w: 108, align: "left"  },
+    { label: "Total",          w: 50,  align: "right" },
+    { label: "Payment",        w: 54,  align: "left"  },
+    { label: "Status",         w: 70,  align: "left"  },
+    { label: "Admin $",        w: 56,  align: "right" },
+  ];
+
+  const PAGE_W     = 841.89;
+  const PAGE_H     = 595.28;
+  const MARGIN     = 40;
+  const TABLE_W    = COLS.reduce((s, c) => s + c.w, 0);
+  const TABLE_X    = MARGIN;
+  const HEADER_H   = 66;
+  const SUMMARY_H  = 36;
+  const COL_HEAD_H = 22;
+  const ROW_H      = 18;
+  const FOOTER_H   = 26;
+  const FONT_SZ    = 7.5;
+
+  const totalOrders  = orders.length;
+  const ocOrders     = orders.filter(o => o.orderCategory === "oc").length;
+  const keysOrders   = orders.filter(o => o.orderCategory === "keys").length;
+  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+
+  const exportDate = new Date().toLocaleDateString("en-AU", {
+    day: "2-digit", month: "long", year: "numeric",
+  });
+
+  let logoBuffer = null;
+  const logoSrc = cfg.logo || "";
+  if (logoSrc) {
+    try {
+      const m = logoSrc.match(/^data:[^;]+;base64,(.+)$/);
+      if (m) logoBuffer = Buffer.from(m[1], "base64");
+    } catch (_) { /* ignore */ }
+  }
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: [PAGE_W, PAGE_H],
+      margin: 0,
+      info: { Title: `TOCS Order Export — ${exportDate}`, Author: "Top Owners Corporation Solution" },
+    });
+
+    const chunks = [];
+    doc.on("data", c => chunks.push(c));
+    doc.on("end",  () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    let pageNum = 0;
+    let y = 0;
+
+    function drawPageHeader() {
+      pageNum++;
+      y = 0;
+      doc.rect(0, 0, PAGE_W, HEADER_H).fill(FOREST);
+
+      if (logoBuffer) {
+        try { doc.image(logoBuffer, MARGIN, 13, { height: 40, fit: [100, 40] }); }
+        catch (_) {
+          doc.fillColor(WHITE).font("Helvetica-Bold").fontSize(22)
+             .text("TOCS", MARGIN, 20, { width: 80, lineBreak: false });
+        }
+      } else {
+        doc.fillColor(WHITE).font("Helvetica-Bold").fontSize(22)
+           .text("TOCS", MARGIN, 20, { width: 80, lineBreak: false });
+      }
+
+      doc.fillColor(WHITE).font("Helvetica-Bold").fontSize(16)
+         .text("ORDER EXPORT REPORT", 0, 17, { width: PAGE_W, align: "center", lineBreak: false });
+      doc.fillColor("rgba(255,255,255,0.6)").font("Helvetica").fontSize(8)
+         .text("Top Owners Corporation Solution", 0, 37, { width: PAGE_W, align: "center", lineBreak: false });
+
+      doc.fillColor(WHITE).font("Helvetica").fontSize(8)
+         .text(`Generated: ${exportDate}`, MARGIN, 20, { width: PAGE_W - MARGIN * 2, align: "right", lineBreak: false });
+      doc.fillColor("rgba(255,255,255,0.6)").fontSize(7.5)
+         .text(`${totalOrders} order${totalOrders !== 1 ? "s" : ""}  |  Page ${pageNum}`,
+           MARGIN, 32, { width: PAGE_W - MARGIN * 2, align: "right", lineBreak: false });
+
+      y = HEADER_H;
+    }
+
+    function drawSummaryBar() {
+      doc.rect(0, y, PAGE_W, SUMMARY_H).fill(SAGE_LIGHT);
+      const stats = [
+        { label: "TOTAL ORDERS",    value: String(totalOrders) },
+        { label: "OC CERTIFICATES", value: String(ocOrders) },
+        { label: "KEYS / FOBS",     value: String(keysOrders) },
+        { label: "TOTAL REVENUE",   value: `$${totalRevenue.toFixed(2)}` },
+      ];
+      const colW = PAGE_W / stats.length;
+      stats.forEach((stat, i) => {
+        const sx = i * colW;
+        doc.fillColor(SAGE).font("Helvetica-Bold").fontSize(6.5)
+           .text(stat.label, sx, y + 7, { width: colW, align: "center", lineBreak: false, characterSpacing: 0.4 });
+        doc.fillColor(FOREST).font("Helvetica-Bold").fontSize(14)
+           .text(stat.value, sx, y + 17, { width: colW, align: "center", lineBreak: false });
+      });
+      y += SUMMARY_H;
+    }
+
+    function drawColumnHeaders() {
+      doc.rect(TABLE_X, y, TABLE_W, COL_HEAD_H).fill(FOREST);
+      let x = TABLE_X;
+      COLS.forEach(col => {
+        const pad = 4;
+        doc.fillColor(WHITE).font("Helvetica-Bold").fontSize(FONT_SZ - 0.5)
+           .text(col.label, x + pad, y + 7, { width: col.w - pad * 2, align: col.align, lineBreak: false });
+        x += col.w;
+      });
+      y += COL_HEAD_H;
+    }
+
+    function drawFooter() {
+      const fy = PAGE_H - FOOTER_H + 2;
+      doc.moveTo(MARGIN, fy).lineTo(PAGE_W - MARGIN, fy).stroke(BORDER);
+      doc.fillColor(MID).font("Helvetica").fontSize(7)
+         .text(
+           `Top Owners Corporation Solution  |  info@tocs.co  |  Exported ${exportDate}  |  Confidential`,
+           MARGIN, fy + 6, { width: PAGE_W - MARGIN * 2, align: "center", lineBreak: false }
+         );
+    }
+
+    function checkNewPage() {
+      if (y + ROW_H > PAGE_H - FOOTER_H - 2) {
+        drawFooter();
+        doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
+        drawPageHeader();
+        drawColumnHeaders();
+      }
+    }
+
+    function drawOrderRow(order, idx) {
+      checkNewPage();
+
+      const ci = order.contactInfo || {};
+      const typeLabel = { oc: "OC Cert", keys: "Keys/Fobs" }[order.orderCategory] || "";
+      const building  = order.items?.[0]?.planName  || "";
+      const lot       = order.items?.[0]?.lotNumber || "";
+      const bldgLot   = lot ? `${building} / ${lot}` : building;
+      const adminCharge = (order.items || []).reduce(
+        (sum, item) => sum + ((item.managerAdminCharge || 0) * (item.qty || 1)), 0
+      );
+      const payLabel = { bank: "Bank", payid: "PayID", stripe: "Stripe", invoice: "Invoice" }[order.payment]
+        || (order.payment || "");
+      const statusColor = /paid|issued/i.test(order.status || "") ? "#1e4a32"
+        : /cancel/i.test(order.status || "") ? "#7a2020" : INK;
+
+      doc.rect(TABLE_X, y, TABLE_W, ROW_H).fill(idx % 2 === 0 ? WHITE : CREAM);
+
+      const cells = [
+        { value: order.id || "",                                                         col: 0 },
+        { value: order.date ? new Date(order.date).toLocaleDateString("en-AU") : "",     col: 1 },
+        { value: typeLabel,                                                               col: 2 },
+        { value: ci.name || "",                                                           col: 3 },
+        { value: bldgLot,                                                                 col: 4 },
+        { value: ci.email || "",                                                          col: 5 },
+        { value: (order.total ?? 0) > 0 ? `$${Number(order.total).toFixed(2)}` : "",     col: 6 },
+        { value: payLabel,                                                                col: 7 },
+        { value: order.status || "",                                                      col: 8, color: statusColor },
+        { value: adminCharge > 0 ? `$${adminCharge.toFixed(2)}` : "",                    col: 9 },
+      ];
+
+      let x = TABLE_X;
+      doc.font("Helvetica").fontSize(FONT_SZ);
+      cells.forEach(cell => {
+        const col = COLS[cell.col];
+        const pad = 4;
+        doc.fillColor(cell.color || INK)
+           .text(String(cell.value), x + pad, y + 5, {
+             width: col.w - pad * 2,
+             align: col.align,
+             lineBreak: false,
+             ellipsis: true,
+           });
+        x += col.w;
+      });
+
+      doc.moveTo(TABLE_X, y + ROW_H).lineTo(TABLE_X + TABLE_W, y + ROW_H).stroke(BORDER).opacity(0.45);
+      doc.opacity(1);
+
+      y += ROW_H;
+    }
+
+    drawPageHeader();
+    drawSummaryBar();
+    drawColumnHeaders();
+    orders.forEach((order, i) => drawOrderRow(order, i));
+    drawFooter();
     doc.end();
   });
 }
